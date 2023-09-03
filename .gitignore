@@ -1,0 +1,6 @@
+/.idea
+/.vscode
+/target
+crates/target
+examples/*/target
+syphon/target
