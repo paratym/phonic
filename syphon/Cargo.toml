@@ -1,7 +1,4 @@
 [package]
-name = "pyrite"
+name = "syphon"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-syphon_pipeline = { path = "../crates/syphon_pipeline" }

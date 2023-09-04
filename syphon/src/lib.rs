@@ -1,3 +1,3 @@
-pub mod pipeline {
-    pub use syphon_pipeline::*;
-}
+pub mod core;
+pub mod io;
+pub mod pipeline;
