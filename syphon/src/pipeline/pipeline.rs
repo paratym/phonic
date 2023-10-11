@@ -1,4 +1,4 @@
-use crate::core::{Sample, SignalSpec, Source, SyphonError};
+use crate::core::{Sample, SignalSpec, SampleReader, SyphonError};
 
 pub trait Pipe<S: Sample> {
     fn signal_spec(&self) -> SignalSpec;
@@ -6,12 +6,12 @@ pub trait Pipe<S: Sample> {
 }
 
 pub struct Pipeline<S: Sample> {
-  source: Box<dyn Source<S>>,
+  source: Box<dyn SampleReader<S>>,
   pipes: Vec<Box<dyn Pipe<S>>>,
 }
 
 impl<S: Sample> Pipeline<S> {
-    pub fn from_source(source: impl Source<S> + 'static) -> Self {
+    pub fn from_source(source: impl SampleReader<S> + 'static) -> Self {
         Self {
             source: Box::new(source),
             pipes: vec![],
@@ -24,9 +24,9 @@ impl<S: Sample> Pipeline<S> {
     }
 }
 
-impl<S: Sample> Source<S> for Pipeline<S> {
+impl<S: Sample> SampleReader<S> for Pipeline<S> {
     fn signal_spec(&self) -> SignalSpec {
-        match self.pipes.last() {
+        match self.pipes.last() { 
             Some(pipe) => pipe.signal_spec(),
             None => self.source.signal_spec(),
         }
