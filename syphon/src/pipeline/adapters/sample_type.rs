@@ -1,4 +1,4 @@
-use crate::core::{FromSample, Sample, SampleReader, SignalSpec, SyphonError, SampleReaderRef};
+use crate::core::{FromSample, Sample, SampleReader, SampleReaderRef, SignalSpec, SyphonError};
 use std::marker::PhantomData;
 
 pub struct SampleTypeAdapter<S: Sample, O: Sample + FromSample<S>> {

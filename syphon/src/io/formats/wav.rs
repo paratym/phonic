@@ -1,10 +1,19 @@
-use crate::{core::SyphonError, io::{formats::FormatReader, SyphonCodecKey}};
-use std::io::Read;
 use super::FormatDataBuilder;
+use crate::{
+    core::SyphonError,
+    io::{formats::FormatReader, FormatIdentifiers, SyphonCodec},
+};
+use std::io::Read;
+
+pub static WAV_FORMAT_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
+    file_extensions: &["wav", "wave"],
+    mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
+    markers: &[b"RIFF", b"WAVE"],
+};
 
 pub struct WavCodecId(pub u16);
 
-impl TryFrom<WavCodecId> for SyphonCodecKey {
+impl TryFrom<WavCodecId> for SyphonCodec {
     type Error = SyphonError;
 
     fn try_from(WavCodecId(id): WavCodecId) -> Result<Self, Self::Error> {
