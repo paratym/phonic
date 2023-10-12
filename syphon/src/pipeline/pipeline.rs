@@ -1,4 +1,4 @@
-use crate::core::{Sample, SignalSpec, SampleReader, SyphonError};
+use crate::core::{Sample, SampleReader, SignalSpec, SyphonError};
 
 pub trait Pipe<S: Sample> {
     fn signal_spec(&self) -> SignalSpec;
@@ -6,11 +6,34 @@ pub trait Pipe<S: Sample> {
 }
 
 pub struct Pipeline<S: Sample> {
-  source: Box<dyn SampleReader<S>>,
-  pipes: Vec<Box<dyn Pipe<S>>>,
+    source: Box<dyn SampleReader<S>>,
+    pipes: Box<[Box<dyn Pipe<S>>]>,
 }
 
-impl<S: Sample> Pipeline<S> {
+impl<S: Sample> SampleReader<S> for Pipeline<S> {
+    fn signal_spec(&self) -> SignalSpec {
+        match self.pipes.last() {
+            Some(pipe) => pipe.signal_spec(),
+            None => self.source.signal_spec(),
+        }
+    }
+
+    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+        let n_read = self.source.read(buffer)?;
+        for pipe in self.pipes.as_mut() {
+            pipe.process(&mut buffer[..n_read])?;
+        }
+
+        Ok(n_read)
+    }
+}
+
+pub struct PipelineBuilder<S: Sample> {
+    source: Box<dyn SampleReader<S>>,
+    pipes: Vec<Box<dyn Pipe<S>>>,
+}
+
+impl<S: Sample> PipelineBuilder<S> {
     pub fn from_source(source: impl SampleReader<S> + 'static) -> Self {
         Self {
             source: Box::new(source),
@@ -22,22 +45,11 @@ impl<S: Sample> Pipeline<S> {
         self.pipes.push(Box::new(pipe));
         self
     }
-}
 
-impl<S: Sample> SampleReader<S> for Pipeline<S> {
-    fn signal_spec(&self) -> SignalSpec {
-        match self.pipes.last() { 
-            Some(pipe) => pipe.signal_spec(),
-            None => self.source.signal_spec(),
+    pub fn build(self) -> Pipeline<S> {
+        Pipeline {
+            source: self.source,
+            pipes: self.pipes.into_boxed_slice(),
         }
-    }
-
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        let n_read = self.source.read(buffer)?;
-        for pipe in &mut self.pipes {
-            pipe.process(&mut buffer[..n_read])?;
-        }
-        
-        Ok(n_read)
     }
 }

@@ -1,7 +1,7 @@
+mod error;
 mod sample;
 mod signal;
-mod error;
 
+pub use error::*;
 pub use sample::*;
 pub use signal::*;
-pub use error::*;

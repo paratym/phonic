@@ -1,26 +1,26 @@
+use crate::core::{FromSample, Sample, SampleReader, SignalSpec, SyphonError, SampleReaderRef};
 use std::marker::PhantomData;
-use crate::core::{SignalSpec, SampleReader, Sample, FromSample, SyphonError};
 
-pub struct SampleTypeAdapter<S: Sample, O: Sample + FromSample<S>>{
-    signal_spec: SignalSpec,
+pub struct SampleTypeAdapter<S: Sample, O: Sample + FromSample<S>> {
     source: Box<dyn SampleReader<S>>,
     buffer: Box<[S]>,
-    out_sample: PhantomData<O>
+    signal_spec: SignalSpec,
+    _sample_type: PhantomData<O>,
 }
 
 impl<S: Sample, O: Sample + FromSample<S>> SampleTypeAdapter<S, O> {
-    pub fn new(source: impl SampleReader<S> + 'static) -> Self {
+    pub fn new(source: Box<dyn SampleReader<S>>) -> Self {
         let signal_spec = SignalSpec {
             sample_format: O::FORMAT,
-            bits_per_sample: (O::N_BYTES * 8) as u16,
+            bytes_per_sample: O::N_BYTES as u16,
             ..source.signal_spec()
         };
 
         Self {
+            source,
+            buffer: vec![S::MID; signal_spec.block_size].into_boxed_slice(),
             signal_spec,
-            source: Box::new(source),
-            buffer: vec![S::MID; signal_spec.block_size as usize].into_boxed_slice(),
-            out_sample: PhantomData,
+            _sample_type: PhantomData,
         }
     }
 }
