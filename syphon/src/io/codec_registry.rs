@@ -2,21 +2,27 @@ use crate::{
     core::{SampleReaderRef, SignalSpec},
     io::codecs::PcmDecoder,
 };
-use std::{collections::HashMap, io::Read};
+use std::{collections::HashMap, io::Read, hash::Hash};
 
-pub struct DecoderRegistry {
-    decoder_constructors:
-        HashMap<&'static str, Box<dyn Fn(Box<dyn Read>, SignalSpec) -> Option<SampleReaderRef>>>,
+#[derive(Eq, PartialEq, Hash)]
+pub enum SyphonCodecKey {
+    Pcm,
+    Other(&'static str),
 }
 
-impl DecoderRegistry {
+pub struct DecoderRegistry<K> {
+    decoder_constructors:
+        HashMap<K, Box<dyn Fn(Box<dyn Read>, SignalSpec) -> Option<SampleReaderRef>>>,
+}
+
+impl<K: Eq + Hash> DecoderRegistry<K> {
     pub fn new() -> Self {
         Self {
             decoder_constructors: HashMap::new(),
         }
     }
 
-    pub fn decoder<F>(mut self, key: &'static str, constructor: F) -> Self
+    pub fn decoder<F>(mut self, key: K, constructor: F) -> Self
     where
         F: Fn(Box<dyn Read>, SignalSpec) -> Option<SampleReaderRef> + 'static,
     {
@@ -28,7 +34,7 @@ impl DecoderRegistry {
 
     pub fn construct_decoder(
         &self,
-        key: &str,
+        key: &K,
         reader: Box<dyn Read>,
         signal_spec: SignalSpec,
     ) -> Option<SampleReaderRef> {
@@ -36,8 +42,8 @@ impl DecoderRegistry {
     }
 }
 
-pub fn syphon_decoder_registry() -> DecoderRegistry {
-    DecoderRegistry::new().decoder("pcm", |reader, spec| {
+pub fn syphon_decoder_registry() -> DecoderRegistry<SyphonCodecKey> {
+    DecoderRegistry::new().decoder(SyphonCodecKey::Pcm, |reader, spec| {
         PcmDecoder::new(reader, spec).try_into_sample_reader_ref()
     })
 }

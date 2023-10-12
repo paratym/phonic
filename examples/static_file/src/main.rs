@@ -2,17 +2,20 @@ use std::fs::File;
 
 use syphon::{
     core::SyphonError,
-    io::{formats::WavReader, syphon_decoder_registry, AudioFormatReader},
+    io::{syphon_decoder_registry, syphon_format_reader_registry, SyphonFormatKey},
 };
 
 fn main() -> Result<(), SyphonError> {
     let file = File::open("").unwrap();
-    let mut wav_reader = WavReader::new(Box::new(file));
-    let (_codec_id, spec_builder) = wav_reader.read_spec()?;
+    let mut format_reader = syphon_format_reader_registry()
+        .construct_reader(&SyphonFormatKey::Wav, Box::new(file))
+        .unwrap();
+
+    let format_data = format_reader.read_spec()?;
     let decoder = syphon_decoder_registry().construct_decoder(
-        "pcm",
-        Box::new(wav_reader),
-        spec_builder.try_build()?,
+        &format_data.codec_key.unwrap(),
+        Box::new(format_reader),
+        format_data.spec.try_build()?,
     );
 
     Ok(())

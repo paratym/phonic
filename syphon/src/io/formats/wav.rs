@@ -1,8 +1,18 @@
-use crate::{
-    core::{SignalSpecBuilder, SyphonError},
-    io::{AudioFormatReader, FormatCodecId},
-};
+use crate::{core::SyphonError, io::{formats::FormatReader, SyphonCodecKey}};
 use std::io::Read;
+use super::FormatDataBuilder;
+
+pub struct WavCodecId(pub u16);
+
+impl TryFrom<WavCodecId> for SyphonCodecKey {
+    type Error = SyphonError;
+
+    fn try_from(WavCodecId(id): WavCodecId) -> Result<Self, Self::Error> {
+        match id {
+            _ => Err(SyphonError::Unsupported),
+        }
+    }
+}
 
 pub struct WavReader {
     reader: Box<dyn Read>,
@@ -14,14 +24,9 @@ impl WavReader {
     }
 }
 
-pub struct WavCodecId(pub u16);
-impl FormatCodecId for WavCodecId {}
-
-impl AudioFormatReader for WavReader {
-    fn read_spec(&mut self) -> Result<(Box<dyn FormatCodecId>, SignalSpecBuilder), SyphonError> {
-        let spec_builder = SignalSpecBuilder::new();
-
-        Ok((Box::new(WavCodecId(0)), spec_builder))
+impl<K: TryFrom<WavCodecId>> FormatReader<K> for WavReader {
+    fn read_spec(&mut self) -> Result<FormatDataBuilder<K>, SyphonError> {
+        Ok(FormatDataBuilder::new())
     }
 }
 
