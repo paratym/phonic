@@ -1,24 +1,13 @@
 use crate::core::{SignalSpec, SignalSpecBuilder, SyphonError};
 use std::io::{Read, Write};
 
-pub struct FormatDataBuilder<K> {
-    pub spec: SignalSpecBuilder,
-    pub codec_key: Option<K>,
+
+
+pub trait FormatReader<K> {
+    fn read_track_data(&mut self) -> Result<TrackDataBuilder<K>, SyphonError>;
+    fn into_reader(self) -> Box<dyn Read>;
 }
 
-impl<K> FormatDataBuilder<K> {
-    pub fn new() -> Self {
-        Self {
-            spec: SignalSpecBuilder::new(),
-            codec_key: None,
-        }
-    }
-}
-
-pub trait FormatReader<K>: Read {
-    fn read_spec(&mut self) -> Result<FormatDataBuilder<K>, SyphonError>;
-}
-
-pub trait FormatWriter: Write {
-    fn write_spec(&mut self, spec: SignalSpec) -> Result<(), SyphonError>;
-}
+// pub trait FormatWriter: Write {
+//     fn write_spec(&mut self, spec: SignalSpec) -> Result<(), SyphonError>;
+// }

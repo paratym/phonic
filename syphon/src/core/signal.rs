@@ -11,11 +11,11 @@ pub struct SignalSpec {
 
 #[derive(Default)]
 pub struct SignalSpecBuilder {
-    n_channels: Option<u16>,
-    sample_rate: Option<u32>,
-    block_size: Option<usize>,
-    sample_format: Option<SampleFormat>,
-    bytes_per_sample: Option<u16>,
+    pub n_channels: Option<u16>,
+    pub sample_rate: Option<u32>,
+    pub block_size: Option<usize>,
+    pub sample_format: Option<SampleFormat>,
+    pub bytes_per_sample: Option<u16>,
 }
 
 impl SignalSpecBuilder {

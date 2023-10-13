@@ -94,7 +94,7 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
 
         //         None
         //     })
-        
+
         None
     }
 
