@@ -1,52 +1,64 @@
-use std::io::{Read, Seek};
 use crate::{Sample, SampleFormat, SyphonError};
+use std::io::{Read, Seek};
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SyphonCodec {
+    Pcm,
+    Other(&'static str),
+}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct SignalSpec {
+pub struct StreamSpec {
+    pub codec_key: SyphonCodec,
     pub bytes_per_sample: u16,
     pub sample_format: SampleFormat,
     pub n_channels: u16,
     pub sample_rate: u32,
     pub block_size: usize,
+    pub n_frames: Option<usize>,
 }
 
 #[derive(Default, Clone, Copy)]
-pub struct SignalSpecBuilder {
+pub struct StreamSpecBuilder {
+    pub codec_key: Option<SyphonCodec>,
+    pub bytes_per_sample: Option<u16>,
+    pub sample_format: Option<SampleFormat>,
     pub n_channels: Option<u16>,
     pub sample_rate: Option<u32>,
     pub block_size: Option<usize>,
-    pub sample_format: Option<SampleFormat>,
-    pub bytes_per_sample: Option<u16>,
+    pub n_frames: Option<usize>,
 }
 
-pub trait SignalReader: Read + Seek {
-    fn signal_spec(&self) -> &SignalSpec;
+pub trait MediaStreamReader: Read + Seek {
+    fn stream_spec(&self) -> &StreamSpec;
 }
 
-impl SignalSpecBuilder {
+impl StreamSpecBuilder {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn try_build(self) -> Result<SignalSpec, SyphonError> {
-        Ok(SignalSpec {
+    pub fn try_build(self) -> Result<StreamSpec, SyphonError> {
+        Ok(StreamSpec {
+            codec_key: self.codec_key.ok_or(SyphonError::MalformedData)?,
+            bytes_per_sample: self.bytes_per_sample.ok_or(SyphonError::MalformedData)?,
+            sample_format: self.sample_format.ok_or(SyphonError::MalformedData)?,
             n_channels: self.n_channels.ok_or(SyphonError::MalformedData)?,
             sample_rate: self.sample_rate.ok_or(SyphonError::MalformedData)?,
             block_size: self.block_size.ok_or(SyphonError::MalformedData)?,
-            sample_format: self.sample_format.ok_or(SyphonError::MalformedData)?,
-            bytes_per_sample: self.bytes_per_sample.ok_or(SyphonError::MalformedData)?,
+            n_frames: self.n_frames,
         })
     }
 }
 
 pub trait SampleReader<S: Sample> {
-    fn signal_spec(&self) -> &SignalSpec;
+    fn stream_spec(&self) -> &StreamSpec;
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 
     fn read_exact(&mut self, mut buffer: &mut [S]) -> Result<(), SyphonError> {
-        let block_size = self.signal_spec().block_size;
+        let block_size = self.stream_spec().block_size;
         if buffer.len() % block_size != 0 {
-            return Err(SyphonError::SignalMismatch);
+            return Err(SyphonError::StreamMismatch);
         }
 
         while !buffer.is_empty() {
@@ -65,13 +77,13 @@ pub trait SampleReader<S: Sample> {
 }
 
 pub trait SampleWriter<S: Sample> {
-    fn signal_spec(&self) -> &SignalSpec;
+    fn stream_spec(&self) -> &StreamSpec;
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
 
     fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
-        let block_size = self.signal_spec().block_size;
+        let block_size = self.stream_spec().block_size;
         if buffer.len() % block_size != 0 {
-            return Err(SyphonError::SignalMismatch);
+            return Err(SyphonError::StreamMismatch);
         }
 
         while !buffer.is_empty() {
@@ -109,11 +121,11 @@ pub fn pipe_buffered<S: Sample>(
     writer: &mut dyn SampleWriter<S>,
     buffer: &mut [S],
 ) -> Result<(), SyphonError> {
-    let spec = *reader.signal_spec();
-    if writer.signal_spec() != &spec {
-        return Err(SyphonError::SignalMismatch);
+    let spec = *reader.stream_spec();
+    if writer.stream_spec() != &spec {
+        return Err(SyphonError::StreamMismatch);
     } else if buffer.len() % spec.block_size != 0 {
-        return Err(SyphonError::SignalMismatch);
+        return Err(SyphonError::StreamMismatch);
     }
 
     loop {
@@ -133,10 +145,10 @@ pub fn pipe<S: Sample>(
     reader: &mut dyn SampleReader<S>,
     writer: &mut dyn SampleWriter<S>,
 ) -> Result<(), SyphonError> {
-    if reader.signal_spec() != writer.signal_spec() {
-        return Err(SyphonError::SignalMismatch);
+    if reader.stream_spec() != writer.stream_spec() {
+        return Err(SyphonError::StreamMismatch);
     }
 
-    let mut buffer = vec![S::MID; reader.signal_spec().block_size as usize];
+    let mut buffer = vec![S::MID; reader.stream_spec().block_size as usize];
     pipe_buffered(reader, writer, buffer.as_mut_slice())
 }

@@ -1,7 +1,7 @@
 use crate::{
     io::{
-        FormatIdentifiers, FormatReadResult, FormatReader, MediaSource, SyphonCodec,
-        TrackDataBuilder,
+        FormatIdentifiers, FormatReadResult, FormatReader, MediaSource, StreamSpecBuilder,
+        SyphonCodec,
     },
     Endianess, SampleFormat, SyphonError,
 };
@@ -29,8 +29,8 @@ impl TryFrom<WavCodecKey> for SyphonCodec {
 
 pub struct WavReader {
     source: Box<dyn MediaSource>,
-    track_data: TrackDataBuilder<WavCodecKey>,
-    track_source_bounds: Option<(usize, usize)>,
+    stream_spec: StreamSpecBuilder,
+    media_bounds: Option<(usize, usize)>,
     source_pos: usize,
 }
 
@@ -40,8 +40,8 @@ impl WavReader {
 
         Self {
             source: reader,
-            track_data: TrackDataBuilder::new(),
-            track_source_bounds: None,
+            stream_spec: StreamSpecBuilder::new(),
+            media_bounds: None,
             source_pos,
         }
     }
@@ -67,18 +67,16 @@ impl WavReader {
         self.source_pos += chunk_len;
 
         let codec_key = u16::from_le_bytes(buf[0..2].try_into().unwrap());
-        self.track_data.codec_key = Some(WavCodecKey(codec_key));
+        self.stream_spec.codec_key = WavCodecKey(codec_key).try_into().ok();
 
-        self.track_data.signal_spec.n_channels =
-            Some(u16::from_le_bytes(buf[2..4].try_into().unwrap()));
-        self.track_data.signal_spec.sample_rate =
-            Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
-        self.track_data.signal_spec.block_size =
+        self.stream_spec.n_channels = Some(u16::from_le_bytes(buf[2..4].try_into().unwrap()));
+        self.stream_spec.sample_rate = Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
+        self.stream_spec.block_size =
             Some(u16::from_le_bytes(buf[12..14].try_into().unwrap()) as usize);
 
         let bits_per_sample = u16::from_le_bytes(buf[14..16].try_into().unwrap());
-        self.track_data.signal_spec.bytes_per_sample = Some(bits_per_sample / 8);
-        self.track_data.signal_spec.sample_format = match codec_key {
+        self.stream_spec.bytes_per_sample = Some(bits_per_sample / 8);
+        self.stream_spec.sample_format = match codec_key {
             1 if bits_per_sample == 8 => Some(SampleFormat::Unsigned(Endianess::Little)),
             1 => Some(SampleFormat::Signed(Endianess::Little)),
             3 => Some(SampleFormat::Float(Endianess::Little)),
@@ -92,8 +90,8 @@ impl WavReader {
         self.source.read_exact(buf)?;
         self.source_pos += buf.len();
 
-        if let Some(n_channels) = self.track_data.signal_spec.n_channels {
-            self.track_data.n_frames =
+        if let Some(n_channels) = self.stream_spec.n_channels {
+            self.stream_spec.n_frames =
                 Some(u32::from_le_bytes(*buf) as usize / n_channels as usize);
         }
 
@@ -102,10 +100,8 @@ impl WavReader {
 }
 
 impl FormatReader for WavReader {
-    type CodecKey = WavCodecKey;
-
-    fn tracks(&self) -> Box<dyn Iterator<Item = TrackDataBuilder<Self::CodecKey>>> {
-        Box::new(std::iter::once(self.track_data))
+    fn tracks(&self) -> Box<dyn Iterator<Item = StreamSpecBuilder>> {
+        Box::new(std::iter::once(self.stream_spec))
     }
 
     fn read_headers(&mut self) -> Result<(), SyphonError> {
@@ -128,14 +124,14 @@ impl FormatReader for WavReader {
                     }
 
                     self.read_fmt_chunk(&mut buf[..chunk_len])?
-                },
+                }
                 b"fact" => {
                     if chunk_len != 4 {
                         return Err(SyphonError::MalformedData);
                     }
 
                     self.read_fact_chunk(&mut buf[..4].try_into().unwrap())?
-                },
+                }
                 b"data" => {
                     if let Ok(pos) = self.source.stream_position() {
                         if pos as usize != self.source_pos {
@@ -143,9 +139,9 @@ impl FormatReader for WavReader {
                         }
                     }
 
-                    self.track_source_bounds = Some((self.source_pos, self.source_pos + chunk_len));
+                    self.media_bounds = Some((self.source_pos, self.source_pos + chunk_len));
                     break;
-                },
+                }
                 _ => {
                     self.source
                         .seek(SeekFrom::Current(chunk_len as i64))
@@ -158,14 +154,14 @@ impl FormatReader for WavReader {
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
-        let track_bounds = self.track_source_bounds.ok_or(SyphonError::NotReady)?;
-        if self.source_pos < track_bounds.0 {
+        let bounds = self.media_bounds.ok_or(SyphonError::NotReady)?;
+        if self.source_pos < bounds.0 {
             return Err(SyphonError::NotReady);
-        } else if self.source_pos >= track_bounds.1 {
+        } else if self.source_pos >= bounds.1 {
             return Err(SyphonError::Empty);
         }
 
-        let len = buf.len().min(track_bounds.1 - self.source_pos);
+        let len = buf.len().min(bounds.1 - self.source_pos);
         let n_bytes = self.source.read(&mut buf[..len])?;
         self.source_pos += n_bytes;
 
@@ -176,12 +172,14 @@ impl FormatReader for WavReader {
     }
 
     fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
-        let track_bounds = self.track_source_bounds.ok_or(SyphonError::NotReady)?;
+        let bounds = self.media_bounds.ok_or(SyphonError::NotReady)?;
         let new_pos = match offset {
-            SeekFrom::Start(offset) => track_bounds.0 as i64 + offset as i64,
-            SeekFrom::End(offset) => track_bounds.1 as i64 + offset,
-            SeekFrom::Current(offset) if offset == 0 => return Ok(self.source.stream_position()?),
-            SeekFrom::Current(offset) => self.source.stream_position()? as i64 + offset
+            SeekFrom::Start(offset) => bounds.0 as i64 + offset as i64,
+            SeekFrom::End(offset) => bounds.1 as i64 + offset,
+            SeekFrom::Current(offset) if offset == 0 => {
+                return Ok(self.source.stream_position()?)
+            }
+            SeekFrom::Current(offset) => self.source.stream_position()? as i64 + offset,
         };
 
         if new_pos < 0 {
@@ -189,7 +187,7 @@ impl FormatReader for WavReader {
         }
 
         let new_pos = new_pos as usize;
-        if new_pos < track_bounds.0 || new_pos > track_bounds.1 {
+        if new_pos < bounds.0 || new_pos > bounds.1 {
             return Err(SyphonError::BadRequest);
         }
 

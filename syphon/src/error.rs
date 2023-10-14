@@ -7,7 +7,7 @@ pub enum SyphonError {
     BadRequest,
     MalformedData,
     Unsupported,
-    SignalMismatch,
+    StreamMismatch,
     Other(String),
 }
 
@@ -21,7 +21,7 @@ impl Display for SyphonError {
             Self::BadRequest => write!(f, "bad request"),
             Self::MalformedData => write!(f, "malformed data"),
             Self::Unsupported => write!(f, "unsupported"),
-            Self::SignalMismatch => write!(f, "signal specs do not match"),
+            Self::StreamMismatch => write!(f, "stream specs do not match"),
             Self::Other(msg) => write!(f, "{}", msg),
         }
     }

@@ -1,7 +1,10 @@
-use crate::{Sample, io::{SignalSpec, SampleReader}, SyphonError};
+use crate::{
+    io::{SampleReader, StreamSpec},
+    Sample, SyphonError,
+};
 
 pub trait Pipe<S: Sample> {
-    fn signal_spec(&self) -> &SignalSpec;
+    fn stream_spec(&self) -> &StreamSpec;
     fn process(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 }
 
@@ -11,10 +14,10 @@ pub struct Pipeline<S: Sample> {
 }
 
 impl<S: Sample> SampleReader<S> for Pipeline<S> {
-    fn signal_spec(&self) -> &SignalSpec {
+    fn stream_spec(&self) -> &StreamSpec {
         match self.pipes.last() {
-            Some(pipe) => pipe.signal_spec(),
-            None => self.source.signal_spec(),
+            Some(pipe) => pipe.stream_spec(),
+            None => self.source.stream_spec(),
         }
     }
 

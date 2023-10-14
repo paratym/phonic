@@ -1,29 +1,26 @@
-use crate::io::{codecs::PcmDecoder, SignalSpec, SampleReaderRef};
+use crate::{
+    io::{codecs::PcmDecoder, MediaStreamReader, SampleReaderRef, SyphonCodec},
+    SyphonError,
+};
 use std::{collections::HashMap, hash::Hash, io::Read};
 
-use super::SignalReader;
-
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SyphonCodec {
-    Pcm,
-    Other(&'static str),
+pub struct CodecRegistry {
+    decoder_constructors: HashMap<
+        SyphonCodec,
+        Box<dyn Fn(Box<dyn MediaStreamReader>) -> Result<SampleReaderRef, SyphonError>>,
+    >,
 }
 
-pub struct CodecRegistry<K> {
-    decoder_constructors:
-        HashMap<K, Box<dyn Fn(Box<dyn SignalReader>) -> Option<SampleReaderRef>>>,
-}
-
-impl<K: Eq + Hash> CodecRegistry<K> {
+impl CodecRegistry {
     pub fn new() -> Self {
         Self {
             decoder_constructors: HashMap::new(),
         }
     }
 
-    pub fn register_decoder<F>(mut self, key: K, constructor: F) -> Self
+    pub fn register_decoder<F>(mut self, key: SyphonCodec, constructor: F) -> Self
     where
-        F: Fn(Box<dyn SignalReader>) -> Option<SampleReaderRef> + 'static,
+        F: Fn(Box<dyn MediaStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
     {
         self.decoder_constructors.insert(key, Box::new(constructor));
 
@@ -32,14 +29,16 @@ impl<K: Eq + Hash> CodecRegistry<K> {
 
     pub fn construct_decoder(
         &self,
-        key: &K,
-        reader: Box<dyn SignalReader>,
-    ) -> Option<SampleReaderRef> {
-        self.decoder_constructors.get(key)?(reader)
+        reader: impl MediaStreamReader + 'static,
+    ) -> Result<SampleReaderRef, SyphonError> {
+        let key = reader.stream_spec().codec_key;
+        self.decoder_constructors
+            .get(&key)
+            .ok_or(SyphonError::Unsupported)?(Box::new(reader))
     }
 }
 
-pub fn syphon_codec_registry() -> CodecRegistry<SyphonCodec> {
+pub fn syphon_codec_registry() -> CodecRegistry {
     CodecRegistry::new().register_decoder(SyphonCodec::Pcm, |reader| {
         PcmDecoder::new(reader).try_into_sample_reader_ref()
     })
