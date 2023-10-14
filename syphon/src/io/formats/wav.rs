@@ -2,7 +2,8 @@ use crate::{
     io::{
         FormatIdentifiers, FormatReadResult, FormatReader, MediaSource, SyphonCodec,
         TrackDataBuilder,
-    }, SyphonError, SampleFormat, Endianess,
+    },
+    Endianess, SampleFormat, SyphonError,
 };
 use std::io::{Read, SeekFrom};
 
@@ -29,51 +30,53 @@ impl TryFrom<WavCodecKey> for SyphonCodec {
 pub struct WavReader {
     source: Box<dyn MediaSource>,
     track_data: TrackDataBuilder<WavCodecKey>,
+    track_source_bounds: Option<(usize, usize)>,
+    source_pos: usize,
 }
 
 impl WavReader {
-    pub fn new(reader: Box<dyn MediaSource>) -> Self {
+    pub fn new(mut reader: Box<dyn MediaSource>) -> Self {
+        let source_pos = reader.stream_position().unwrap_or(0) as usize;
+
         Self {
             source: reader,
             track_data: TrackDataBuilder::new(),
+            track_source_bounds: None,
+            source_pos,
         }
     }
 
-    fn read_riff_header(&mut self, buf: &mut [u8; 12]) -> Result<(), ()> {
-        self.source.read_exact(buf).map_err(|_| ())?;
+    fn read_riff_header(&mut self, buf: &mut [u8; 12]) -> Result<(), SyphonError> {
+        self.source.read_exact(buf)?;
+        self.source_pos += buf.len();
+
         if &buf[0..4] != b"RIFF" || &buf[8..12] != b"WAVE" {
-            return Err(());
+            return Err(SyphonError::MalformedData);
         }
 
         Ok(())
     }
 
-    fn read_chunk_header<'a>(&mut self, buf: &'a mut [u8; 8]) -> Result<&'a [u8; 8], ()> {
-        self.source.read_exact(buf).map_err(|_| ())?;
-        Ok(buf)
-    }
-
-    fn read_fmt_chunk<K: TryFrom<WavCodecKey>>(&mut self, buf: &mut [u8]) -> Result<(), ()> {
-        match buf.len() {
-            16 | 18 | 40 => (),
-            _ => return Err(()),
+    fn read_fmt_chunk(&mut self, buf: &mut [u8]) -> Result<(), SyphonError> {
+        let chunk_len = buf.len();
+        if chunk_len != 16 && chunk_len != 18 && chunk_len != 40 {
+            return Err(SyphonError::MalformedData);
         }
 
-        self.source.read_exact(buf).map_err(|_| ())?;
+        self.source.read_exact(buf)?;
+        self.source_pos += chunk_len;
 
-        let codec_key = u16::from_le_bytes(buf[0..2].try_into().map_err(|_| ())?);
-        self.track_data.codec_key = WavCodecKey(codec_key)
-            .try_into()
-            .map_or(None, |key| Some(key));
+        let codec_key = u16::from_le_bytes(buf[0..2].try_into().unwrap());
+        self.track_data.codec_key = Some(WavCodecKey(codec_key));
 
         self.track_data.signal_spec.n_channels =
-            Some(u16::from_le_bytes(buf[2..4].try_into().map_err(|_| ())?));
+            Some(u16::from_le_bytes(buf[2..4].try_into().unwrap()));
         self.track_data.signal_spec.sample_rate =
-            Some(u32::from_le_bytes(buf[4..8].try_into().map_err(|_| ())?));
+            Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
         self.track_data.signal_spec.block_size =
-            Some(u16::from_le_bytes(buf[12..14].try_into().map_err(|_| ())?) as usize);
+            Some(u16::from_le_bytes(buf[12..14].try_into().unwrap()) as usize);
 
-        let bits_per_sample = u16::from_le_bytes(buf[14..16].try_into().map_err(|_| ())?);
+        let bits_per_sample = u16::from_le_bytes(buf[14..16].try_into().unwrap());
         self.track_data.signal_spec.bytes_per_sample = Some(bits_per_sample / 8);
         self.track_data.signal_spec.sample_format = match codec_key {
             1 if bits_per_sample == 8 => Some(SampleFormat::Unsigned(Endianess::Little)),
@@ -85,9 +88,14 @@ impl WavReader {
         Ok(())
     }
 
-    fn read_fact_chunk(&mut self, buf: &mut [u8; 4]) -> Result<(), ()> {
-        self.source.read_exact(buf).map_err(|_| ())?;
-        // let n_samples = u32::from_le_bytes(*buf);
+    fn read_fact_chunk(&mut self, buf: &mut [u8; 4]) -> Result<(), SyphonError> {
+        self.source.read_exact(buf)?;
+        self.source_pos += buf.len();
+
+        if let Some(n_channels) = self.track_data.signal_spec.n_channels {
+            self.track_data.n_frames =
+                Some(u32::from_le_bytes(*buf) as usize / n_channels as usize);
+        }
 
         Ok(())
     }
@@ -100,15 +108,94 @@ impl FormatReader for WavReader {
         Box::new(std::iter::once(self.track_data))
     }
 
-    fn read_headers(&mut self) -> Result<usize, SyphonError> {
-        todo!()
+    fn read_headers(&mut self) -> Result<(), SyphonError> {
+        let mut buf = [0u8; 40];
+
+        self.read_riff_header(&mut buf[0..12].try_into().unwrap())?;
+
+        loop {
+            self.source
+                .read_exact(&mut buf[..8])
+                .map_err(|e| Into::<SyphonError>::into(e))?;
+
+            self.source_pos += 8;
+            let chunk_len = u32::from_le_bytes(buf[4..8].try_into().unwrap()) as usize;
+
+            match &buf[0..4] {
+                b"fmt " => {
+                    if chunk_len > buf.len() {
+                        return Err(SyphonError::MalformedData);
+                    }
+
+                    self.read_fmt_chunk(&mut buf[..chunk_len])?
+                },
+                b"fact" => {
+                    if chunk_len != 4 {
+                        return Err(SyphonError::MalformedData);
+                    }
+
+                    self.read_fact_chunk(&mut buf[..4].try_into().unwrap())?
+                },
+                b"data" => {
+                    if let Ok(pos) = self.source.stream_position() {
+                        if pos as usize != self.source_pos {
+                            return Err(SyphonError::MalformedData);
+                        }
+                    }
+
+                    self.track_source_bounds = Some((self.source_pos, self.source_pos + chunk_len));
+                    break;
+                },
+                _ => {
+                    self.source
+                        .seek(SeekFrom::Current(chunk_len as i64))
+                        .map_err(|e| Into::<SyphonError>::into(e))?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
-        todo!()
+        let track_bounds = self.track_source_bounds.ok_or(SyphonError::NotReady)?;
+        if self.source_pos < track_bounds.0 {
+            return Err(SyphonError::NotReady);
+        } else if self.source_pos >= track_bounds.1 {
+            return Err(SyphonError::Empty);
+        }
+
+        let len = buf.len().min(track_bounds.1 - self.source_pos);
+        let n_bytes = self.source.read(&mut buf[..len])?;
+        self.source_pos += n_bytes;
+
+        Ok(FormatReadResult {
+            n_bytes,
+            track_i: 0,
+        })
     }
 
-    fn seek(&mut self, offset: SeekFrom) -> Result<usize, SyphonError> {
-        todo!()
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        let track_bounds = self.track_source_bounds.ok_or(SyphonError::NotReady)?;
+        let new_pos = match offset {
+            SeekFrom::Start(offset) => track_bounds.0 as i64 + offset as i64,
+            SeekFrom::End(offset) => track_bounds.1 as i64 + offset,
+            SeekFrom::Current(offset) if offset == 0 => return Ok(self.source.stream_position()?),
+            SeekFrom::Current(offset) => self.source.stream_position()? as i64 + offset
+        };
+
+        if new_pos < 0 {
+            return Err(SyphonError::BadRequest);
+        }
+
+        let new_pos = new_pos as usize;
+        if new_pos < track_bounds.0 || new_pos > track_bounds.1 {
+            return Err(SyphonError::BadRequest);
+        }
+
+        self.source.seek(SeekFrom::Start(new_pos as u64))?;
+        self.source_pos = new_pos;
+
+        Ok(new_pos as u64)
     }
 }

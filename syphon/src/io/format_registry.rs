@@ -1,11 +1,11 @@
 use crate::{
-    SyphonError,
     io::{
         codec_registry::SyphonCodec,
         formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
         BufReader, FormatReadResult, FormatReader, MediaSource, TrackDataBuilder,
         UnseekableMediaSource,
     },
+    SyphonError,
 };
 use std::{
     collections::HashMap,
@@ -26,6 +26,7 @@ pub struct FormatIdentifiers {
     pub markers: &'static [&'static [u8]],
 }
 
+#[derive(Clone, Copy)]
 pub enum FormatIdentifier<'a> {
     FileExtension(&'a str),
     MimeType(&'a str),
@@ -95,15 +96,22 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
         &self,
         key: &K,
         source: impl MediaSource + 'static,
-    ) -> Option<Box<dyn FormatReader<CodecKey = C>>> {
-        Some(self.formats.get(key)?.1.as_ref()?(Box::new(source)))
+    ) -> Result<Box<dyn FormatReader<CodecKey = C>>, SyphonError> {
+        let constructor = self
+            .formats
+            .get(key)
+            .map(|f| f.1.as_ref())
+            .flatten()
+            .ok_or(SyphonError::Unsupported)?;
+
+        Ok(constructor(Box::new(source)))
     }
 
     pub fn resolve_format(
         &self,
         reader: &mut (impl MediaSource + 'static),
         identifier: Option<FormatIdentifier>,
-    ) -> Option<K> {
+    ) -> Result<K, SyphonError> {
         // self.formats
         //     .iter()
         //     .filter_map(|(key, format)| Some((key, format.0.as_ref()?)))
@@ -119,14 +127,14 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
         //         None
         //     })
 
-        None
+        Err(SyphonError::Unsupported)
     }
 
     pub fn resolve_reader(
         &self,
         mut reader: impl MediaSource + 'static,
         identifier: Option<FormatIdentifier>,
-    ) -> Option<Box<dyn FormatReader<CodecKey = C>>> {
+    ) -> Result<Box<dyn FormatReader<CodecKey = C>>, SyphonError> {
         let key = self.resolve_format(&mut reader, identifier)?;
         self.construct_reader(&key, Box::new(reader))
     }
@@ -153,7 +161,7 @@ impl<T: FormatReader, K: Copy + TryFrom<T::CodecKey>> FormatReader for CodecKeyC
         todo!()
     }
 
-    fn read_headers(&mut self) -> Result<usize, SyphonError> {
+    fn read_headers(&mut self) -> Result<(), SyphonError> {
         self.reader.read_headers()
     }
 
@@ -161,7 +169,7 @@ impl<T: FormatReader, K: Copy + TryFrom<T::CodecKey>> FormatReader for CodecKeyC
         self.reader.read(buf)
     }
 
-    fn seek(&mut self, offset: SeekFrom) -> Result<usize, SyphonError> {
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
         self.reader.seek(offset)
     }
 }

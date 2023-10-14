@@ -13,7 +13,7 @@ impl<S: Sample, O: Sample + FromSample<S>> SampleTypeAdapter<S, O> {
         let signal_spec = SignalSpec {
             sample_format: O::FORMAT,
             bytes_per_sample: O::N_BYTES as u16,
-            ..source.signal_spec()
+            ..*source.signal_spec()
         };
 
         Self {
@@ -26,8 +26,8 @@ impl<S: Sample, O: Sample + FromSample<S>> SampleTypeAdapter<S, O> {
 }
 
 impl<S: Sample, O: Sample + FromSample<S>> SampleReader<O> for SampleTypeAdapter<S, O> {
-    fn signal_spec(&self) -> SignalSpec {
-        self.signal_spec
+    fn signal_spec(&self) -> &SignalSpec {
+        &self.signal_spec
     }
 
     fn read(&mut self, buffer: &mut [O]) -> Result<usize, SyphonError> {

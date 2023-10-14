@@ -1,3 +1,4 @@
+use std::io::{Read, Seek};
 use crate::{Sample, SampleFormat, SyphonError};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -18,6 +19,10 @@ pub struct SignalSpecBuilder {
     pub bytes_per_sample: Option<u16>,
 }
 
+pub trait SignalReader: Read + Seek {
+    fn signal_spec(&self) -> &SignalSpec;
+}
+
 impl SignalSpecBuilder {
     pub fn new() -> Self {
         Self::default()
@@ -35,7 +40,7 @@ impl SignalSpecBuilder {
 }
 
 pub trait SampleReader<S: Sample> {
-    fn signal_spec(&self) -> SignalSpec;
+    fn signal_spec(&self) -> &SignalSpec;
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 
     fn read_exact(&mut self, mut buffer: &mut [S]) -> Result<(), SyphonError> {
@@ -60,7 +65,7 @@ pub trait SampleReader<S: Sample> {
 }
 
 pub trait SampleWriter<S: Sample> {
-    fn signal_spec(&self) -> SignalSpec;
+    fn signal_spec(&self) -> &SignalSpec;
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
 
     fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
@@ -84,13 +89,28 @@ pub trait SampleWriter<S: Sample> {
     }
 }
 
+pub enum SampleReaderRef {
+    I8(Box<dyn SampleReader<i8>>),
+    I16(Box<dyn SampleReader<i16>>),
+    I32(Box<dyn SampleReader<i32>>),
+    I64(Box<dyn SampleReader<i64>>),
+
+    U8(Box<dyn SampleReader<u8>>),
+    U16(Box<dyn SampleReader<u16>>),
+    U32(Box<dyn SampleReader<u32>>),
+    U64(Box<dyn SampleReader<u64>>),
+
+    F32(Box<dyn SampleReader<f32>>),
+    F64(Box<dyn SampleReader<f64>>),
+}
+
 pub fn pipe_buffered<S: Sample>(
     reader: &mut dyn SampleReader<S>,
     writer: &mut dyn SampleWriter<S>,
     buffer: &mut [S],
 ) -> Result<(), SyphonError> {
-    let spec = reader.signal_spec();
-    if writer.signal_spec() != spec {
+    let spec = *reader.signal_spec();
+    if writer.signal_spec() != &spec {
         return Err(SyphonError::SignalMismatch);
     } else if buffer.len() % spec.block_size != 0 {
         return Err(SyphonError::SignalMismatch);

@@ -1,5 +1,7 @@
-use crate::io::{codecs::PcmDecoder, SignalSpec, SampleReader};
+use crate::io::{codecs::PcmDecoder, SignalSpec, SampleReaderRef};
 use std::{collections::HashMap, hash::Hash, io::Read};
+
+use super::SignalReader;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SyphonCodec {
@@ -7,24 +9,9 @@ pub enum SyphonCodec {
     Other(&'static str),
 }
 
-pub enum SampleReaderRef {
-    I8(Box<dyn SampleReader<i8>>),
-    I16(Box<dyn SampleReader<i16>>),
-    I32(Box<dyn SampleReader<i32>>),
-    I64(Box<dyn SampleReader<i64>>),
-
-    U8(Box<dyn SampleReader<u8>>),
-    U16(Box<dyn SampleReader<u16>>),
-    U32(Box<dyn SampleReader<u32>>),
-    U64(Box<dyn SampleReader<u64>>),
-
-    F32(Box<dyn SampleReader<f32>>),
-    F64(Box<dyn SampleReader<f64>>),
-}
-
 pub struct CodecRegistry<K> {
     decoder_constructors:
-        HashMap<K, Box<dyn Fn(Box<dyn Read>, SignalSpec) -> Option<SampleReaderRef>>>,
+        HashMap<K, Box<dyn Fn(Box<dyn SignalReader>) -> Option<SampleReaderRef>>>,
 }
 
 impl<K: Eq + Hash> CodecRegistry<K> {
@@ -36,7 +23,7 @@ impl<K: Eq + Hash> CodecRegistry<K> {
 
     pub fn register_decoder<F>(mut self, key: K, constructor: F) -> Self
     where
-        F: Fn(Box<dyn Read>, SignalSpec) -> Option<SampleReaderRef> + 'static,
+        F: Fn(Box<dyn SignalReader>) -> Option<SampleReaderRef> + 'static,
     {
         self.decoder_constructors.insert(key, Box::new(constructor));
 
@@ -46,15 +33,14 @@ impl<K: Eq + Hash> CodecRegistry<K> {
     pub fn construct_decoder(
         &self,
         key: &K,
-        reader: Box<dyn Read>,
-        signal_spec: SignalSpec,
+        reader: Box<dyn SignalReader>,
     ) -> Option<SampleReaderRef> {
-        self.decoder_constructors.get(key)?(reader, signal_spec)
+        self.decoder_constructors.get(key)?(reader)
     }
 }
 
 pub fn syphon_codec_registry() -> CodecRegistry<SyphonCodec> {
-    CodecRegistry::new().register_decoder(SyphonCodec::Pcm, |reader, spec| {
-        PcmDecoder::new(reader, spec).try_into_sample_reader_ref()
+    CodecRegistry::new().register_decoder(SyphonCodec::Pcm, |reader| {
+        PcmDecoder::new(reader).try_into_sample_reader_ref()
     })
 }

@@ -4,6 +4,7 @@ use std::{error::Error, fmt::Display};
 pub enum SyphonError {
     Empty,
     NotReady,
+    BadRequest,
     MalformedData,
     Unsupported,
     SignalMismatch,
@@ -17,6 +18,7 @@ impl Display for SyphonError {
         match self {
             Self::Empty => write!(f, "empty"),
             Self::NotReady => write!(f, "not ready"),
+            Self::BadRequest => write!(f, "bad request"),
             Self::MalformedData => write!(f, "malformed data"),
             Self::Unsupported => write!(f, "unsupported"),
             Self::SignalMismatch => write!(f, "signal specs do not match"),
@@ -28,5 +30,11 @@ impl Display for SyphonError {
 impl From<std::io::Error> for SyphonError {
     fn from(e: std::io::Error) -> Self {
         Self::Other(e.to_string())
+    }
+}
+
+impl From<SyphonError> for std::io::Error {
+    fn from(e: SyphonError) -> Self {
+        Self::new(std::io::ErrorKind::Other, e.to_string())
     }
 }

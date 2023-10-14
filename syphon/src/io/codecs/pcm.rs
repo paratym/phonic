@@ -1,27 +1,23 @@
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
 use std::io::{Read, Write};
-
-use crate::{io::{SignalSpec, SampleReaderRef, SampleReader, SampleWriter}, SampleFormat, SyphonError, Sample};
+use crate::{
+    io::{SampleReader, SampleReaderRef, SampleWriter, SignalReader, SignalSpec},
+    Sample, SampleFormat, SyphonError,
+};
 
 pub struct PcmDecoder {
-    reader: Box<dyn Read>,
-    signal_spec: SignalSpec,
+    reader: Box<dyn SignalReader>,
 }
 
 impl PcmDecoder {
-    pub fn new(reader: Box<dyn Read>, signal_spec: SignalSpec) -> Self {
-        Self {
-            reader,
-            signal_spec,
-        }
+    pub fn new(reader: Box<dyn SignalReader>) -> Self {
+        Self { reader }
     }
 
     pub fn try_into_sample_reader_ref(self) -> Option<SampleReaderRef> {
         let decoder_ref = Box::new(self);
-        let reader_ref = match (
-            decoder_ref.signal_spec.sample_format,
-            decoder_ref.signal_spec.bytes_per_sample,
-        ) {
+        let signal_spec = decoder_ref.reader.signal_spec();
+        let reader_ref = match (signal_spec.sample_format, signal_spec.bytes_per_sample) {
             (SampleFormat::Unsigned(_), 1) => SampleReaderRef::U8(decoder_ref),
             (SampleFormat::Unsigned(_), 2) => SampleReaderRef::U16(decoder_ref),
             (SampleFormat::Unsigned(_), 4) => SampleReaderRef::U32(decoder_ref),
@@ -43,13 +39,14 @@ impl PcmDecoder {
 }
 
 impl<S: Sample + ToMutByteSlice> SampleReader<S> for PcmDecoder {
-    fn signal_spec(&self) -> SignalSpec {
-        self.signal_spec
+    fn signal_spec(&self) -> &SignalSpec {
+        self.reader.signal_spec()
     }
 
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        let n_samples = buffer.len() / self.signal_spec.block_size * self.signal_spec.block_size;
-        let bytes_per_block = <S>::N_BYTES * self.signal_spec.block_size;
+        let signal_spec = self.reader.signal_spec();
+        let n_samples = buffer.len() / signal_spec.block_size * signal_spec.block_size;
+        let bytes_per_block = <S>::N_BYTES * signal_spec.block_size;
 
         match self.reader.read(buffer[..n_samples].as_mut_byte_slice()) {
             Ok(n) if n % bytes_per_block == 0 => Ok(n / <S>::N_BYTES),
@@ -74,8 +71,8 @@ impl PcmEncoder {
 }
 
 impl<S: Sample + ToByteSlice> SampleWriter<S> for PcmEncoder {
-    fn signal_spec(&self) -> SignalSpec {
-        self.signal_spec
+    fn signal_spec(&self) -> &SignalSpec {
+        &self.signal_spec
     }
 
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {

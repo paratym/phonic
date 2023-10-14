@@ -1,13 +1,13 @@
 use std::io::{self, Read, Seek, SeekFrom};
-use crate::{SyphonError, SampleFormat, Sample, io::{SignalSpec, SignalSpecBuilder}};
+use crate::{SyphonError, SampleFormat, Sample, io::{SignalSpec, SignalSpecBuilder, SignalReader}};
 
 pub trait MediaSource: Read + Seek {}
+
+impl<T: Read + Seek> MediaSource for T {}
 
 pub struct UnseekableMediaSource<R: Read> {
     reader: R,
 }
-
-impl<T: Read + Seek> MediaSource for T {}
 
 impl<R: Read> UnseekableMediaSource<R> {
     pub fn new(reader: R) -> Self {
@@ -50,9 +50,9 @@ pub trait FormatReader {
     type CodecKey: Copy;
 
     fn tracks(&self) -> Box<dyn Iterator<Item = TrackDataBuilder<Self::CodecKey>>>;
-    fn read_headers(&mut self) -> Result<usize, SyphonError>;
+    fn read_headers(&mut self) -> Result<(), SyphonError>;
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError>;
-    fn seek(&mut self, offset: SeekFrom) -> Result<usize, SyphonError>;
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError>;
 }
 
 impl<K: Copy> TrackDataBuilder<K> {
@@ -114,5 +114,28 @@ impl<'a, K: Copy> TrackReader<'a, K> {
             track_data,
             track_i: 0,
         })
+    }
+}
+
+impl<K: Copy> SignalReader for TrackReader<'_, K> {
+    fn signal_spec(&self) -> &SignalSpec {
+        &self.track_data.signal_spec
+    }
+}
+
+impl<K: Copy> Read for TrackReader<'_, K> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        loop {
+            let result = self.reader.read(buf)?;
+            if result.track_i == self.track_i {
+                return Ok(result.n_bytes);
+            }
+        }
+    }
+}
+
+impl<K: Copy> Seek for TrackReader<'_, K> {
+    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
+        Ok(self.reader.seek(offset)?)
     }
 }
