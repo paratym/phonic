@@ -1,5 +1,5 @@
 use crate::{
-    core::SyphonError,
+    SyphonError,
     io::{
         codec_registry::SyphonCodec,
         formats::{WavReader, WAV_FORMAT_IDENTIFIERS},

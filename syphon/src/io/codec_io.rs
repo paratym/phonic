@@ -1,12 +1,12 @@
-use crate::core::{Sample, SampleFormat, SyphonError};
+use crate::{Sample, SampleFormat, SyphonError};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SignalSpec {
+    pub bytes_per_sample: u16,
+    pub sample_format: SampleFormat,
     pub n_channels: u16,
     pub sample_rate: u32,
     pub block_size: usize,
-    pub sample_format: SampleFormat,
-    pub bytes_per_sample: u16,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -21,31 +21,6 @@ pub struct SignalSpecBuilder {
 impl SignalSpecBuilder {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn n_channels(mut self, n_channels: u16) -> Self {
-        self.n_channels = Some(n_channels);
-        self
-    }
-
-    pub fn sample_rate(mut self, sample_rate: u32) -> Self {
-        self.sample_rate = Some(sample_rate);
-        self
-    }
-
-    pub fn block_size(mut self, block_size: usize) -> Self {
-        self.block_size = Some(block_size);
-        self
-    }
-
-    pub fn sample_format(mut self, sample_format: SampleFormat) -> Self {
-        self.sample_format = Some(sample_format);
-        self
-    }
-
-    pub fn bytes_per_sample(mut self, bytes_per_sample: u16) -> Self {
-        self.bytes_per_sample = Some(bytes_per_sample);
-        self
     }
 
     pub fn try_build(self) -> Result<SignalSpec, SyphonError> {
@@ -82,21 +57,6 @@ pub trait SampleReader<S: Sample> {
 
         Ok(())
     }
-}
-
-pub enum SampleReaderRef {
-    I8(Box<dyn SampleReader<i8>>),
-    I16(Box<dyn SampleReader<i16>>),
-    I32(Box<dyn SampleReader<i32>>),
-    I64(Box<dyn SampleReader<i64>>),
-
-    U8(Box<dyn SampleReader<u8>>),
-    U16(Box<dyn SampleReader<u16>>),
-    U32(Box<dyn SampleReader<u32>>),
-    U64(Box<dyn SampleReader<u64>>),
-
-    F32(Box<dyn SampleReader<f32>>),
-    F64(Box<dyn SampleReader<f64>>),
 }
 
 pub trait SampleWriter<S: Sample> {

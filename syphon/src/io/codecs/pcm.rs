@@ -1,8 +1,7 @@
-use crate::core::{
-    Sample, SampleFormat, SampleReader, SampleReaderRef, SampleWriter, SignalSpec, SyphonError,
-};
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
 use std::io::{Read, Write};
+
+use crate::{io::{SignalSpec, SampleReaderRef, SampleReader, SampleWriter}, SampleFormat, SyphonError, Sample};
 
 pub struct PcmDecoder {
     reader: Box<dyn Read>,

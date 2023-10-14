@@ -1,5 +1,5 @@
-use crate::core::{SignalSpec, SignalSpecBuilder, SyphonError};
 use std::io::{self, Read, Seek, SeekFrom};
+use crate::{SyphonError, SampleFormat, Sample, io::{SignalSpec, SignalSpecBuilder}};
 
 pub trait MediaSource: Read + Seek {}
 
@@ -27,19 +27,18 @@ impl<R: Read> Seek for UnseekableMediaSource<R> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TrackData<K> {
-    pub signal_spec: SignalSpec,
     pub codec_key: K,
+    pub signal_spec: SignalSpec,
     pub n_frames: Option<usize>,
-    pub channel_map: Option<()>,
 }
 
 #[derive(Clone, Copy)]
 pub struct TrackDataBuilder<K> {
-    pub signal_spec: SignalSpecBuilder,
     pub codec_key: Option<K>,
+    pub signal_spec: SignalSpecBuilder,
     pub n_frames: Option<usize>,
-    pub channel_map: Option<()>,
 }
 
 pub struct FormatReadResult {
@@ -59,28 +58,25 @@ pub trait FormatReader {
 impl<K: Copy> TrackDataBuilder<K> {
     pub fn new() -> Self {
         Self {
-            signal_spec: SignalSpecBuilder::new(),
             codec_key: None,
+            signal_spec: SignalSpecBuilder::new(),
             n_frames: None,
-            channel_map: None,
         }
     }
 
     pub fn from_other<O: TryFrom<K>>(other: &Self) -> TrackDataBuilder<O> {
         TrackDataBuilder {
-            signal_spec: other.signal_spec,
             codec_key: other.codec_key.map(|key| key.try_into().ok()).flatten(),
+            signal_spec: other.signal_spec,
             n_frames: other.n_frames,
-            channel_map: other.channel_map,
         }
     }
 
     pub fn build(self) -> Result<TrackData<K>, SyphonError> {
         Ok(TrackData {
-            signal_spec: self.signal_spec.try_build()?,
             codec_key: self.codec_key.ok_or(SyphonError::MalformedData)?,
+            signal_spec: self.signal_spec.try_build()?,
             n_frames: self.n_frames,
-            channel_map: self.channel_map,
         })
     }
 }

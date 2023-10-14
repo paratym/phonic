@@ -1,4 +1,4 @@
-use crate::core::{Sample, SampleReader, SignalSpec, SyphonError};
+use crate::{Sample, io::{SignalSpec, SampleReader}, SyphonError};
 
 pub trait Pipe<S: Sample> {
     fn signal_spec(&self) -> SignalSpec;

@@ -1,4 +1,4 @@
-use crate::core::{Sample, SampleReader, SignalSpec, SyphonError};
+use crate::{Sample, io::{SampleReader, SignalSpec}, SyphonError};
 
 pub struct BlockSizeAdapter<S: Sample> {
     source: Box<dyn SampleReader<S>>,

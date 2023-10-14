@@ -1,13 +1,25 @@
-use crate::{
-    core::{SampleReaderRef, SignalSpec},
-    io::codecs::PcmDecoder,
-};
+use crate::io::{codecs::PcmDecoder, SignalSpec, SampleReader};
 use std::{collections::HashMap, hash::Hash, io::Read};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SyphonCodec {
     Pcm,
     Other(&'static str),
+}
+
+pub enum SampleReaderRef {
+    I8(Box<dyn SampleReader<i8>>),
+    I16(Box<dyn SampleReader<i16>>),
+    I32(Box<dyn SampleReader<i32>>),
+    I64(Box<dyn SampleReader<i64>>),
+
+    U8(Box<dyn SampleReader<u8>>),
+    U16(Box<dyn SampleReader<u16>>),
+    U32(Box<dyn SampleReader<u32>>),
+    U64(Box<dyn SampleReader<u64>>),
+
+    F32(Box<dyn SampleReader<f32>>),
+    F64(Box<dyn SampleReader<f64>>),
 }
 
 pub struct CodecRegistry<K> {

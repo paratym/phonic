@@ -1,5 +1,5 @@
-use crate::core::{FromSample, Sample, SampleReader, SampleReaderRef, SignalSpec, SyphonError};
 use std::marker::PhantomData;
+use crate::{Sample, FromSample, io::{SampleReader, SignalSpec}, SyphonError};
 
 pub struct SampleTypeAdapter<S: Sample, O: Sample + FromSample<S>> {
     source: Box<dyn SampleReader<S>>,

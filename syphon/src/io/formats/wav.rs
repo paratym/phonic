@@ -1,9 +1,8 @@
 use crate::{
-    core::{Endianess, SampleFormat, SyphonError},
     io::{
         FormatIdentifiers, FormatReadResult, FormatReader, MediaSource, SyphonCodec,
         TrackDataBuilder,
-    },
+    }, SyphonError, SampleFormat, Endianess,
 };
 use std::io::{Read, SeekFrom};
 
