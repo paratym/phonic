@@ -9,7 +9,7 @@ pub struct SignalSpec {
     pub bytes_per_sample: u16,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct SignalSpecBuilder {
     pub n_channels: Option<u16>,
     pub sample_rate: Option<u32>,

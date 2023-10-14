@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{collections::HashMap, hash::Hash, io::Read};
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SyphonCodec {
     Pcm,
     Other(&'static str),

@@ -1,23 +1,23 @@
-use crate::io::{
-    codec_registry::SyphonCodec,
-    formats::{FormatReader, WavReader, WAV_FORMAT_IDENTIFIERS},
+use crate::{
+    core::SyphonError,
+    io::{
+        codec_registry::SyphonCodec,
+        formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
+        BufReader, FormatReadResult, FormatReader, MediaSource, TrackDataBuilder,
+        UnseekableMediaSource,
+    },
 };
-use std::{collections::HashMap, hash::Hash, io::Read};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    io::{Read, Seek, SeekFrom},
+    marker::PhantomData,
+};
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum SyphonFormat {
     Wav,
     Other(&'static str),
-}
-
-pub struct FormatRegistry<K, C> {
-    formats: HashMap<
-        K,
-        (
-            Option<&'static FormatIdentifiers>,
-            Option<Box<dyn Fn(Box<dyn Read>) -> Box<dyn FormatReader<C>>>>, // reader constructor
-        ),
-    >,
 }
 
 pub struct FormatIdentifiers {
@@ -26,9 +26,30 @@ pub struct FormatIdentifiers {
     pub markers: &'static [&'static [u8]],
 }
 
-pub struct FormatHint<'a> {
-    pub file_extension: Option<&'a str>,
-    pub mime_type: Option<&'a str>,
+pub enum FormatIdentifier<'a> {
+    FileExtension(&'a str),
+    MimeType(&'a str),
+}
+
+const MAX_MARKER_INDEX: usize = 1024;
+
+impl FormatIdentifiers {
+    fn contains(&self, identifier: &FormatIdentifier) -> bool {
+        match identifier {
+            FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
+            FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
+        }
+    }
+}
+
+pub struct FormatRegistry<K, C> {
+    formats: HashMap<
+        K,
+        (
+            Option<&'static FormatIdentifiers>,
+            Option<Box<dyn Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader<CodecKey = C>>>>,
+        ),
+    >,
 }
 
 impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
@@ -48,7 +69,8 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
     pub fn register_reader(
         mut self,
         key: K,
-        reader_constructor: impl Fn(Box<dyn Read>) -> Box<dyn FormatReader<C>> + 'static,
+        reader_constructor: impl Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader<CodecKey = C>>
+            + 'static,
     ) -> Self {
         let format = self.formats.entry(key).or_insert((None, None));
         format.1 = Some(Box::new(reader_constructor));
@@ -56,15 +78,13 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
         self
     }
 
-    pub fn register_format<R>(
+    pub fn register_format(
         mut self,
         key: K,
         identifiers: &'static FormatIdentifiers,
-        reader_constructor: R,
-    ) -> Self
-    where
-        R: Fn(Box<dyn Read>) -> Box<dyn FormatReader<C>> + 'static,
-    {
+        reader_constructor: impl Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader<CodecKey = C>>
+            + 'static,
+    ) -> Self {
         self.formats
             .insert(key, (Some(identifiers), Some(Box::new(reader_constructor))));
 
@@ -74,12 +94,16 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
     pub fn construct_reader(
         &self,
         key: &K,
-        reader: Box<dyn Read>,
-    ) -> Option<Box<dyn FormatReader<C>>> {
-        Some(self.formats.get(key)?.1.as_ref()?(reader))
+        source: impl MediaSource + 'static,
+    ) -> Option<Box<dyn FormatReader<CodecKey = C>>> {
+        Some(self.formats.get(key)?.1.as_ref()?(Box::new(source)))
     }
 
-    pub fn resolve_format(&self, reader: &mut impl Read, hint: Option<&FormatHint>) -> Option<K> {
+    pub fn resolve_format(
+        &self,
+        reader: &mut (impl MediaSource + 'static),
+        identifier: Option<FormatIdentifier>,
+    ) -> Option<K> {
         // self.formats
         //     .iter()
         //     .filter_map(|(key, format)| Some((key, format.0.as_ref()?)))
@@ -100,51 +124,50 @@ impl<K: Hash + Eq + Copy, C> FormatRegistry<K, C> {
 
     pub fn resolve_reader(
         &self,
-        mut reader: Box<dyn Read>,
-        hint: Option<&FormatHint>,
-    ) -> Option<Box<dyn FormatReader<C>>> {
-        let key = self.resolve_format(&mut reader, hint)?;
-        self.construct_reader(&key, reader)
+        mut reader: impl MediaSource + 'static,
+        identifier: Option<FormatIdentifier>,
+    ) -> Option<Box<dyn FormatReader<CodecKey = C>>> {
+        let key = self.resolve_format(&mut reader, identifier)?;
+        self.construct_reader(&key, Box::new(reader))
     }
 }
 
-impl<'a> FormatHint<'a> {
-    pub fn new() -> Self {
+pub struct CodecKeyConverter<T: FormatReader, K: TryFrom<T::CodecKey>> {
+    reader: T,
+    _key: PhantomData<K>,
+}
+
+impl<T: FormatReader, K: TryFrom<T::CodecKey>> CodecKeyConverter<T, K> {
+    pub fn new(reader: T) -> Self {
         Self {
-            file_extension: None,
-            mime_type: None,
+            reader,
+            _key: PhantomData,
         }
     }
+}
 
-    pub fn file_extension(mut self, file_extension: &'a str) -> Self {
-        self.file_extension = Some(file_extension);
-        self
+impl<T: FormatReader, K: Copy + TryFrom<T::CodecKey>> FormatReader for CodecKeyConverter<T, K> {
+    type CodecKey = K;
+
+    fn tracks(&self) -> Box<dyn Iterator<Item = TrackDataBuilder<Self::CodecKey>>> {
+        todo!()
     }
 
-    pub fn mime_type(mut self, mime_type: &'a str) -> Self {
-        self.mime_type = Some(mime_type);
-        self
+    fn read_headers(&mut self) -> Result<usize, SyphonError> {
+        self.reader.read_headers()
     }
 
-    pub fn matches(&self, identifiers: &FormatIdentifiers) -> bool {
-        if let Some(file_extension) = self.file_extension {
-            if identifiers.file_extensions.contains(&file_extension) {
-                return true;
-            }
-        }
+    fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
+        self.reader.read(buf)
+    }
 
-        if let Some(mime_type) = self.mime_type {
-            if identifiers.mime_types.contains(&mime_type) {
-                return true;
-            }
-        }
-
-        false
+    fn seek(&mut self, offset: SeekFrom) -> Result<usize, SyphonError> {
+        self.reader.seek(offset)
     }
 }
 
 pub fn syphon_format_registry() -> FormatRegistry<SyphonFormat, SyphonCodec> {
     FormatRegistry::new().register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |reader| {
-        Box::new(WavReader::new(reader))
+        Box::new(CodecKeyConverter::new(WavReader::new(reader)))
     })
 }
