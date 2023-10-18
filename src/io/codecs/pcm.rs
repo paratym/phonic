@@ -1,86 +1,90 @@
 use crate::{
-    io::{MediaStreamReader, SampleReader, SampleReaderRef, SampleWriter, StreamSpec},
+    io::{EncodedStreamReader, SampleReader, SampleReaderRef, StreamSpec},
     Sample, SampleFormat, SyphonError,
 };
-use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
-use std::io::{Read, Write};
+use byte_slice_cast::{AsMutByteSlice, ToMutByteSlice};
+use std::{io::Read, mem::size_of};
 
 pub struct PcmDecoder {
-    reader: Box<dyn MediaStreamReader>,
+    reader: Box<dyn EncodedStreamReader>,
 }
 
 impl PcmDecoder {
-    pub fn new(reader: Box<dyn MediaStreamReader>) -> Self {
-        Self { reader }
+    pub fn new(reader: Box<dyn EncodedStreamReader>) -> Result<Self, SyphonError> {
+        let spec = reader.stream_spec();
+        let bytes_per_sample_block =
+            spec.decoded_spec.block_size * spec.decoded_spec.sample_format.size();
+
+        if bytes_per_sample_block % spec.block_size != 0 {
+            return Err(SyphonError::BadRequest);
+        }
+
+        Ok(Self { reader })
     }
 
-    pub fn try_into_sample_reader_ref(self) -> Result<SampleReaderRef, SyphonError> {
+    pub fn into_sample_reader_ref(self) -> SampleReaderRef {
         let decoder_ref = Box::new(self);
-        let spec = decoder_ref.reader.stream_spec();
-        match (spec.sample_format, spec.bytes_per_sample) {
-            (SampleFormat::Unsigned(_), 1) => Ok(SampleReaderRef::U8(decoder_ref)),
-            (SampleFormat::Unsigned(_), 2) => Ok(SampleReaderRef::U16(decoder_ref)),
-            (SampleFormat::Unsigned(_), 4) => Ok(SampleReaderRef::U32(decoder_ref)),
-            (SampleFormat::Unsigned(_), 8) => Ok(SampleReaderRef::U64(decoder_ref)),
+        match decoder_ref.reader.stream_spec().decoded_spec.sample_format {
+            SampleFormat::U8 => SampleReaderRef::U8(decoder_ref),
+            SampleFormat::U16 => SampleReaderRef::U16(decoder_ref),
+            SampleFormat::U32 => SampleReaderRef::U32(decoder_ref),
+            SampleFormat::U64 => SampleReaderRef::U64(decoder_ref),
 
-            (SampleFormat::Signed(_), 1) => Ok(SampleReaderRef::I8(decoder_ref)),
-            (SampleFormat::Signed(_), 2) => Ok(SampleReaderRef::I16(decoder_ref)),
-            (SampleFormat::Signed(_), 4) => Ok(SampleReaderRef::I32(decoder_ref)),
-            (SampleFormat::Signed(_), 8) => Ok(SampleReaderRef::I64(decoder_ref)),
-            
-            (SampleFormat::Float(_), 4) => Ok(SampleReaderRef::F32(decoder_ref)),
-            (SampleFormat::Float(_), 8) => Ok(SampleReaderRef::F64(decoder_ref)),
+            SampleFormat::I8 => SampleReaderRef::I8(decoder_ref),
+            SampleFormat::I16 => SampleReaderRef::I16(decoder_ref),
+            SampleFormat::I32 => SampleReaderRef::I32(decoder_ref),
+            SampleFormat::I64 => SampleReaderRef::I64(decoder_ref),
 
-            _ => Err(SyphonError::Unsupported),
+            SampleFormat::F32 => SampleReaderRef::F32(decoder_ref),
+            SampleFormat::F64 => SampleReaderRef::F64(decoder_ref),
         }
     }
 }
 
 impl<S: Sample + ToMutByteSlice> SampleReader<S> for PcmDecoder {
     fn stream_spec(&self) -> &StreamSpec {
-        self.reader.stream_spec()
+        &self.reader.stream_spec().decoded_spec
     }
 
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        let spec = self.reader.stream_spec();
-        let n_samples = buffer.len() / spec.block_size * spec.block_size;
-        let bytes_per_block = <S>::N_BYTES * spec.block_size;
+        let spec = SampleReader::<S>::stream_spec(self);
+        let n_samples = buffer.len() - (buffer.len() % spec.block_size);
+        let sample_block_size = spec.block_size * size_of::<S>();
 
         match self.reader.read(buffer[..n_samples].as_mut_byte_slice()) {
-            Ok(n) if n % bytes_per_block == 0 => Ok(n / <S>::N_BYTES),
+            Ok(n) if n % sample_block_size == 0 => Ok(n / size_of::<S>()),
             Ok(_) => Err(SyphonError::StreamMismatch),
             Err(e) => Err(e.into()),
         }
     }
 }
 
-pub struct PcmEncoder {
-    writer: Box<dyn Write>,
-    stream_spec: StreamSpec,
-}
+// pub struct PcmEncoder {
+//     writer: Box<dyn Write>,
+//     stream_spec: StreamSpec,
+// }
 
-impl PcmEncoder {
-    pub fn new(writer: Box<dyn Write>, stream_spec: StreamSpec) -> Self {
-        Self {
-            writer,
-            stream_spec,
-        }
-    }
-}
+// impl PcmEncoder {
+//     pub fn new(writer: Box<dyn Write>, stream_spec: StreamSpec) -> Self {
+//         Self {
+//             writer,
+//             stream_spec,
+//         }
+//     }
+// }
 
-impl<S: Sample + ToByteSlice> SampleWriter<S> for PcmEncoder {
-    fn stream_spec(&self) -> &StreamSpec {
-        &self.stream_spec
-    }
+// impl<S: Sample + ToByteSlice> SampleWriter<S> for PcmEncoder {
+//     fn stream_spec(&self) -> &StreamSpec {
+//         &self.stream_spec
+//     }
 
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        let n_samples = buffer.len() / self.stream_spec.block_size * self.stream_spec.block_size;
-        let bytes_per_block = <S>::N_BYTES * self.stream_spec.block_size;
+//     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+//         let spec = self.;
 
-        match self.writer.write(buffer[..n_samples].as_byte_slice()) {
-            Ok(n) if n % bytes_per_block == 0 => Ok(n / <S>::N_BYTES),
-            Ok(_) => Err(SyphonError::StreamMismatch),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
+//         match self.writer.write(buffer[..n_samples].as_byte_slice()) {
+//             Ok(n) if n % bytes_per_block == 0 => Ok(n / <S>::N_BYTES),
+//             Ok(_) => Err(SyphonError::StreamMismatch),
+//             Err(e) => Err(e.into()),
+//         }
+//     }
+// }

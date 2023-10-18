@@ -3,18 +3,43 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone, Eq)]
-pub enum Endianess {
-    Big,
-    Little,
-    Native,
-}
-
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SampleFormat {
-    Signed(Endianess),
-    Unsigned(Endianess),
-    Float(Endianess),
+    I8,
+    I16,
+    // I24,
+    I32,
+    // I48,
+    I64,
+
+    U8,
+    U16,
+    // U24,
+    U32,
+    // U48,
+    U64,
+
+    F32,
+    F64,
+}
+
+impl SampleFormat {
+    pub fn size(&self) -> usize {
+        match self {
+            Self::I8 => size_of::<i8>(),
+            Self::I16 => size_of::<i16>(),
+            Self::I32 => size_of::<i32>(),
+            Self::I64 => size_of::<i64>(),
+
+            Self::U8 => size_of::<u8>(),
+            Self::U16 => size_of::<u16>(),
+            Self::U32 => size_of::<u32>(),
+            Self::U64 => size_of::<u64>(),
+
+            Self::F32 => size_of::<f32>(),
+            Self::F64 => size_of::<f64>(),
+        }
+    }
 }
 
 pub trait Sample:
@@ -27,7 +52,6 @@ pub trait Sample:
     + PartialEq
     + Sized
 {
-    const N_BYTES: usize;
     const FORMAT: SampleFormat;
 
     const MIN: Self;
@@ -43,10 +67,9 @@ pub trait Sample:
 }
 
 macro_rules! impl_int_sample {
-    ($s:ty) => {
+    ($s:ty, $f: ident) => {
         impl Sample for $s {
-            const N_BYTES: usize = size_of::<$s>();
-            const FORMAT: SampleFormat = SampleFormat::Signed(Endianess::Native);
+            const FORMAT: SampleFormat = SampleFormat::$f;
 
             const MIN: Self = <$s>::MIN;
             const MID: Self = 0;
@@ -61,10 +84,9 @@ macro_rules! impl_int_sample {
 }
 
 macro_rules! impl_uint_sample {
-    ($s:ty) => {
+    ($s:ty, $f:ident) => {
         impl Sample for $s {
-            const N_BYTES: usize = size_of::<$s>();
-            const FORMAT: SampleFormat = SampleFormat::Unsigned(Endianess::Native);
+            const FORMAT: SampleFormat = SampleFormat::$f;
 
             const MIN: Self = <$s>::MIN;
             const MID: Self = Self::MAX / 2;
@@ -79,10 +101,9 @@ macro_rules! impl_uint_sample {
 }
 
 macro_rules! impl_float_sample {
-    ($s:ty) => {
+    ($s:ty, $f:ident) => {
         impl Sample for $s {
-            const N_BYTES: usize = size_of::<$s>();
-            const FORMAT: SampleFormat = SampleFormat::Float(Endianess::Native);
+            const FORMAT: SampleFormat = SampleFormat::$f;
 
             const MIN: Self = -1.0;
             const MID: Self = 0.0;
@@ -102,80 +123,18 @@ macro_rules! impl_float_sample {
     };
 }
 
-impl_int_sample!(i8);
-impl_int_sample!(i16);
-impl_int_sample!(i32);
-impl_int_sample!(i64);
+impl_int_sample!(i8, I8);
+impl_int_sample!(i16, I16);
+impl_int_sample!(i32, I32);
+impl_int_sample!(i64, I64);
 
-impl_uint_sample!(u8);
-impl_uint_sample!(u16);
-impl_uint_sample!(u32);
-impl_uint_sample!(u64);
+impl_uint_sample!(u8, U8);
+impl_uint_sample!(u16, U16);
+impl_uint_sample!(u32, U32);
+impl_uint_sample!(u64, U64);
 
-impl_float_sample!(f32);
-impl_float_sample!(f64);
-
-impl Endianess {
-    pub fn is_big(&self) -> bool {
-        match self {
-            Self::Big => true,
-            Self::Native if cfg!(endianess = "big") => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_little(&self) -> bool {
-        match self {
-            Self::Little => true,
-            Self::Native if cfg!(endianess = "little") => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_native(&self) -> bool {
-        match self {
-            Self::Native => true,
-            Self::Big if cfg!(endianess = "big") => true,
-            Self::Little if cfg!(endianess = "little") => true,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq for Endianess {
-    fn eq(&self, other: &Self) -> bool {
-        (self.is_native() && other.is_native())
-            || (self.is_big() && other.is_big())
-            || (self.is_little() && other.is_little())
-    }
-}
-
-impl SampleFormat {
-    pub fn endianess(&self) -> Endianess {
-        match self {
-            Self::Signed(e) => *e,
-            Self::Unsigned(e) => *e,
-            Self::Float(e) => *e,
-        }
-    }
-
-    pub fn endianess_mut(&mut self) -> &mut Endianess {
-        match self {
-            Self::Signed(e) => e,
-            Self::Unsigned(e) => e,
-            Self::Float(e) => e,
-        }
-    }
-
-    pub fn layout_eq(&self, other: &Self) -> bool {
-        match self {
-            Self::Signed(_) if matches!(other, Self::Signed(_)) => true,
-            Self::Unsigned(_) if matches!(other, Self::Unsigned(_)) => true,
-            Self::Float(_) if matches!(other, Self::Float(_)) => true,
-            _ => false,
-        }
-    }
-}
+impl_float_sample!(f32, F32);
+impl_float_sample!(f64, F64);
 
 pub trait FromSample<S: Sample>: Sample {
     fn from(sample: S) -> Self;

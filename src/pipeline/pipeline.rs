@@ -13,6 +13,12 @@ pub struct Pipeline<S: Sample> {
     pipes: Box<[Box<dyn Pipe<S>>]>,
 }
 
+impl<S: Sample> Pipeline<S> {
+    fn from_source(source: impl SampleReader<S> + 'static) -> PipelineBuilder<S> {
+        PipelineBuilder::from_source(source)
+    }
+}
+
 impl<S: Sample> SampleReader<S> for Pipeline<S> {
     fn stream_spec(&self) -> &StreamSpec {
         match self.pipes.last() {
@@ -49,10 +55,19 @@ impl<S: Sample> PipelineBuilder<S> {
         self
     }
 
-    pub fn build(self) -> Pipeline<S> {
-        Pipeline {
+    pub fn try_build(self) -> Result<Pipeline<S>, SyphonError> {
+        let stream_spec = self.source.stream_spec();
+        if self
+            .pipes
+            .iter()
+            .all(|pipe| pipe.stream_spec() == stream_spec)
+        {
+            return Err(SyphonError::StreamMismatch);
+        }
+
+        Ok(Pipeline {
             source: self.source,
             pipes: self.pipes.into_boxed_slice(),
-        }
+        })
     }
 }

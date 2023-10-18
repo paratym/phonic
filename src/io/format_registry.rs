@@ -1,17 +1,11 @@
 use crate::{
     io::{
         formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
-        BufReader, FormatReadResult, FormatReader, MediaSource, StreamSpecBuilder, SyphonCodec,
-        UnseekableMediaSource,
+        FormatReader, MediaSource,
     },
     SyphonError,
 };
-use std::{
-    collections::HashMap,
-    hash::Hash,
-    io::{Read, Seek, SeekFrom},
-    marker::PhantomData,
-};
+use std::{collections::HashMap, hash::Hash};
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum SyphonFormat {
@@ -110,39 +104,33 @@ impl FormatRegistry {
 
     pub fn resolve_format(
         &self,
-        reader: &mut (impl MediaSource + 'static),
-        identifier: Option<FormatIdentifier>,
+        source: &mut (impl MediaSource + 'static),
     ) -> Result<SyphonFormat, SyphonError> {
-        // self.formats
-        //     .iter()
-        //     .filter_map(|(key, format)| Some((key, format.0.as_ref()?)))
-        //     .find_map(|(k, identifiers)| {
-        //         if let Some(hint) = hint {
-        //             if hint.matches(identifiers) {
-        //                 return Some(*k);
-        //             }
-        //         }
-
-        //         // TODO: check for markers
-
-        //         None
-        //     })
-
-        Err(SyphonError::Unsupported)
+        todo!()
     }
 
     pub fn resolve_reader(
         &self,
-        mut reader: impl MediaSource + 'static,
+        mut source: impl MediaSource + 'static,
         identifier: Option<FormatIdentifier>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
-        let key = self.resolve_format(&mut reader, identifier)?;
-        self.construct_reader(&key, Box::new(reader))
+        let key = if let Some(id) = identifier {
+            *self
+                .formats
+                .iter()
+                .find(|(_, (ids, _))| ids.is_some_and(|ids| ids.contains(&id)))
+                .map(|(key, _)| key)
+                .ok_or(SyphonError::Unsupported)?
+        } else {
+            self.resolve_format(&mut source)?
+        };
+
+        self.construct_reader(&key, Box::new(source))
     }
 }
 
 pub fn syphon_format_registry() -> FormatRegistry {
-    FormatRegistry::new().register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |reader| {
-        Box::new(WavReader::new(reader))
+    FormatRegistry::new().register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |source| {
+        Box::new(WavReader::new(source))
     })
 }

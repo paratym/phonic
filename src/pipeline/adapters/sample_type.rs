@@ -15,7 +15,6 @@ impl<S: Sample, O: Sample + FromSample<S>> SampleTypeAdapter<S, O> {
     pub fn new(source: Box<dyn SampleReader<S>>) -> Self {
         let stream_spec = StreamSpec {
             sample_format: O::FORMAT,
-            bytes_per_sample: O::N_BYTES as u16,
             ..*source.stream_spec()
         };
 

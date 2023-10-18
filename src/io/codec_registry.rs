@@ -1,13 +1,19 @@
 use crate::{
-    io::{codecs::PcmDecoder, MediaStreamReader, SampleReaderRef, SyphonCodec},
+    io::{codecs::PcmDecoder, EncodedStreamReader, SampleReaderRef},
     SyphonError,
 };
-use std::{collections::HashMap, hash::Hash, io::Read};
+use std::collections::HashMap;
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SyphonCodec {
+    Pcm,
+    Other(&'static str),
+}
 
 pub struct CodecRegistry {
     decoder_constructors: HashMap<
         SyphonCodec,
-        Box<dyn Fn(Box<dyn MediaStreamReader>) -> Result<SampleReaderRef, SyphonError>>,
+        Box<dyn Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError>>,
     >,
 }
 
@@ -20,7 +26,7 @@ impl CodecRegistry {
 
     pub fn register_decoder<F>(mut self, key: SyphonCodec, constructor: F) -> Self
     where
-        F: Fn(Box<dyn MediaStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
+        F: Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
     {
         self.decoder_constructors.insert(key, Box::new(constructor));
 
@@ -29,7 +35,7 @@ impl CodecRegistry {
 
     pub fn construct_decoder(
         &self,
-        reader: impl MediaStreamReader + 'static,
+        reader: impl EncodedStreamReader + 'static,
     ) -> Result<SampleReaderRef, SyphonError> {
         let key = reader.stream_spec().codec_key;
         self.decoder_constructors
@@ -40,6 +46,6 @@ impl CodecRegistry {
 
 pub fn syphon_codec_registry() -> CodecRegistry {
     CodecRegistry::new().register_decoder(SyphonCodec::Pcm, |reader| {
-        PcmDecoder::new(reader).try_into_sample_reader_ref()
+        Ok(PcmDecoder::new(reader)?.into_sample_reader_ref())
     })
 }

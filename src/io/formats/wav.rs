@@ -1,9 +1,9 @@
 use crate::{
     io::{
-        FormatIdentifiers, FormatReadResult, FormatReader, MediaSource, StreamSpecBuilder,
-        SyphonCodec,
+        EncodedStreamSpecBuilder, FormatDataBuilder, FormatIdentifiers, FormatReadResult,
+        FormatReader, MediaSource, SyphonCodec,
     },
-    Endianess, SampleFormat, SyphonError,
+    SampleFormat, SyphonError,
 };
 use std::io::{Read, SeekFrom};
 
@@ -29,141 +29,153 @@ impl TryFrom<WavCodecKey> for SyphonCodec {
 
 pub struct WavReader {
     source: Box<dyn MediaSource>,
-    stream_spec: StreamSpecBuilder,
-    media_bounds: Option<(usize, usize)>,
-    source_pos: usize,
+    data: FormatDataBuilder,
+    media_bounds: (u64, u64),
+    source_pos: u64,
 }
 
 impl WavReader {
-    pub fn new(mut reader: Box<dyn MediaSource>) -> Self {
-        let source_pos = reader.stream_position().unwrap_or(0) as usize;
+    pub fn new(mut source: Box<dyn MediaSource>) -> Self {
+        let source_pos = source.stream_position().unwrap_or(0);
 
         Self {
-            source: reader,
-            stream_spec: StreamSpecBuilder::new(),
-            media_bounds: None,
+            source,
+            data: FormatDataBuilder::new(),
+            media_bounds: (0, 0),
             source_pos,
         }
     }
 
-    fn read_riff_header(&mut self, buf: &mut [u8; 12]) -> Result<(), SyphonError> {
-        self.source.read_exact(buf)?;
-        self.source_pos += buf.len();
-
-        if &buf[0..4] != b"RIFF" || &buf[8..12] != b"WAVE" {
-            return Err(SyphonError::MalformedData);
+    fn stream_spec_mut(&mut self) -> &mut EncodedStreamSpecBuilder {
+        let tracks = &mut self.data.tracks;
+        if tracks.is_empty() {
+            tracks.push(EncodedStreamSpecBuilder::new());
         }
 
-        Ok(())
+        return tracks.first_mut().unwrap();
     }
 
-    fn read_fmt_chunk(&mut self, buf: &mut [u8]) -> Result<(), SyphonError> {
+    fn media_pos(&self) -> u64 {
+        self.source_pos
+            .max(self.media_bounds.0)
+            .min(self.media_bounds.1)
+    }
+
+    fn parse_fmt_chunk(&mut self, buf: &mut [u8]) -> Result<(), SyphonError> {
         let chunk_len = buf.len();
         if chunk_len != 16 && chunk_len != 18 && chunk_len != 40 {
             return Err(SyphonError::MalformedData);
         }
 
-        self.source.read_exact(buf)?;
-        self.source_pos += chunk_len;
-
+        let encoded_stream_spec = self.stream_spec_mut();
         let codec_key = u16::from_le_bytes(buf[0..2].try_into().unwrap());
-        self.stream_spec.codec_key = WavCodecKey(codec_key).try_into().ok();
+        encoded_stream_spec.codec_key = WavCodecKey(codec_key).try_into().ok();
 
-        self.stream_spec.n_channels = Some(u16::from_le_bytes(buf[2..4].try_into().unwrap()));
-        self.stream_spec.sample_rate = Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
-        self.stream_spec.block_size =
-            Some(u16::from_le_bytes(buf[12..14].try_into().unwrap()) as usize);
+        let stream_spec = &mut encoded_stream_spec.decoded_spec;
+        stream_spec.n_channels = Some(u16::from_le_bytes(buf[2..4].try_into().unwrap()));
+        stream_spec.sample_rate = Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
+        stream_spec.block_size = Some(u16::from_le_bytes(buf[12..14].try_into().unwrap()) as usize);
 
         let bits_per_sample = u16::from_le_bytes(buf[14..16].try_into().unwrap());
-        self.stream_spec.bytes_per_sample = Some(bits_per_sample / 8);
-        self.stream_spec.sample_format = match codec_key {
-            1 if bits_per_sample == 8 => Some(SampleFormat::Unsigned(Endianess::Little)),
-            1 => Some(SampleFormat::Signed(Endianess::Little)),
-            3 => Some(SampleFormat::Float(Endianess::Little)),
+        stream_spec.sample_format = match (codec_key, bits_per_sample) {
+            (1, 8) => SampleFormat::U8.into(),
+            (1, 16) => SampleFormat::I16.into(),
+            (1, 32) => SampleFormat::I32.into(),
+            (1, 64) => SampleFormat::I64.into(),
+            (3, 32) => SampleFormat::F32.into(),
+            (3, 64) => SampleFormat::F64.into(),
             _ => None,
         };
 
         Ok(())
     }
 
-    fn read_fact_chunk(&mut self, buf: &mut [u8; 4]) -> Result<(), SyphonError> {
-        self.source.read_exact(buf)?;
-        self.source_pos += buf.len();
+    fn parse_fact_chunk(&mut self, buf: &mut [u8]) -> Result<(), SyphonError> {
+        if buf.len() != 4 {
+            return Err(SyphonError::MalformedData);
+        }
 
-        if let Some(n_channels) = self.stream_spec.n_channels {
-            self.stream_spec.n_frames =
-                Some(u32::from_le_bytes(*buf) as usize / n_channels as usize);
+        let stream_spec = &mut self.stream_spec_mut().decoded_spec;
+        if let Some(n_channels) = stream_spec.n_channels {
+            stream_spec.n_frames = Some(
+                u32::from_le_bytes(buf[0..4].try_into().unwrap()) as usize / n_channels as usize,
+            );
         }
 
         Ok(())
+    }
+
+    fn get_chunk_parser(
+        chunk_id: &[u8],
+    ) -> Option<fn(&mut Self, &mut [u8]) -> Result<(), SyphonError>> {
+        match chunk_id {
+            b"fmt " => Some(Self::parse_fmt_chunk),
+            b"fact" => Some(Self::parse_fact_chunk),
+            _ => None,
+        }
     }
 }
 
 impl FormatReader for WavReader {
-    fn tracks(&self) -> Box<dyn Iterator<Item = StreamSpecBuilder>> {
-        Box::new(std::iter::once(self.stream_spec))
-    }
-
-    fn read_headers(&mut self) -> Result<(), SyphonError> {
+    fn try_format(&mut self) -> Result<(), SyphonError> {
         let mut buf = [0u8; 40];
 
-        self.read_riff_header(&mut buf[0..12].try_into().unwrap())?;
-
-        loop {
-            self.source
-                .read_exact(&mut buf[..8])
-                .map_err(|e| Into::<SyphonError>::into(e))?;
-
-            self.source_pos += 8;
-            let chunk_len = u32::from_le_bytes(buf[4..8].try_into().unwrap()) as usize;
-
-            match &buf[0..4] {
-                b"fmt " => {
-                    if chunk_len > buf.len() {
-                        return Err(SyphonError::MalformedData);
-                    }
-
-                    self.read_fmt_chunk(&mut buf[..chunk_len])?
-                }
-                b"fact" => {
-                    if chunk_len != 4 {
-                        return Err(SyphonError::MalformedData);
-                    }
-
-                    self.read_fact_chunk(&mut buf[..4].try_into().unwrap())?
-                }
-                b"data" => {
-                    if let Ok(pos) = self.source.stream_position() {
-                        if pos as usize != self.source_pos {
-                            return Err(SyphonError::MalformedData);
-                        }
-                    }
-
-                    self.media_bounds = Some((self.source_pos, self.source_pos + chunk_len));
-                    break;
-                }
-                _ => {
-                    self.source
-                        .seek(SeekFrom::Current(chunk_len as i64))
-                        .map_err(|e| Into::<SyphonError>::into(e))?;
-                }
-            }
+        self.source.read_exact(&mut buf[0..12])?;
+        self.source_pos += 12;
+        if &buf[0..4] != b"RIFF" || &buf[8..12] != b"WAVE" {
+            return Err(SyphonError::MalformedData);
         }
 
-        Ok(())
+        loop {
+            self.source.read_exact(&mut buf[..8])?;
+            self.source_pos += 8;
+
+            let chunk_id = &buf[0..4];
+            let chunk_len = u32::from_le_bytes(buf[4..8].try_into().unwrap()) as usize;
+
+            if chunk_id == b"data" {
+                self.media_bounds = (self.source_pos, self.source_pos + chunk_len as u64);
+                self.stream_spec_mut().byte_len = Some(chunk_len);
+                return Ok(());
+            }
+
+            if let Some(parser) = Self::get_chunk_parser(chunk_id) {
+                if chunk_len as usize > buf.len() {
+                    return Err(SyphonError::MalformedData);
+                }
+
+                self.source.read_exact(&mut buf[..chunk_len])?;
+                self.source_pos += chunk_len as u64;
+                parser(self, &mut buf[..chunk_len])?;
+            } else {
+                self.source_pos = self.source.seek(SeekFrom::Current(chunk_len as i64))?;
+            }
+        }
+    }
+
+    fn format_data(&self) -> &FormatDataBuilder {
+        &self.data
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
-        let bounds = self.media_bounds.ok_or(SyphonError::NotReady)?;
-        if self.source_pos < bounds.0 {
+        if self.source_pos < self.media_bounds.0 {
             return Err(SyphonError::NotReady);
-        } else if self.source_pos >= bounds.1 {
+        } else if self.source_pos >= self.media_bounds.1 {
             return Err(SyphonError::Empty);
         }
 
-        let len = buf.len().min(bounds.1 - self.source_pos);
+        let mut len = buf
+            .len()
+            .min((self.media_bounds.1 - self.source_pos) as usize);
+        let block_size = self.stream_spec_mut().block_size.unwrap_or(1);
+        len -= len % block_size;
+
         let n_bytes = self.source.read(&mut buf[..len])?;
-        self.source_pos += n_bytes;
+        self.source_pos += n_bytes as u64;
+
+        if n_bytes % block_size != 0 {
+            todo!();
+        }
 
         Ok(FormatReadResult {
             n_bytes,
@@ -172,28 +184,29 @@ impl FormatReader for WavReader {
     }
 
     fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
-        let bounds = self.media_bounds.ok_or(SyphonError::NotReady)?;
         let new_pos = match offset {
-            SeekFrom::Start(offset) => bounds.0 as i64 + offset as i64,
-            SeekFrom::End(offset) => bounds.1 as i64 + offset,
             SeekFrom::Current(offset) if offset == 0 => {
-                return Ok(self.source.stream_position()?)
+                return Ok(self.media_pos());
             }
-            SeekFrom::Current(offset) => self.source.stream_position()? as i64 + offset,
+            SeekFrom::Current(offset) => self.media_pos() as i64 + offset,
+            SeekFrom::Start(offset) => self.media_bounds.0 as i64 + offset as i64,
+            SeekFrom::End(offset) => self.media_bounds.1 as i64 + offset,
         };
 
         if new_pos < 0 {
             return Err(SyphonError::BadRequest);
         }
 
-        let new_pos = new_pos as usize;
-        if new_pos < bounds.0 || new_pos > bounds.1 {
+        let mut new_pos = new_pos as u64;
+        if new_pos < self.media_bounds.0 || new_pos >= self.media_bounds.1 {
             return Err(SyphonError::BadRequest);
         }
 
-        self.source.seek(SeekFrom::Start(new_pos as u64))?;
-        self.source_pos = new_pos;
+        let new_media_pos = new_pos - self.media_bounds.0;
+        let block_size = self.stream_spec_mut().block_size.unwrap_or(1);
+        new_pos -= new_media_pos % block_size as u64;
 
-        Ok(new_pos as u64)
+        self.source_pos = self.source.seek(SeekFrom::Start(new_pos))?;
+        Ok(self.media_pos())
     }
 }
