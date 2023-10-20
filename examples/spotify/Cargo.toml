@@ -1,7 +1,0 @@
-[package]
-name = "spotify_example"
-version = "1.0.0"
-edition = "2021"
-
-[dependencies]
-syphon = { path = "../../syphon" }

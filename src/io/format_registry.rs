@@ -1,7 +1,8 @@
 use crate::{
     io::{
-        formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
-        FormatReader, MediaSource,
+        // formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
+        FormatReader,
+        MediaSource,
     },
     SyphonError,
 };
@@ -24,8 +25,6 @@ pub enum FormatIdentifier<'a> {
     FileExtension(&'a str),
     MimeType(&'a str),
 }
-
-const MAX_MARKER_INDEX: usize = 1024;
 
 impl FormatIdentifiers {
     fn contains(&self, identifier: &FormatIdentifier) -> bool {
@@ -90,7 +89,7 @@ impl FormatRegistry {
     pub fn construct_reader(
         &self,
         key: &SyphonFormat,
-        source: impl MediaSource + 'static,
+        source: Box<dyn MediaSource>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         let constructor = self
             .formats
@@ -104,14 +103,14 @@ impl FormatRegistry {
 
     pub fn resolve_format(
         &self,
-        source: &mut (impl MediaSource + 'static),
+        source: &mut impl MediaSource,
     ) -> Result<SyphonFormat, SyphonError> {
         todo!()
     }
 
     pub fn resolve_reader(
         &self,
-        mut source: impl MediaSource + 'static,
+        mut source: Box<dyn MediaSource>,
         identifier: Option<FormatIdentifier>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         let key = if let Some(id) = identifier {
@@ -125,12 +124,13 @@ impl FormatRegistry {
             self.resolve_format(&mut source)?
         };
 
-        self.construct_reader(&key, Box::new(source))
+        self.construct_reader(&key, source)
     }
 }
 
 pub fn syphon_format_registry() -> FormatRegistry {
-    FormatRegistry::new().register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |source| {
-        Box::new(WavReader::new(source))
-    })
+    FormatRegistry::new()
+    // .register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |source| {
+    //     Box::new(WavReader::new(source))
+    // })
 }

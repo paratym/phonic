@@ -1,7 +1,4 @@
-use std::{
-    mem::size_of,
-    ops::{Add, Div, Mul, Sub},
-};
+use std::mem::size_of;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SampleFormat {
@@ -24,7 +21,7 @@ pub enum SampleFormat {
 }
 
 impl SampleFormat {
-    pub fn size(&self) -> usize {
+    pub fn byte_size(&self) -> usize {
         match self {
             Self::I8 => size_of::<i8>(),
             Self::I16 => size_of::<i16>(),
@@ -42,28 +39,12 @@ impl SampleFormat {
     }
 }
 
-pub trait Sample:
-    Copy
-    + Add<Output = Self>
-    + Sub<Output = Self>
-    + Mul<Output = Self>
-    + Div<Output = Self>
-    + PartialOrd
-    + PartialEq
-    + Sized
-{
+pub trait Sample: Copy + PartialOrd + PartialEq + Sized {
     const FORMAT: SampleFormat;
 
     const MIN: Self;
     const MID: Self;
     const MAX: Self;
-
-    fn clamped(self) -> Self;
-
-    #[inline(always)]
-    fn range() -> Self {
-        Self::MAX - Self::MIN
-    }
 }
 
 macro_rules! impl_int_sample {
@@ -74,11 +55,6 @@ macro_rules! impl_int_sample {
             const MIN: Self = <$s>::MIN;
             const MID: Self = 0;
             const MAX: Self = <$s>::MAX;
-
-            #[inline(always)]
-            fn clamped(self) -> Self {
-                self
-            }
         }
     };
 }
@@ -91,11 +67,6 @@ macro_rules! impl_uint_sample {
             const MIN: Self = <$s>::MIN;
             const MID: Self = Self::MAX / 2;
             const MAX: Self = <$s>::MAX;
-
-            #[inline(always)]
-            fn clamped(self) -> Self {
-                self
-            }
         }
     };
 }
@@ -108,17 +79,6 @@ macro_rules! impl_float_sample {
             const MIN: Self = -1.0;
             const MID: Self = 0.0;
             const MAX: Self = 1.0;
-
-            #[inline]
-            fn clamped(self) -> Self {
-                if self > Self::MAX {
-                    Self::MAX
-                } else if self < Self::MIN {
-                    Self::MIN
-                } else {
-                    self
-                }
-            }
         }
     };
 }
@@ -135,6 +95,16 @@ impl_uint_sample!(u64, U64);
 
 impl_float_sample!(f32, F32);
 impl_float_sample!(f64, F64);
+
+pub fn clamp_sample<S: Sample>(s: S) -> S {
+    if s < <S>::MIN {
+        return <S>::MIN;
+    } else if s > <S>::MAX {
+        return <S>::MAX;
+    }
+
+    s
+}
 
 pub trait FromSample<S: Sample>: Sample {
     fn from(sample: S) -> Self;
@@ -193,7 +163,7 @@ impl_convert!(i16, f64, s, s as f64 / 32_768.0); // f64
 
 // #[inline(always)]
 // fn i24_to_u32(s: i24) -> u32 {
-//     ((s.clamped().inner() << 8) as u32).wrapping_add(0x8000_0000)
+//     ((clamp_sample(s).inner() << 8) as u32).wrapping_add(0x8000_0000)
 // }
 
 // impl_convert!(i24, u8, s, (i24_to_u32(s) >> 24) as u8); // u8
@@ -201,13 +171,13 @@ impl_convert!(i16, f64, s, s as f64 / 32_768.0); // f64
 // impl_convert!(i24, u24, s, u24::from(i24_to_u32(s) >> 8)); // u24
 // impl_convert!(i24, u32, s, i24_to_u32(s)); // u32
 
-// impl_convert!(i24, i8, s, (s.clamped().inner() >> 16) as i8); // i8
-// impl_convert!(i24, i16, s, (s.clamped().inner() >> 8) as i16); // i16
+// impl_convert!(i24, i8, s, (clamp_sample(s).inner() >> 16) as i8); // i8
+// impl_convert!(i24, i16, s, (clamp_sample(s).inner() >> 8) as i16); // i16
 // impl_convert!(i24, i24, s, s); // i24
-// impl_convert!(i24, i32, s, (s.clamped().inner()) << 8); // i32
+// impl_convert!(i24, i32, s, (clamp_sample(s).inner()) << 8); // i32
 
-// impl_convert!(i24, f32, s, s.clamped().inner() as f32 / 8_388_608.0); // f32
-// impl_convert!(i24, f64, s, s.clamped().inner() as f64 / 8_388_608.0); // f64
+// impl_convert!(i24, f32, s, clamp_sample(s).inner() as f32 / 8_388_608.0); // f32
+// impl_convert!(i24, f64, s, clamp_sample(s).inner() as f64 / 8_388_608.0); // f64
 
 // i32 to ...
 
@@ -261,18 +231,18 @@ impl_convert!(u16, f64, s, ((s as f64) / 32_768.0) - 1.0); // f64
 
 // u24 to ...
 
-// impl_convert!(u24, u8, s, (s.clamped().inner() >> 16) as u8); // u8
-// impl_convert!(u24, u16, s, (s.clamped().inner() >> 8) as u16); // u16
+// impl_convert!(u24, u8, s, (clamp_sample(s).inner() >> 16) as u8); // u8
+// impl_convert!(u24, u16, s, (clamp_sample(s).inner() >> 8) as u16); // u16
 // impl_convert!(u24, u24, s, s); // u24
-// impl_convert!(u24, u32, s, s.clamped().inner() << 8); // u32
+// impl_convert!(u24, u32, s, clamp_sample(s).inner() << 8); // u32
 
-// impl_convert!(u24, i8, s, (s.clamped().inner().wrapping_sub(0x80_0000) >> 16) as i8); // i8
-// impl_convert!(u24, i16, s, (s.clamped().inner().wrapping_sub(0x80_0000) >> 8) as i16); // i16
-// impl_convert!(u24, i24, s, i24::from(s.clamped().inner().wrapping_sub(0x80_0000) as i32)); // i24
-// impl_convert!(u24, i32, s, (s.clamped().inner().wrapping_sub(0x80_0000) << 8) as i32); // i32
+// impl_convert!(u24, i8, s, (clamp_sample(s).inner().wrapping_sub(0x80_0000) >> 16) as i8); // i8
+// impl_convert!(u24, i16, s, (clamp_sample(s).inner().wrapping_sub(0x80_0000) >> 8) as i16); // i16
+// impl_convert!(u24, i24, s, i24::from(clamp_sample(s).inner().wrapping_sub(0x80_0000) as i32)); // i24
+// impl_convert!(u24, i32, s, (clamp_sample(s).inner().wrapping_sub(0x80_0000) << 8) as i32); // i32
 
-// impl_convert!(u24, f32, s, ((s.clamped().inner() as f32) / 8_388_608.0) - 1.0); // f32
-// impl_convert!(u24, f64, s, ((s.clamped().inner() as f64) / 8_388_608.0) - 1.0); // f64
+// impl_convert!(u24, f32, s, ((clamp_sample(s).inner() as f32) / 8_388_608.0) - 1.0); // f32
+// impl_convert!(u24, f64, s, ((clamp_sample(s).inner() as f64) / 8_388_608.0) - 1.0); // f64
 
 // u32 to ...
 
@@ -291,35 +261,45 @@ impl_convert!(u32, f64, s, ((s as f64) / 2_147_483_648.0) - 1.0); // f64
 
 // f32 to ...
 
-impl_convert!(f32, u8, s, ((s.clamped() + 1.0) * 128.0) as u8); // u8
-impl_convert!(f32, u16, s, ((s.clamped() + 1.0) * 32_768.0) as u16); // u16
-                                                                     // impl_convert!(f32, u24, s, u24::from(((s.clamped() + 1.0) * 8_388_608.0) as u32)); // u24
+impl_convert!(f32, u8, s, ((clamp_sample(s) + 1.0) * 128.0) as u8); // u8
+impl_convert!(f32, u16, s, ((clamp_sample(s) + 1.0) * 32_768.0) as u16); // u16
+                                                                         // impl_convert!(f32, u24, s, u24::from(((clamp_sample(s) + 1.0) * 8_388_608.0) as u32)); // u24
 impl_convert!(
     f32,
     u32,
     s,
-    ((s.clamped() + 1.0) as f64 * 2_147_483_648.0) as u32
+    ((clamp_sample(s) + 1.0) as f64 * 2_147_483_648.0) as u32
 ); // u32
 
-impl_convert!(f32, i8, s, (s.clamped() * 128.0) as i8); // i8
-impl_convert!(f32, i16, s, (s.clamped() * 32_768.0) as i16); // i16
-                                                             // impl_convert!(f32, i24, s, i24::from((s.clamped() * 8_388_608.0) as i32)); // i24
-impl_convert!(f32, i32, s, (s.clamped() as f64 * 2_147_483_648.0) as i32); // i32
+impl_convert!(f32, i8, s, (clamp_sample(s) * 128.0) as i8); // i8
+impl_convert!(f32, i16, s, (clamp_sample(s) * 32_768.0) as i16); // i16
+                                                                 // impl_convert!(f32, i24, s, i24::from((clamp_sample(s) * 8_388_608.0) as i32)); // i24
+impl_convert!(
+    f32,
+    i32,
+    s,
+    (clamp_sample(s) as f64 * 2_147_483_648.0) as i32
+); // i32
 
 impl_convert!(f32, f32, s, s); // f32
 impl_convert!(f32, f64, s, s as f64); // f64
 
 // f64 to ...
 
-impl_convert!(f64, u8, s, ((s.clamped() + 1.0) * 128.0) as u8); // u8
-impl_convert!(f64, u16, s, ((s.clamped() + 1.0) * 32_768.0) as u16); // u16
-                                                                     // impl_convert!(f64, u24, s, u24::from(((s.clamped() + 1.0) * 8_388_608.0) as u32)); // u24
-impl_convert!(f64, u32, s, ((s.clamped() + 1.0) * 2_147_483_648.0) as u32); // u32
+impl_convert!(f64, u8, s, ((clamp_sample(s) + 1.0) * 128.0) as u8); // u8
+impl_convert!(f64, u16, s, ((clamp_sample(s) + 1.0) * 32_768.0) as u16); // u16
+                                                                         // impl_convert!(f64, u24, s, u24::from(((clamp_sample(s) + 1.0) * 8_388_608.0) as u32)); // u24
+impl_convert!(
+    f64,
+    u32,
+    s,
+    ((clamp_sample(s) + 1.0) * 2_147_483_648.0) as u32
+); // u32
 
-impl_convert!(f64, i8, s, (s.clamped() * 128.0) as i8); // i8
-impl_convert!(f64, i16, s, (s.clamped() * 32_768.0) as i16); // i16
-                                                             // impl_convert!(f64, i24, s, i24::from((s.clamped() * 8_388_608.0) as i32)); // i24
-impl_convert!(f64, i32, s, (s.clamped() * 2_147_483_648.0) as i32); // i32
+impl_convert!(f64, i8, s, (clamp_sample(s) * 128.0) as i8); // i8
+impl_convert!(f64, i16, s, (clamp_sample(s) * 32_768.0) as i16); // i16
+                                                                 // impl_convert!(f64, i24, s, i24::from((clamp_sample(s) * 8_388_608.0) as i32)); // i24
+impl_convert!(f64, i32, s, (clamp_sample(s) * 2_147_483_648.0) as i32); // i32
 
 impl_convert!(f64, f32, s, s as f32); // f32
 impl_convert!(f64, f64, s, s); // f64

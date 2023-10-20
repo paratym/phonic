@@ -2,6 +2,7 @@ use crate::{
     io::{SampleReader, StreamSpec},
     Sample, SyphonError,
 };
+use std::io::SeekFrom;
 
 pub struct BlockSizeAdapter<S: Sample> {
     source: Box<dyn SampleReader<S>>,
@@ -48,6 +49,10 @@ impl<S: Sample> SampleReader<S> for BlockSizeAdapter<S> {
     }
 
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+        todo!()
+    }
+
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
         todo!()
     }
 }

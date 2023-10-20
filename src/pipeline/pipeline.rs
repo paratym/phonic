@@ -2,6 +2,7 @@ use crate::{
     io::{SampleReader, StreamSpec},
     Sample, SyphonError,
 };
+use std::io::SeekFrom;
 
 pub trait Pipe<S: Sample> {
     fn stream_spec(&self) -> &StreamSpec;
@@ -34,6 +35,10 @@ impl<S: Sample> SampleReader<S> for Pipeline<S> {
         }
 
         Ok(n_read)
+    }
+
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        todo!()
     }
 }
 

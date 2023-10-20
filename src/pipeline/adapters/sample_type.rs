@@ -2,7 +2,7 @@ use crate::{
     io::{SampleReader, StreamSpec},
     FromSample, Sample, SyphonError,
 };
-use std::marker::PhantomData;
+use std::{io::SeekFrom, marker::PhantomData};
 
 pub struct SampleTypeAdapter<S: Sample, O: Sample + FromSample<S>> {
     source: Box<dyn SampleReader<S>>,
@@ -45,5 +45,9 @@ impl<S: Sample, O: Sample + FromSample<S>> SampleReader<O> for SampleTypeAdapter
         }
 
         Ok(n_read)
+    }
+
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        self.source.seek(offset)
     }
 }

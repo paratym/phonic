@@ -4,17 +4,16 @@ use crate::{
 };
 use std::io::{self, Read, Seek, SeekFrom};
 
-pub struct TrackReader {
-    reader: Box<dyn FormatReader>,
+pub struct TrackReader<R: FormatReader> {
+    reader: R,
     stream_spec: EncodedStreamSpec,
     track_i: usize,
 }
 
-impl TrackReader {
-    pub fn new(reader: Box<dyn FormatReader>, track_i: usize) -> Result<Self, SyphonError> {
+impl<R: FormatReader> TrackReader<R> {
+    pub fn new(reader: R, track_i: usize) -> Result<Self, SyphonError> {
         let stream_spec = reader
-            .format_data()
-            .tracks
+            .tracks()
             .iter()
             .nth(track_i)
             .ok_or(SyphonError::BadRequest)?
@@ -27,13 +26,12 @@ impl TrackReader {
         })
     }
 
-    pub fn default(reader: Box<dyn FormatReader>) -> Result<Self, SyphonError> {
+    pub fn default(reader: R) -> Result<Self, SyphonError> {
         let (track_i, stream_spec) = reader
-            .format_data()
-            .tracks
+            .tracks()
             .iter()
             .enumerate()
-            .find(|(_, t)| t.codec_key.is_some() && t.decoded_spec.sample_format.is_some())
+            .find(|(_, spec)| spec.codec_key.is_some() && spec.decoded_spec.sample_format.is_some())
             .map(|(i, spec)| (i, spec.try_build()))
             .ok_or(SyphonError::Empty)?;
 
@@ -45,24 +43,24 @@ impl TrackReader {
     }
 }
 
-impl EncodedStreamReader for TrackReader {
+impl<R: FormatReader> EncodedStreamReader for TrackReader<R> {
     fn stream_spec(&self) -> &EncodedStreamSpec {
         &self.stream_spec
     }
 }
 
-impl Read for TrackReader {
+impl<R: FormatReader> Read for TrackReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             let result = self.reader.read(buf)?;
             if result.track_i == self.track_i {
-                return Ok(result.n_bytes);
+                return Ok(result.n);
             }
         }
     }
 }
 
-impl Seek for TrackReader {
+impl<R: FormatReader> Seek for TrackReader<R> {
     fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
         Ok(self.reader.seek(offset)?)
     }

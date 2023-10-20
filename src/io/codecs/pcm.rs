@@ -3,28 +3,45 @@ use crate::{
     Sample, SampleFormat, SyphonError,
 };
 use byte_slice_cast::{AsMutByteSlice, ToMutByteSlice};
-use std::{io::Read, mem::size_of};
+use std::{
+    io::{Read, SeekFrom},
+    mem::size_of,
+};
 
 pub struct PcmDecoder {
     reader: Box<dyn EncodedStreamReader>,
+    stream_spec: StreamSpec,
 }
 
 impl PcmDecoder {
     pub fn new(reader: Box<dyn EncodedStreamReader>) -> Result<Self, SyphonError> {
-        let spec = reader.stream_spec();
-        let bytes_per_sample_block =
-            spec.decoded_spec.block_size * spec.decoded_spec.sample_format.size();
+        let mut encoded_spec = *reader.stream_spec();
+        if encoded_spec.decoded_spec.block_size.is_none() {
+            encoded_spec.decoded_spec.block_size =
+                encoded_spec.decoded_spec.n_channels.map(|n| n as usize);
+        }
 
-        if bytes_per_sample_block % spec.block_size != 0 {
+        let mut stream_spec = encoded_spec.decoded_spec.try_build()?;
+        if stream_spec.bytes_per_block() % encoded_spec.block_size != 0 {
             return Err(SyphonError::BadRequest);
         }
 
-        Ok(Self { reader })
+        if stream_spec.n_frames.is_none() {
+            if let Some(byte_len) = encoded_spec.byte_len {
+                let bytes_per_frame = stream_spec.n_channels as u64 * stream_spec.sample_format.byte_size() as u64;
+                stream_spec.n_frames = Some(byte_len / bytes_per_frame);
+            }
+        }
+
+        Ok(Self {
+            reader,
+            stream_spec,
+        })
     }
 
     pub fn into_sample_reader_ref(self) -> SampleReaderRef {
         let decoder_ref = Box::new(self);
-        match decoder_ref.reader.stream_spec().decoded_spec.sample_format {
+        match decoder_ref.stream_spec.sample_format {
             SampleFormat::U8 => SampleReaderRef::U8(decoder_ref),
             SampleFormat::U16 => SampleReaderRef::U16(decoder_ref),
             SampleFormat::U32 => SampleReaderRef::U32(decoder_ref),
@@ -43,7 +60,7 @@ impl PcmDecoder {
 
 impl<S: Sample + ToMutByteSlice> SampleReader<S> for PcmDecoder {
     fn stream_spec(&self) -> &StreamSpec {
-        &self.reader.stream_spec().decoded_spec
+        &self.stream_spec
     }
 
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
@@ -56,6 +73,10 @@ impl<S: Sample + ToMutByteSlice> SampleReader<S> for PcmDecoder {
             Ok(_) => Err(SyphonError::StreamMismatch),
             Err(e) => Err(e.into()),
         }
+    }
+
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        todo!();
     }
 }
 

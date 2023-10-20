@@ -35,12 +35,12 @@ impl CodecRegistry {
 
     pub fn construct_decoder(
         &self,
-        reader: impl EncodedStreamReader + 'static,
+        reader: Box<dyn EncodedStreamReader>,
     ) -> Result<SampleReaderRef, SyphonError> {
         let key = reader.stream_spec().codec_key;
         self.decoder_constructors
             .get(&key)
-            .ok_or(SyphonError::Unsupported)?(Box::new(reader))
+            .ok_or(SyphonError::Unsupported)?(reader)
     }
 }
 
