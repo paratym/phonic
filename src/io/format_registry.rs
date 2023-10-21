@@ -1,9 +1,5 @@
 use crate::{
-    io::{
-        // formats::{WavReader, WAV_FORMAT_IDENTIFIERS},
-        FormatReader,
-        MediaSource,
-    },
+    io::{formats::*, FormatData, FormatReader, FormatWriter, MediaSink, MediaSource},
     SyphonError,
 };
 use std::{collections::HashMap, hash::Hash};
@@ -40,7 +36,15 @@ pub struct FormatRegistry {
         SyphonFormat,
         (
             Option<&'static FormatIdentifiers>,
-            Option<Box<dyn Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader>>>,
+            Option<Box<dyn Fn(Box<dyn MediaSource>) -> Result<Box<dyn FormatReader>, SyphonError>>>,
+            Option<
+                Box<
+                    dyn Fn(
+                        Box<dyn MediaSink>,
+                        FormatData,
+                    ) -> Result<Box<dyn FormatWriter>, SyphonError>,
+                >,
+            >,
         ),
     >,
 }
@@ -57,31 +61,53 @@ impl FormatRegistry {
         key: SyphonFormat,
         identifiers: &'static FormatIdentifiers,
     ) -> Self {
-        let entry = self.formats.entry(key).or_insert((None, None));
-        entry.0 = Some(identifiers);
+        let format = self.formats.entry(key).or_insert((None, None, None));
+        format.0 = Some(identifiers);
 
         self
     }
 
-    pub fn register_reader(
-        mut self,
-        key: SyphonFormat,
-        reader_constructor: impl Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader> + 'static,
-    ) -> Self {
-        let format = self.formats.entry(key).or_insert((None, None));
-        format.1 = Some(Box::new(reader_constructor));
+    pub fn register_reader<C>(mut self, key: SyphonFormat, constructor: C) -> Self
+    where
+        C: Fn(Box<dyn MediaSource>) -> Result<Box<dyn FormatReader>, SyphonError> + 'static,
+    {
+        let format = self.formats.entry(key).or_insert((None, None, None));
+        format.1 = Some(Box::new(constructor));
 
         self
     }
 
-    pub fn register_format(
+    pub fn register_writer<C>(mut self, key: SyphonFormat, constructor: C) -> Self
+    where
+        C: Fn(Box<dyn MediaSink>, FormatData) -> Result<Box<dyn FormatWriter>, SyphonError>
+            + 'static,
+    {
+        let format = self.formats.entry(key).or_insert((None, None, None));
+        format.2 = Some(Box::new(constructor));
+
+        self
+    }
+
+    pub fn register_format<R, W>(
         mut self,
         key: SyphonFormat,
         identifiers: &'static FormatIdentifiers,
-        reader_constructor: impl Fn(Box<dyn MediaSource>) -> Box<dyn FormatReader> + 'static,
-    ) -> Self {
-        self.formats
-            .insert(key, (Some(identifiers), Some(Box::new(reader_constructor))));
+        reader_constructor: R,
+        writer_constructor: W,
+    ) -> Self
+    where
+        R: Fn(Box<dyn MediaSource>) -> Result<Box<dyn FormatReader>, SyphonError> + 'static,
+        W: Fn(Box<dyn MediaSink>, FormatData) -> Result<Box<dyn FormatWriter>, SyphonError>
+            + 'static,
+    {
+        self.formats.insert(
+            key,
+            (
+                Some(identifiers),
+                Some(Box::new(reader_constructor)),
+                Some(Box::new(writer_constructor)),
+            ),
+        );
 
         self
     }
@@ -98,7 +124,23 @@ impl FormatRegistry {
             .flatten()
             .ok_or(SyphonError::Unsupported)?;
 
-        Ok(constructor(Box::new(source)))
+        constructor(source)
+    }
+
+    pub fn construct_writer(
+        &self,
+        key: &SyphonFormat,
+        sink: Box<dyn MediaSink>,
+        data: FormatData,
+    ) -> Result<Box<dyn FormatWriter>, SyphonError> {
+        let constructor = self
+            .formats
+            .get(key)
+            .map(|f| f.2.as_ref())
+            .flatten()
+            .ok_or(SyphonError::Unsupported)?;
+
+        constructor(sink, data)
     }
 
     pub fn resolve_format(
@@ -117,7 +159,7 @@ impl FormatRegistry {
             *self
                 .formats
                 .iter()
-                .find(|(_, (ids, _))| ids.is_some_and(|ids| ids.contains(&id)))
+                .find(|(_, (ids, _, _))| ids.is_some_and(|ids| ids.contains(&id)))
                 .map(|(key, _)| key)
                 .ok_or(SyphonError::Unsupported)?
         } else {
@@ -129,8 +171,14 @@ impl FormatRegistry {
 }
 
 pub fn syphon_format_registry() -> FormatRegistry {
-    FormatRegistry::new()
-    // .register_format(SyphonFormat::Wav, &WAV_FORMAT_IDENTIFIERS, |source| {
-    //     Box::new(WavReader::new(source))
-    // })
+    FormatRegistry::new().register_format(
+        SyphonFormat::Wav,
+        &WAV_FORMAT_IDENTIFIERS,
+        |source| Ok(Box::new(WavFormat::reader(source)?.into_dyn_format())),
+        |sink, data| {
+            Ok(Box::new(
+                WavFormat::writer(sink, data.try_into()?)?.into_dyn_format(),
+            ))
+        },
+    )
 }

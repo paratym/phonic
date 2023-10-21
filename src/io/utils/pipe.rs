@@ -10,7 +10,7 @@ pub fn pipe_buffered<S: Sample>(
 ) -> Result<(), SyphonError> {
     let spec = reader.stream_spec();
     let buf_len = buffer.len() - buffer.len() % spec.block_size;
-    if writer.stream_spec() != spec {
+    if S::FORMAT != spec.sample_format || writer.stream_spec() != spec {
         return Err(SyphonError::StreamMismatch);
     }
 

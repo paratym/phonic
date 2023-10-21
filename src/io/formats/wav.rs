@@ -1,7 +1,7 @@
 use crate::{
     io::{
-        EncodedStreamReader, EncodedStreamSpec, EncodedStreamSpecBuilder, FormatIdentifiers,
-        FormatReadResult, FormatReader, MediaSource, StreamSpec, StreamSpecBuilder, SyphonCodec,
+        EncodedStreamSpecBuilder, FormatData, FormatIdentifiers,
+        FormatReadResult, FormatReader, FormatWriter, StreamSpecBuilder, SyphonCodec,
     },
     SampleFormat, SyphonError,
 };
@@ -150,7 +150,7 @@ impl WavHeader {
     }
 }
 
-impl From<WavHeader> for EncodedStreamSpecBuilder {
+impl From<WavHeader> for FormatData {
     fn from(header: WavHeader) -> Self {
         let codec_key = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
@@ -167,35 +167,39 @@ impl From<WavHeader> for EncodedStreamSpecBuilder {
         };
 
         Self {
-            codec_key,
-            block_size: Some(header.fmt.block_align as usize),
-            byte_len: Some(header.data.byte_len as u64),
-            decoded_spec: StreamSpecBuilder {
-                sample_format,
-                n_channels: Some(header.fmt.n_channels as u8),
-                n_frames: header.fact.map(|fact| fact.n_frames as u64),
-                sample_rate: Some(header.fmt.sample_rate),
-                block_size: None,
-            },
+            tracks: vec![EncodedStreamSpecBuilder {
+                codec_key,
+                block_size: Some(header.fmt.block_align as usize),
+                byte_len: Some(header.data.byte_len as u64),
+                decoded_spec: StreamSpecBuilder {
+                    sample_format,
+                    n_channels: Some(header.fmt.n_channels as u8),
+                    n_frames: header.fact.map(|fact| fact.n_frames as u64),
+                    sample_rate: Some(header.fmt.sample_rate),
+                    block_size: None,
+                },
+            }],
         }
     }
 }
 
-impl TryFrom<EncodedStreamSpec> for WavHeader {
+impl TryFrom<FormatData> for WavHeader {
     type Error = SyphonError;
 
-    fn try_from(spec: EncodedStreamSpec) -> Result<Self, Self::Error> {
-        let format_tag = match spec.codec_key {
-            SyphonCodec::Pcm => match spec.decoded_spec.sample_format {
-                Some(SampleFormat::U8) => 1,
-                Some(SampleFormat::I16) => 1,
-                Some(SampleFormat::I32) => 1,
-                Some(SampleFormat::F32) => 3,
-                Some(SampleFormat::F64) => 3,
-                Some(_) => return Err(SyphonError::Unsupported),
-                None => return Err(SyphonError::BadRequest),
-            },
-            _ => return Err(SyphonError::Unsupported),
+    fn try_from(data: FormatData) -> Result<Self, Self::Error> {
+        if data.tracks.len() != 1 {
+            return Err(SyphonError::Unsupported);
+        }
+
+        let spec = &data.tracks[0];
+        let format_tag = match spec.codec_key.zip(spec.decoded_spec.sample_format) {
+            Some((SyphonCodec::Pcm, SampleFormat::U8)) => 1,
+            Some((SyphonCodec::Pcm, SampleFormat::I16)) => 1,
+            Some((SyphonCodec::Pcm, SampleFormat::I32)) => 1,
+            Some((SyphonCodec::Pcm, SampleFormat::F32)) => 3,
+            Some((SyphonCodec::Pcm, SampleFormat::F64)) => 3,
+            Some(_) => return Err(SyphonError::Unsupported),
+            None => return Err(SyphonError::Unsupported),
         };
 
         Ok(Self {
@@ -210,7 +214,7 @@ impl TryFrom<EncodedStreamSpec> for WavHeader {
                     .sample_rate
                     .ok_or(SyphonError::BadRequest)?,
                 avg_bytes_rate: 0,
-                block_align: spec.block_size as u16,
+                block_align: spec.block_size.ok_or(SyphonError::BadRequest)? as u16,
                 bits_per_sample: (spec
                     .decoded_spec
                     .sample_format
@@ -357,11 +361,12 @@ impl<T> WavFormat<T> {
         })
     }
 
-    pub fn into_format_reader(self) -> WavFormatReader<T>
-    where
-        T: Read + Seek,
-    {
-        WavFormatReader::from(self)
+    pub fn header(&self) -> &WavHeader {
+        &self.header
+    }
+
+    pub fn into_dyn_format(self) -> DynWavFormat<T> {
+        DynWavFormat::from(self)
     }
 }
 
@@ -436,29 +441,65 @@ impl<T: Seek> Seek for WavFormat<T> {
     }
 }
 
-pub struct WavFormatReader<T> {
+pub struct DynWavFormat<T> {
     inner: WavFormat<T>,
-    tracks: [EncodedStreamSpecBuilder; 1],
+    data: FormatData,
 }
 
-impl<T> From<WavFormat<T>> for WavFormatReader<T> {
+impl<T> From<WavFormat<T>> for DynWavFormat<T> {
     fn from(inner: WavFormat<T>) -> Self {
-        let tracks = [inner.header.into()];
-        Self { inner, tracks }
+        let data = inner.header.into();
+        Self { inner, data }
     }
 }
 
-impl<T: Read + Seek> FormatReader for WavFormatReader<T> {
-    fn tracks(&self) -> &[EncodedStreamSpecBuilder] {
-        &self.tracks
+impl<T: Read> Read for DynWavFormat<T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl<T: Write> Write for DynWavFormat<T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<T: Seek> Seek for DynWavFormat<T> {
+    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(offset)
+    }
+}
+
+impl<T: Read + Seek> FormatReader for DynWavFormat<T> {
+    fn format_data(&self) -> &FormatData {
+        &self.data
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
         let n = self.inner.read(buf)?;
         Ok(FormatReadResult { track_i: 0, n })
     }
+}
 
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
-        Ok(self.inner.seek(offset)?)
+impl<T: Write + Seek> FormatWriter for DynWavFormat<T> {
+    fn format_data(&self) -> &FormatData {
+        &self.data
+    }
+
+    fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
+        if track_i != 0 {
+            return Err(SyphonError::BadRequest);
+        }
+
+        Ok(self.inner.write(buf)?)
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        Ok(self.inner.flush()?)
     }
 }

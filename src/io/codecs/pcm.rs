@@ -1,7 +1,7 @@
 use crate::{
     io::{
-        EncodedStreamReader, EncodedStreamSpec, SampleReader, SampleReaderRef, SampleWriter,
-        StreamSpec,
+        EncodedStreamReader, EncodedStreamSpec, EncodedStreamWriter, SampleReader, SampleReaderRef,
+        SampleWriter, SampleWriterRef, StreamSpec,
     },
     Sample, SampleFormat, SyphonError,
 };
@@ -44,36 +44,23 @@ impl<T> PcmCodec<T> {
             }
         }
 
-        Ok(Self::new(inner, stream_spec))
+        Ok(Self { inner, stream_spec })
     }
 
-    pub fn from_encoded_stream(inner: T) -> Result<Self, SyphonError>
+    pub fn decoder(inner: T) -> Result<Self, SyphonError>
     where
         T: EncodedStreamReader,
     {
-        let spec = *inner.stream_spec();
-        Self::from_encoded_spec(inner, spec)
+        let encoded_spec = *inner.stream_spec();
+        Self::from_encoded_spec(inner, encoded_spec)
     }
 
-    pub fn into_sample_reader_ref(self) -> SampleReaderRef
+    pub fn encoder(inner: T) -> Result<Self, SyphonError>
     where
-        T: Read + Seek + 'static,
+        T: EncodedStreamWriter,
     {
-        let decoder_ref = Box::new(self);
-        match decoder_ref.stream_spec.sample_format {
-            SampleFormat::U8 => SampleReaderRef::U8(decoder_ref),
-            SampleFormat::U16 => SampleReaderRef::U16(decoder_ref),
-            SampleFormat::U32 => SampleReaderRef::U32(decoder_ref),
-            SampleFormat::U64 => SampleReaderRef::U64(decoder_ref),
-
-            SampleFormat::I8 => SampleReaderRef::I8(decoder_ref),
-            SampleFormat::I16 => SampleReaderRef::I16(decoder_ref),
-            SampleFormat::I32 => SampleReaderRef::I32(decoder_ref),
-            SampleFormat::I64 => SampleReaderRef::I64(decoder_ref),
-
-            SampleFormat::F32 => SampleReaderRef::F32(decoder_ref),
-            SampleFormat::F64 => SampleReaderRef::F64(decoder_ref),
-        }
+        let encoded_spec = *inner.stream_spec();
+        Self::from_encoded_spec(inner, encoded_spec)
     }
 
     pub fn read<S: Sample + ToMutByteSlice>(&mut self, buf: &mut [S]) -> Result<usize, SyphonError>
@@ -145,5 +132,43 @@ impl<T: Write + Seek, S: Sample + ToByteSlice> SampleWriter<S> for PcmCodec<T> {
 
     fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
         self.seek(offset)
+    }
+}
+
+impl<T: Read + Seek + 'static> From<PcmCodec<T>> for SampleReaderRef {
+    fn from(decoder: PcmCodec<T>) -> Self {
+        match decoder.stream_spec.sample_format {
+            SampleFormat::U8 => Self::U8(Box::new(decoder)),
+            SampleFormat::U16 => Self::U16(Box::new(decoder)),
+            SampleFormat::U32 => Self::U32(Box::new(decoder)),
+            SampleFormat::U64 => Self::U64(Box::new(decoder)),
+
+            SampleFormat::I8 => Self::I8(Box::new(decoder)),
+            SampleFormat::I16 => Self::I16(Box::new(decoder)),
+            SampleFormat::I32 => Self::I32(Box::new(decoder)),
+            SampleFormat::I64 => Self::I64(Box::new(decoder)),
+
+            SampleFormat::F32 => Self::F32(Box::new(decoder)),
+            SampleFormat::F64 => Self::F64(Box::new(decoder)),
+        }
+    }
+}
+
+impl<T: Write + Seek + 'static> From<PcmCodec<T>> for SampleWriterRef {
+    fn from(encoder: PcmCodec<T>) -> Self {
+        match encoder.stream_spec.sample_format {
+            SampleFormat::U8 => Self::U8(Box::new(encoder)),
+            SampleFormat::U16 => Self::U16(Box::new(encoder)),
+            SampleFormat::U32 => Self::U32(Box::new(encoder)),
+            SampleFormat::U64 => Self::U64(Box::new(encoder)),
+
+            SampleFormat::I8 => Self::I8(Box::new(encoder)),
+            SampleFormat::I16 => Self::I16(Box::new(encoder)),
+            SampleFormat::I32 => Self::I32(Box::new(encoder)),
+            SampleFormat::I64 => Self::I64(Box::new(encoder)),
+
+            SampleFormat::F32 => Self::F32(Box::new(encoder)),
+            SampleFormat::F64 => Self::F64(Box::new(encoder)),
+        }
     }
 }

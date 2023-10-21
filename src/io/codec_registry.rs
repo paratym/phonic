@@ -1,5 +1,5 @@
 use crate::{
-    io::{EncodedStreamReader, SampleReaderRef},
+    io::{codecs::*, EncodedStreamReader, EncodedStreamWriter, SampleReaderRef, SampleWriterRef},
     SyphonError,
 };
 use std::collections::HashMap;
@@ -13,7 +13,14 @@ pub enum SyphonCodec {
 pub struct CodecRegistry {
     decoder_constructors: HashMap<
         SyphonCodec,
-        Box<dyn Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError>>,
+        (
+            Option<
+                Box<dyn Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError>>,
+            >,
+            Option<
+                Box<dyn Fn(Box<dyn EncodedStreamWriter>) -> Result<SampleWriterRef, SyphonError>>,
+            >,
+        ),
     >,
 }
 
@@ -24,11 +31,43 @@ impl CodecRegistry {
         }
     }
 
-    pub fn register_decoder<F>(mut self, key: SyphonCodec, constructor: F) -> Self
+    pub fn register_decoder<C>(mut self, key: SyphonCodec, constructor: C) -> Self
     where
-        F: Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
+        C: Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
     {
-        self.decoder_constructors.insert(key, Box::new(constructor));
+        let codec = self.decoder_constructors.entry(key).or_insert((None, None));
+        codec.0 = Some(Box::new(constructor));
+
+        self
+    }
+
+    pub fn register_encoder<C>(mut self, key: SyphonCodec, constructor: C) -> Self
+    where
+        C: Fn(Box<dyn EncodedStreamWriter>) -> Result<SampleWriterRef, SyphonError> + 'static,
+    {
+        let codec = self.decoder_constructors.entry(key).or_insert((None, None));
+        codec.1 = Some(Box::new(constructor));
+
+        self
+    }
+
+    pub fn register_codec<D, E>(
+        mut self,
+        key: SyphonCodec,
+        decoder_constructor: D,
+        encoder_constructor: E,
+    ) -> Self
+    where
+        D: Fn(Box<dyn EncodedStreamReader>) -> Result<SampleReaderRef, SyphonError> + 'static,
+        E: Fn(Box<dyn EncodedStreamWriter>) -> Result<SampleWriterRef, SyphonError> + 'static,
+    {
+        self.decoder_constructors.insert(
+            key,
+            (
+                Some(Box::new(decoder_constructor)),
+                Some(Box::new(encoder_constructor)),
+            ),
+        );
 
         self
     }
@@ -37,16 +76,35 @@ impl CodecRegistry {
         &self,
         reader: Box<dyn EncodedStreamReader>,
     ) -> Result<SampleReaderRef, SyphonError> {
-        let key = reader.stream_spec().codec_key;
-        self.decoder_constructors
-            .get(&key)
-            .ok_or(SyphonError::Unsupported)?(reader)
+        let constructor = self
+            .decoder_constructors
+            .get(&reader.stream_spec().codec_key)
+            .map(|c| c.0.as_ref())
+            .flatten()
+            .ok_or(SyphonError::Unsupported)?;
+
+        constructor(reader)
+    }
+
+    pub fn construct_encoder(
+        &self,
+        writer: Box<dyn EncodedStreamWriter>,
+    ) -> Result<SampleWriterRef, SyphonError> {
+        let constructor = self
+            .decoder_constructors
+            .get(&writer.stream_spec().codec_key)
+            .map(|c| c.1.as_ref())
+            .flatten()
+            .ok_or(SyphonError::Unsupported)?;
+
+        constructor(writer)
     }
 }
 
 pub fn syphon_codec_registry() -> CodecRegistry {
-    CodecRegistry::new()
-    // .register_decoder(SyphonCodec::Pcm, |reader| {
-    //     Ok(PcmDecoder::new(reader)?.into_sample_reader_ref())
-    // })
+    CodecRegistry::new().register_codec(
+        SyphonCodec::Pcm,
+        |reader| Ok(PcmCodec::decoder(reader)?.into()),
+        |writer| Ok(PcmCodec::encoder(writer)?.into()),
+    )
 }
