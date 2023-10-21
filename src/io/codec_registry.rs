@@ -1,5 +1,5 @@
 use crate::{
-    io::{codecs::PcmDecoder, EncodedStreamReader, SampleReaderRef},
+    io::{EncodedStreamReader, SampleReaderRef},
     SyphonError,
 };
 use std::collections::HashMap;
@@ -45,7 +45,8 @@ impl CodecRegistry {
 }
 
 pub fn syphon_codec_registry() -> CodecRegistry {
-    CodecRegistry::new().register_decoder(SyphonCodec::Pcm, |reader| {
-        Ok(PcmDecoder::new(reader)?.into_sample_reader_ref())
-    })
+    CodecRegistry::new()
+    // .register_decoder(SyphonCodec::Pcm, |reader| {
+    //     Ok(PcmDecoder::new(reader)?.into_sample_reader_ref())
+    // })
 }

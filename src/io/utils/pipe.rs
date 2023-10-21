@@ -8,23 +8,22 @@ pub fn pipe_buffered<S: Sample>(
     writer: &mut dyn SampleWriter<S>,
     buffer: &mut [S],
 ) -> Result<(), SyphonError> {
-    let spec = *reader.stream_spec();
-    if writer.stream_spec() != &spec {
-        return Err(SyphonError::StreamMismatch);
-    } else if buffer.len() % spec.block_size != 0 {
+    let spec = reader.stream_spec();
+    let buf_len = buffer.len() - buffer.len() % spec.block_size;
+    if writer.stream_spec() != spec {
         return Err(SyphonError::StreamMismatch);
     }
 
+    let mut n;
     loop {
-        match reader.read(buffer) {
+        n = match reader.read(&mut buffer[..buf_len]) {
             Ok(0) => return Ok(()),
-            Ok(n) if n % spec.block_size == 0 => {}
-            Ok(_) => return Err(SyphonError::MalformedData),
+            Ok(n) => n,
             Err(SyphonError::Empty) => return Ok(()),
             Err(e) => return Err(e),
-        }
+        };
 
-        writer.write_exact(buffer)?;
+        writer.write_exact(&buffer[..n])?;
     }
 }
 

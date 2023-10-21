@@ -134,6 +134,7 @@ pub trait SampleReader<S: Sample> {
 pub trait SampleWriter<S: Sample> {
     fn stream_spec(&self) -> &StreamSpec;
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError>;
 
     fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
         let block_size = self.stream_spec().block_size;
@@ -158,6 +159,16 @@ pub trait SampleWriter<S: Sample> {
 impl StreamSpec {
     pub fn bytes_per_block(&self) -> usize {
         self.block_size * self.sample_format.byte_size()
+    }
+
+    pub fn into_builder(self) -> StreamSpecBuilder {
+        StreamSpecBuilder {
+            sample_format: Some(self.sample_format),
+            n_channels: Some(self.n_channels),
+            sample_rate: Some(self.sample_rate),
+            block_size: Some(self.block_size),
+            n_frames: self.n_frames,
+        }
     }
 }
 

@@ -1,21 +1,30 @@
 use crate::{
-    io::{EncodedStreamReader, SampleReader, SampleReaderRef, StreamSpec},
+    io::{
+        EncodedStreamReader, EncodedStreamSpec, SampleReader, SampleReaderRef, SampleWriter,
+        StreamSpec,
+    },
     Sample, SampleFormat, SyphonError,
 };
-use byte_slice_cast::{AsMutByteSlice, ToMutByteSlice};
+use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
 use std::{
-    io::{Read, SeekFrom},
+    io::{Read, Seek, SeekFrom, Write},
     mem::size_of,
 };
 
-pub struct PcmDecoder {
-    reader: Box<dyn EncodedStreamReader>,
+pub struct PcmCodec<T> {
+    inner: T,
     stream_spec: StreamSpec,
 }
 
-impl PcmDecoder {
-    pub fn new(reader: Box<dyn EncodedStreamReader>) -> Result<Self, SyphonError> {
-        let mut encoded_spec = *reader.stream_spec();
+impl<T> PcmCodec<T> {
+    pub fn new(inner: T, stream_spec: StreamSpec) -> Self {
+        Self { inner, stream_spec }
+    }
+
+    pub fn from_encoded_spec(
+        inner: T,
+        mut encoded_spec: EncodedStreamSpec,
+    ) -> Result<Self, SyphonError> {
         if encoded_spec.decoded_spec.block_size.is_none() {
             encoded_spec.decoded_spec.block_size =
                 encoded_spec.decoded_spec.n_channels.map(|n| n as usize);
@@ -28,18 +37,28 @@ impl PcmDecoder {
 
         if stream_spec.n_frames.is_none() {
             if let Some(byte_len) = encoded_spec.byte_len {
-                let bytes_per_frame = stream_spec.n_channels as u64 * stream_spec.sample_format.byte_size() as u64;
+                let bytes_per_frame =
+                    stream_spec.n_channels as u64 * stream_spec.sample_format.byte_size() as u64;
+
                 stream_spec.n_frames = Some(byte_len / bytes_per_frame);
             }
         }
 
-        Ok(Self {
-            reader,
-            stream_spec,
-        })
+        Ok(Self::new(inner, stream_spec))
     }
 
-    pub fn into_sample_reader_ref(self) -> SampleReaderRef {
+    pub fn from_encoded_stream(inner: T) -> Result<Self, SyphonError>
+    where
+        T: EncodedStreamReader,
+    {
+        let spec = *inner.stream_spec();
+        Self::from_encoded_spec(inner, spec)
+    }
+
+    pub fn into_sample_reader_ref(self) -> SampleReaderRef
+    where
+        T: Read + Seek + 'static,
+    {
         let decoder_ref = Box::new(self);
         match decoder_ref.stream_spec.sample_format {
             SampleFormat::U8 => SampleReaderRef::U8(decoder_ref),
@@ -56,56 +75,75 @@ impl PcmDecoder {
             SampleFormat::F64 => SampleReaderRef::F64(decoder_ref),
         }
     }
-}
 
-impl<S: Sample + ToMutByteSlice> SampleReader<S> for PcmDecoder {
-    fn stream_spec(&self) -> &StreamSpec {
-        &self.stream_spec
-    }
+    pub fn read<S: Sample + ToMutByteSlice>(&mut self, buf: &mut [S]) -> Result<usize, SyphonError>
+    where
+        T: Read,
+    {
+        if S::FORMAT != self.stream_spec.sample_format {
+            return Err(SyphonError::StreamMismatch);
+        }
 
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        let spec = SampleReader::<S>::stream_spec(self);
-        let n_samples = buffer.len() - (buffer.len() % spec.block_size);
-        let sample_block_size = spec.block_size * size_of::<S>();
+        let n_samples = buf.len() - (buf.len() % self.stream_spec.block_size);
+        let sample_block_size = self.stream_spec.block_size * size_of::<S>();
 
-        match self.reader.read(buffer[..n_samples].as_mut_byte_slice()) {
+        match self.inner.read(buf[..n_samples].as_mut_byte_slice()) {
             Ok(n) if n % sample_block_size == 0 => Ok(n / size_of::<S>()),
-            Ok(_) => Err(SyphonError::StreamMismatch),
+            Ok(_) => todo!(),
             Err(e) => Err(e.into()),
         }
     }
 
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+    pub fn write<S: Sample + ToByteSlice>(&mut self, buf: &[S]) -> Result<usize, SyphonError>
+    where
+        T: Write,
+    {
+        if S::FORMAT != self.stream_spec.sample_format {
+            return Err(SyphonError::StreamMismatch);
+        }
+
+        let n_samples = buf.len() - (buf.len() % self.stream_spec.block_size);
+        let sample_block_size = self.stream_spec.block_size * size_of::<S>();
+
+        match self.inner.write(buf[..n_samples].as_byte_slice()) {
+            Ok(n) if n % sample_block_size == 0 => Ok(n / size_of::<S>()),
+            Ok(_) => todo!(),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError>
+    where
+        T: Seek,
+    {
         todo!();
     }
 }
 
-// pub struct PcmEncoder {
-//     writer: Box<dyn Write>,
-//     stream_spec: StreamSpec,
-// }
+impl<T: Read + Seek, S: Sample + ToMutByteSlice> SampleReader<S> for PcmCodec<T> {
+    fn stream_spec(&self) -> &StreamSpec {
+        &self.stream_spec
+    }
 
-// impl PcmEncoder {
-//     pub fn new(writer: Box<dyn Write>, stream_spec: StreamSpec) -> Self {
-//         Self {
-//             writer,
-//             stream_spec,
-//         }
-//     }
-// }
+    fn read(&mut self, buf: &mut [S]) -> Result<usize, SyphonError> {
+        self.read(buf)
+    }
 
-// impl<S: Sample + ToByteSlice> SampleWriter<S> for PcmEncoder {
-//     fn stream_spec(&self) -> &StreamSpec {
-//         &self.stream_spec
-//     }
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        self.seek(offset)
+    }
+}
 
-//     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-//         let spec = self.;
+impl<T: Write + Seek, S: Sample + ToByteSlice> SampleWriter<S> for PcmCodec<T> {
+    fn stream_spec(&self) -> &StreamSpec {
+        &self.stream_spec
+    }
 
-//         match self.writer.write(buffer[..n_samples].as_byte_slice()) {
-//             Ok(n) if n % bytes_per_block == 0 => Ok(n / <S>::N_BYTES),
-//             Ok(_) => Err(SyphonError::StreamMismatch),
-//             Err(e) => Err(e.into()),
-//         }
-//     }
-// }
+    fn write(&mut self, buf: &[S]) -> Result<usize, SyphonError> {
+        self.write(buf)
+    }
+
+    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
+        self.seek(offset)
+    }
+}

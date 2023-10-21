@@ -1,7 +1,7 @@
 use crate::{
     io::{
-        EncodedStreamSpecBuilder, FormatIdentifiers, FormatReadResult, FormatReader, MediaSource,
-        StreamSpec, StreamSpecBuilder, SyphonCodec, EncodedStreamReader,
+        EncodedStreamReader, EncodedStreamSpec, EncodedStreamSpecBuilder, FormatIdentifiers,
+        FormatReadResult, FormatReader, MediaSource, StreamSpec, StreamSpecBuilder, SyphonCodec,
     },
     SampleFormat, SyphonError,
 };
@@ -103,6 +103,7 @@ impl WavHeader {
                 return Err(SyphonError::MalformedData);
             }
 
+            reader.read_exact(&mut buf[..byte_len])?;
             match &chunk_id {
                 FMT_CHUNK_ID => {
                     fmt = Some(FmtChunk::read(&buf[..byte_len])?);
@@ -177,6 +178,54 @@ impl From<WavHeader> for EncodedStreamSpecBuilder {
                 block_size: None,
             },
         }
+    }
+}
+
+impl TryFrom<EncodedStreamSpec> for WavHeader {
+    type Error = SyphonError;
+
+    fn try_from(spec: EncodedStreamSpec) -> Result<Self, Self::Error> {
+        let format_tag = match spec.codec_key {
+            SyphonCodec::Pcm => match spec.decoded_spec.sample_format {
+                Some(SampleFormat::U8) => 1,
+                Some(SampleFormat::I16) => 1,
+                Some(SampleFormat::I32) => 1,
+                Some(SampleFormat::F32) => 3,
+                Some(SampleFormat::F64) => 3,
+                Some(_) => return Err(SyphonError::Unsupported),
+                None => return Err(SyphonError::BadRequest),
+            },
+            _ => return Err(SyphonError::Unsupported),
+        };
+
+        Ok(Self {
+            fmt: FmtChunk {
+                format_tag,
+                n_channels: spec
+                    .decoded_spec
+                    .n_channels
+                    .ok_or(SyphonError::BadRequest)? as u16,
+                sample_rate: spec
+                    .decoded_spec
+                    .sample_rate
+                    .ok_or(SyphonError::BadRequest)?,
+                avg_bytes_rate: 0,
+                block_align: spec.block_size as u16,
+                bits_per_sample: (spec
+                    .decoded_spec
+                    .sample_format
+                    .ok_or(SyphonError::BadRequest)?
+                    .byte_size()
+                    * 8) as u16,
+                ext: None,
+            },
+            fact: spec.decoded_spec.n_frames.map(|n_frames| FactChunk {
+                n_frames: n_frames as u32,
+            }),
+            data: DataChunk {
+                byte_len: spec.byte_len.ok_or(SyphonError::BadRequest)? as u32,
+            },
+        })
     }
 }
 
@@ -278,11 +327,14 @@ impl FactChunk {
 pub struct WavFormat<T> {
     header: WavHeader,
     inner: T,
-    i: usize,
+    i: u64,
 }
 
-impl<T: Read> WavFormat<T> {
-    pub fn reader(mut inner: T) -> std::io::Result<Self> {
+impl<T> WavFormat<T> {
+    pub fn reader(mut inner: T) -> std::io::Result<Self>
+    where
+        T: Read,
+    {
         let header = WavHeader::read(&mut inner)?;
 
         Ok(Self {
@@ -291,15 +343,37 @@ impl<T: Read> WavFormat<T> {
             i: 0,
         })
     }
+
+    pub fn writer(mut inner: T, header: WavHeader) -> std::io::Result<Self>
+    where
+        T: Write,
+    {
+        header.write(&mut inner)?;
+
+        Ok(Self {
+            header,
+            inner,
+            i: 0,
+        })
+    }
+
+    pub fn into_format_reader(self) -> WavFormatReader<T>
+    where
+        T: Read + Seek,
+    {
+        WavFormatReader::from(self)
+    }
 }
 
 impl<T: Read> Read for WavFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf.len().min(self.header.data.byte_len as usize - self.i);
+        let mut buf_len = buf
+            .len()
+            .min(self.header.data.byte_len as usize - self.i as usize);
         buf_len -= buf_len % self.header.fmt.block_align as usize;
 
         let n = self.inner.read(&mut buf[..buf_len])?;
-        self.i += n;
+        self.i += n as u64;
 
         if n % self.header.fmt.block_align as usize != 0 {
             todo!();
@@ -309,25 +383,15 @@ impl<T: Read> Read for WavFormat<T> {
     }
 }
 
-impl<T: Write> WavFormat<T> {
-    pub fn writer(mut inner: T, header: WavHeader) -> std::io::Result<Self> {
-        header.write(&mut inner)?;
-
-        Ok(Self {
-            header,
-            inner,
-            i: 0,
-        })
-    }
-}
-
 impl<T: Write> Write for WavFormat<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf.len().min(self.header.data.byte_len as usize - self.i);
+        let mut buf_len = buf
+            .len()
+            .min(self.header.data.byte_len as usize - self.i as usize);
         buf_len -= buf_len % self.header.fmt.block_align as usize;
 
         let n = self.inner.write(&buf[..buf_len])?;
-        self.i += n;
+        self.i += n as u64;
 
         if n % self.header.fmt.block_align as usize != 0 {
             todo!();
@@ -369,12 +433,6 @@ impl<T: Seek> Seek for WavFormat<T> {
 
         // self.source_pos = self.source.seek(SeekFrom::Start(new_pos))?;
         // Ok(self.media_pos())
-    }
-}
-
-impl<T: Read + Seek> WavFormat<T> {
-    pub fn into_format_reader(self) -> WavFormatReader<T> {
-        WavFormatReader::from(self)
     }
 }
 
