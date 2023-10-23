@@ -1,25 +1,8 @@
+use std::io::{Read, Write};
+
 use crate::{
-    io::{
-        EncodedStreamSpecBuilder, FormatData, FormatIdentifiers,
-        FormatReadResult, FormatReader, FormatWriter, StreamSpecBuilder, SyphonCodec,
-    },
-    SampleFormat, SyphonError,
-};
-use std::io::{Read, Seek, SeekFrom, Write};
-
-// implementation based on:
-// https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html
-
-pub static WAV_FORMAT_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
-    file_extensions: &["wav", "wave"],
-    mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
-    markers: &[
-        RIFF_CHUNK_ID,
-        WAV_CHUNK_ID,
-        FMT_CHUNK_ID,
-        FACT_CHUNK_ID,
-        DATA_CHUNK_ID,
-    ],
+    io::{EncodedStreamSpecBuilder, FormatData, SyphonCodec},
+    SampleFormat, StreamSpecBuilder, SyphonError,
 };
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
@@ -76,12 +59,12 @@ impl WavHeader {
             + self.data.byte_len
     }
 
-    fn read(reader: &mut impl Read) -> Result<Self, SyphonError> {
+    pub fn read(reader: &mut impl Read) -> Result<Self, SyphonError> {
         let mut buf = [0u8; 40];
 
         reader.read_exact(&mut buf[0..12])?;
         if &buf[0..4] != RIFF_CHUNK_ID || &buf[8..12] != WAV_CHUNK_ID {
-            return Err(SyphonError::MalformedData);
+            return Err(SyphonError::InvalidData);
         }
 
         let mut fmt = None;
@@ -100,7 +83,7 @@ impl WavHeader {
 
             let byte_len = byte_len as usize;
             if byte_len > buf.len() {
-                return Err(SyphonError::MalformedData);
+                return Err(SyphonError::InvalidData);
             }
 
             reader.read_exact(&mut buf[..byte_len])?;
@@ -111,18 +94,18 @@ impl WavHeader {
                 FACT_CHUNK_ID => {
                     fact = Some(FactChunk::read(&buf[..byte_len])?);
                 }
-                _ => return Err(SyphonError::MalformedData),
+                _ => return Err(SyphonError::InvalidData),
             }
         }
 
         Ok(Self {
-            fmt: fmt.ok_or(SyphonError::MalformedData)?,
+            fmt: fmt.ok_or(SyphonError::InvalidData)?,
             fact,
             data,
         })
     }
 
-    fn write(&self, writer: &mut impl Write) -> Result<(), SyphonError> {
+    pub fn write(&self, writer: &mut impl Write) -> Result<(), SyphonError> {
         let mut buf = [0u8; 40];
 
         buf[0..4].copy_from_slice(RIFF_CHUNK_ID);
@@ -208,17 +191,17 @@ impl TryFrom<FormatData> for WavHeader {
                 n_channels: spec
                     .decoded_spec
                     .n_channels
-                    .ok_or(SyphonError::BadRequest)? as u16,
+                    .ok_or(SyphonError::InvalidInput)? as u16,
                 sample_rate: spec
                     .decoded_spec
                     .sample_rate
-                    .ok_or(SyphonError::BadRequest)?,
+                    .ok_or(SyphonError::InvalidInput)?,
                 avg_bytes_rate: 0,
-                block_align: spec.block_size.ok_or(SyphonError::BadRequest)? as u16,
+                block_align: spec.block_size.ok_or(SyphonError::InvalidInput)? as u16,
                 bits_per_sample: (spec
                     .decoded_spec
                     .sample_format
-                    .ok_or(SyphonError::BadRequest)?
+                    .ok_or(SyphonError::InvalidInput)?
                     .byte_size()
                     * 8) as u16,
                 ext: None,
@@ -227,7 +210,7 @@ impl TryFrom<FormatData> for WavHeader {
                 n_frames: n_frames as u32,
             }),
             data: DataChunk {
-                byte_len: spec.byte_len.ok_or(SyphonError::BadRequest)? as u32,
+                byte_len: spec.byte_len.ok_or(SyphonError::InvalidInput)? as u32,
             },
         })
     }
@@ -245,7 +228,7 @@ impl FmtChunk {
     fn read(buf: &[u8]) -> Result<Self, SyphonError> {
         let buf_len = buf.len();
         if buf_len != 16 && buf_len != 18 && buf_len != 40 {
-            return Err(SyphonError::MalformedData);
+            return Err(SyphonError::InvalidData);
         }
 
         let mut chunk = Self {
@@ -266,7 +249,7 @@ impl FmtChunk {
         if ext_len == 0 && buf_len == 18 {
             return Ok(chunk);
         } else if ext_len != 22 && buf_len != 40 {
-            return Err(SyphonError::MalformedData);
+            return Err(SyphonError::InvalidData);
         }
 
         chunk.ext = Some(FmtChunkExt {
@@ -281,7 +264,7 @@ impl FmtChunk {
     fn write(&self, buf: &mut [u8]) -> Result<usize, SyphonError> {
         let byte_len = self.byte_len() as usize;
         if buf.len() < byte_len {
-            return Err(SyphonError::BadRequest);
+            return Err(SyphonError::InvalidInput);
         }
 
         buf[0..2].copy_from_slice(&self.format_tag.to_le_bytes());
@@ -310,7 +293,7 @@ impl FactChunk {
     fn read(buf: &[u8]) -> Result<Self, SyphonError> {
         let buf_len = buf.len();
         if buf_len != 4 {
-            return Err(SyphonError::MalformedData);
+            return Err(SyphonError::InvalidData);
         }
 
         Ok(Self {
@@ -320,186 +303,10 @@ impl FactChunk {
 
     fn write(&self, buf: &mut [u8]) -> Result<usize, SyphonError> {
         if buf.len() < 4 {
-            return Err(SyphonError::BadRequest);
+            return Err(SyphonError::InvalidData);
         }
 
         buf[0..4].copy_from_slice(&self.n_frames.to_le_bytes());
         Ok(4)
-    }
-}
-
-pub struct WavFormat<T> {
-    header: WavHeader,
-    inner: T,
-    i: u64,
-}
-
-impl<T> WavFormat<T> {
-    pub fn reader(mut inner: T) -> std::io::Result<Self>
-    where
-        T: Read,
-    {
-        let header = WavHeader::read(&mut inner)?;
-
-        Ok(Self {
-            header,
-            inner,
-            i: 0,
-        })
-    }
-
-    pub fn writer(mut inner: T, header: WavHeader) -> std::io::Result<Self>
-    where
-        T: Write,
-    {
-        header.write(&mut inner)?;
-
-        Ok(Self {
-            header,
-            inner,
-            i: 0,
-        })
-    }
-
-    pub fn header(&self) -> &WavHeader {
-        &self.header
-    }
-
-    pub fn into_dyn_format(self) -> DynWavFormat<T> {
-        DynWavFormat::from(self)
-    }
-}
-
-impl<T: Read> Read for WavFormat<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf
-            .len()
-            .min(self.header.data.byte_len as usize - self.i as usize);
-        buf_len -= buf_len % self.header.fmt.block_align as usize;
-
-        let n = self.inner.read(&mut buf[..buf_len])?;
-        self.i += n as u64;
-
-        if n % self.header.fmt.block_align as usize != 0 {
-            todo!();
-        }
-
-        Ok(n)
-    }
-}
-
-impl<T: Write> Write for WavFormat<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf
-            .len()
-            .min(self.header.data.byte_len as usize - self.i as usize);
-        buf_len -= buf_len % self.header.fmt.block_align as usize;
-
-        let n = self.inner.write(&buf[..buf_len])?;
-        self.i += n as u64;
-
-        if n % self.header.fmt.block_align as usize != 0 {
-            todo!();
-        }
-
-        Ok(n)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<T: Seek> Seek for WavFormat<T> {
-    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
-        todo!()
-
-        // let new_pos = match offset {
-        //     SeekFrom::Current(offset) if offset == 0 => {
-        //         return Ok(self.media_pos());
-        //     }
-        //     SeekFrom::Current(offset) => self.source_pos as i64 + offset,
-        //     SeekFrom::Start(offset) => self.media_bounds.0 as i64 + offset as i64,
-        //     SeekFrom::End(offset) => self.media_bounds.1 as i64 + offset,
-        // };
-
-        // if new_pos < 0 {
-        //     return Err(SyphonError::BadRequest);
-        // }
-
-        // let mut new_pos = new_pos as u64;
-        // if new_pos < self.media_bounds.0 || new_pos >= self.media_bounds.1 {
-        //     return Err(SyphonError::BadRequest);
-        // }
-
-        // let new_media_pos = new_pos - self.media_bounds.0;
-        // let block_size = self.stream_spec_mut().block_size.unwrap_or(1);
-        // new_pos -= new_media_pos % block_size as u64;
-
-        // self.source_pos = self.source.seek(SeekFrom::Start(new_pos))?;
-        // Ok(self.media_pos())
-    }
-}
-
-pub struct DynWavFormat<T> {
-    inner: WavFormat<T>,
-    data: FormatData,
-}
-
-impl<T> From<WavFormat<T>> for DynWavFormat<T> {
-    fn from(inner: WavFormat<T>) -> Self {
-        let data = inner.header.into();
-        Self { inner, data }
-    }
-}
-
-impl<T: Read> Read for DynWavFormat<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
-
-impl<T: Write> Write for DynWavFormat<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<T: Seek> Seek for DynWavFormat<T> {
-    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
-        self.inner.seek(offset)
-    }
-}
-
-impl<T: Read + Seek> FormatReader for DynWavFormat<T> {
-    fn format_data(&self) -> &FormatData {
-        &self.data
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
-        let n = self.inner.read(buf)?;
-        Ok(FormatReadResult { track_i: 0, n })
-    }
-}
-
-impl<T: Write + Seek> FormatWriter for DynWavFormat<T> {
-    fn format_data(&self) -> &FormatData {
-        &self.data
-    }
-
-    fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
-        if track_i != 0 {
-            return Err(SyphonError::BadRequest);
-        }
-
-        Ok(self.inner.write(buf)?)
-    }
-
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        Ok(self.inner.flush()?)
     }
 }

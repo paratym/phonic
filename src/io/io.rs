@@ -1,13 +1,7 @@
-use crate::{io::SyphonCodec, Sample, SampleFormat, SyphonError};
-use std::io::{Read, Seek, SeekFrom, Write};
-
-pub trait MediaSource: Read + Seek {}
-
-pub trait MediaSink: Write + Seek {}
-
-impl<T: Read + Seek> MediaSource for T {}
-
-impl<T: Write + Seek> MediaSink for T {}
+use crate::{
+    io::SyphonCodec, SampleReader, SampleWriter, StreamSpec, StreamSpecBuilder, SyphonError,
+};
+use std::io::{Read, Write};
 
 #[derive(Clone)]
 pub struct FormatData {
@@ -15,37 +9,58 @@ pub struct FormatData {
     // pub metadata: Metadata,
 }
 
+impl FormatData {
+    pub fn new() -> Self {
+        Self { tracks: Vec::new() }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tracks.is_empty()
+    }
+
+    pub fn track(mut self, track: EncodedStreamSpecBuilder) -> Self {
+        self.tracks.push(track);
+        self
+    }
+}
+
+pub trait Format {
+    fn format_data(&self) -> &FormatData;
+}
+
 pub struct FormatReadResult {
-    pub track_i: usize,
+    pub track: usize,
     pub n: usize,
 }
 
-pub trait FormatReader: Seek {
-    fn format_data(&self) -> &FormatData;
+pub trait FormatReader: Format {
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError>;
 }
 
-pub trait FormatWriter: Seek {
-    fn format_data(&self) -> &FormatData;
+pub trait FormatWriter: Format {
     fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 }
 
-impl FormatReader for Box<dyn FormatReader> {
+impl Format for Box<dyn FormatReader> {
     fn format_data(&self) -> &FormatData {
         self.as_ref().format_data()
     }
+}
 
+impl FormatReader for Box<dyn FormatReader> {
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
         self.as_mut().read(buf)
     }
 }
 
-impl FormatWriter for Box<dyn FormatWriter> {
+impl Format for Box<dyn FormatWriter> {
     fn format_data(&self) -> &FormatData {
         self.as_ref().format_data()
     }
+}
 
+impl FormatWriter for Box<dyn FormatWriter> {
     fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
         self.as_mut().write(track_i, buf)
     }
@@ -71,23 +86,34 @@ pub struct EncodedStreamSpecBuilder {
     pub byte_len: Option<u64>,
 }
 
-pub trait EncodedStreamReader: Read + Seek {
-    fn stream_spec(&self) -> &EncodedStreamSpec;
-}
+impl EncodedStreamSpec {
+    pub fn builder() -> EncodedStreamSpecBuilder {
+        EncodedStreamSpecBuilder::new()
+    }
 
-pub trait EncodedStreamWriter: Write + Seek {
-    fn stream_spec(&self) -> &EncodedStreamSpec;
-}
-
-impl EncodedStreamReader for Box<dyn EncodedStreamReader> {
-    fn stream_spec(&self) -> &EncodedStreamSpec {
-        self.as_ref().stream_spec()
+    pub fn n_blocks(&self) -> Option<u64> {
+        self.byte_len.map(|n| n / self.block_size as u64)
     }
 }
 
-impl EncodedStreamWriter for Box<dyn EncodedStreamWriter> {
-    fn stream_spec(&self) -> &EncodedStreamSpec {
-        self.as_ref().stream_spec()
+impl TryFrom<EncodedStreamSpecBuilder> for EncodedStreamSpec {
+    type Error = SyphonError;
+
+    fn try_from(builder: EncodedStreamSpecBuilder) -> Result<Self, Self::Error> {
+        if builder
+            .block_size
+            .zip(builder.byte_len)
+            .map_or(false, |(b, n)| n % b as u64 != 0)
+        {
+            return Err(SyphonError::InvalidData);
+        }
+
+        Ok(Self {
+            codec_key: builder.codec_key.ok_or(SyphonError::InvalidData)?,
+            decoded_spec: builder.decoded_spec,
+            block_size: builder.block_size.ok_or(SyphonError::InvalidData)?,
+            byte_len: builder.byte_len,
+        })
     }
 }
 
@@ -103,189 +129,68 @@ impl EncodedStreamSpecBuilder {
             && self.byte_len.is_none()
     }
 
-    pub fn try_build(self) -> Result<EncodedStreamSpec, SyphonError> {
-        Ok(EncodedStreamSpec {
-            codec_key: self.codec_key.ok_or(SyphonError::MalformedData)?,
-            decoded_spec: self.decoded_spec,
-            block_size: self.block_size.ok_or(SyphonError::MalformedData)?,
-            byte_len: self.byte_len,
-        })
+    pub fn n_blocks(&self) -> Option<u64> {
+        self.byte_len
+            .zip(self.block_size)
+            .map(|(n, b)| n / b as u64)
+    }
+
+    pub fn codec(mut self, codec: SyphonCodec) -> Self {
+        self.codec_key = Some(codec);
+        self
+    }
+
+    pub fn decoded_spec(mut self, decoded_spec: StreamSpecBuilder) -> Self {
+        self.decoded_spec = decoded_spec;
+        self
+    }
+
+    pub fn block_size(mut self, block_size: usize) -> Self {
+        self.block_size = Some(block_size);
+        self
+    }
+
+    pub fn byte_len(mut self, byte_len: u64) -> Self {
+        self.byte_len = Some(byte_len);
+        self
+    }
+
+    pub fn build(self) -> Result<EncodedStreamSpec, SyphonError> {
+        self.try_into()
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct StreamSpec {
-    pub sample_format: SampleFormat,
-    pub n_channels: u8,
-    pub sample_rate: u32,
-    pub block_size: usize,
-    pub n_frames: Option<u64>,
-}
-
-#[derive(Default, Clone, Copy)]
-pub struct StreamSpecBuilder {
-    pub sample_format: Option<SampleFormat>,
-    pub n_channels: Option<u8>,
-    pub sample_rate: Option<u32>,
-    pub block_size: Option<usize>,
-    pub n_frames: Option<u64>,
-}
-
-pub trait SampleReader<S: Sample> {
-    fn stream_spec(&self) -> &StreamSpec;
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError>;
-
-    // fn into_ref(self: Box<Self>) -> SampleReaderRef {
-    //     match S::FORMAT {
-    //         SampleFormat::U8 => SampleReaderRef::U8(self),
-    //         SampleFormat::U16 => SampleReaderRef::U16(self),
-    //         SampleFormat::U32 => SampleReaderRef::U32(self),
-    //         SampleFormat::U64 => SampleReaderRef::U64(self),
-
-    //         SampleFormat::I8 => SampleReaderRef::I8(self),
-    //         SampleFormat::I16 => SampleReaderRef::I16(self),
-    //         SampleFormat::I32 => SampleReaderRef::I32(self),
-    //         SampleFormat::I64 => SampleReaderRef::I64(self),
-
-    //         SampleFormat::F32 => SampleReaderRef::F32(self),
-    //         SampleFormat::F64 => SampleReaderRef::F64(self),
-    //     }
-    // }
-
-    fn read_exact(&mut self, mut buffer: &mut [S]) -> Result<(), SyphonError> {
-        let block_size = self.stream_spec().block_size;
-        if buffer.len() % block_size != 0 {
-            return Err(SyphonError::StreamMismatch);
-        }
-
-        let mut n_read: usize = 0;
-        while !buffer.is_empty() {
-            n_read += self.read(buffer)?;
-            if n_read == 0 {
-                return Err(SyphonError::Empty);
-            }
-
-            buffer = &mut buffer[n_read..];
-        }
-
-        Ok(())
-    }
-}
-
-pub trait SampleWriter<S: Sample> {
-    fn stream_spec(&self) -> &StreamSpec;
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError>;
-
-    fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
-        let block_size = self.stream_spec().block_size;
-        if buffer.len() % block_size != 0 {
-            return Err(SyphonError::StreamMismatch);
-        }
-
-        let mut n_written: usize = 0;
-        while !buffer.is_empty() {
-            n_written += self.write(buffer)?;
-            if n_written == 0 {
-                return Err(SyphonError::Empty);
-            }
-
-            buffer = &buffer[n_written..];
-        }
-
-        Ok(())
-    }
-}
-
-macro_rules! impl_sample_reader_into_ref {
-    ($s:ty, $f:ident) => {
-        impl From<Box<dyn SampleReader<$s>>> for SampleReaderRef {
-            fn from(reader: Box<dyn SampleReader<$s>>) -> Self {
-                Self::$f(Box::new(reader))
-            }
-        }
-    };
-}
-
-impl_sample_reader_into_ref!(i8, I8);
-impl_sample_reader_into_ref!(i16, I16);
-impl_sample_reader_into_ref!(i32, I32);
-impl_sample_reader_into_ref!(i64, I64);
-
-impl_sample_reader_into_ref!(u8, U8);
-impl_sample_reader_into_ref!(u16, U16);
-impl_sample_reader_into_ref!(u32, U32);
-impl_sample_reader_into_ref!(u64, U64);
-
-impl_sample_reader_into_ref!(f32, F32);
-impl_sample_reader_into_ref!(f64, F64);
-
-impl<S: Sample> SampleReader<S> for Box<dyn SampleReader<S>> {
-    fn stream_spec(&self) -> &StreamSpec {
-        self.as_ref().stream_spec()
-    }
-
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        self.as_mut().read(buffer)
-    }
-
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
-        self.as_mut().seek(offset)
-    }
-}
-
-impl<S: Sample> SampleWriter<S> for Box<dyn SampleWriter<S>> {
-    fn stream_spec(&self) -> &StreamSpec {
-        self.as_ref().stream_spec()
-    }
-
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        self.as_mut().write(buffer)
-    }
-
-    fn seek(&mut self, offset: SeekFrom) -> Result<u64, SyphonError> {
-        self.as_mut().seek(offset)
-    }
-}
-
-impl StreamSpec {
-    pub fn bytes_per_block(&self) -> usize {
-        self.block_size * self.sample_format.byte_size()
-    }
-
-    pub fn into_builder(self) -> StreamSpecBuilder {
-        StreamSpecBuilder {
-            sample_format: Some(self.sample_format),
-            n_channels: Some(self.n_channels),
-            sample_rate: Some(self.sample_rate),
-            block_size: Some(self.block_size),
-            n_frames: self.n_frames,
+impl From<EncodedStreamSpec> for EncodedStreamSpecBuilder {
+    fn from(spec: EncodedStreamSpec) -> Self {
+        Self {
+            codec_key: Some(spec.codec_key),
+            decoded_spec: spec.decoded_spec,
+            block_size: Some(spec.block_size),
+            byte_len: spec.byte_len,
         }
     }
 }
 
-impl StreamSpecBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
+pub trait EncodedStream {
+    fn spec(&self) -> &EncodedStreamSpec;
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.sample_format.is_none()
-            && self.n_channels.is_none()
-            && self.sample_rate.is_none()
-            && self.block_size.is_none()
-            && self.n_frames.is_none()
-    }
+pub trait EncodedStreamReader: EncodedStream + Read {}
+pub trait EncodedStreamWriter: EncodedStream + Write {}
 
-    pub fn try_build(self) -> Result<StreamSpec, SyphonError> {
-        Ok(StreamSpec {
-            sample_format: self.sample_format.ok_or(SyphonError::MalformedData)?,
-            n_channels: self.n_channels.ok_or(SyphonError::MalformedData)?,
-            sample_rate: self.sample_rate.ok_or(SyphonError::MalformedData)?,
-            block_size: self.block_size.ok_or(SyphonError::MalformedData)?,
-            n_frames: self.n_frames,
-        })
+impl<T: EncodedStream + Read> EncodedStreamReader for T {}
+
+impl EncodedStream for Box<dyn EncodedStreamReader> {
+    fn spec(&self) -> &EncodedStreamSpec {
+        self.as_ref().spec()
+    }
+}
+
+impl<T: EncodedStream + Write> EncodedStreamWriter for T {}
+
+impl EncodedStream for Box<dyn EncodedStreamWriter> {
+    fn spec(&self) -> &EncodedStreamSpec {
+        self.as_ref().spec()
     }
 }
 
@@ -320,39 +225,62 @@ pub enum SampleWriterRef {
 }
 
 impl SampleReaderRef {
-    pub fn stream_spec(&self) -> &StreamSpec {
+    pub fn spec(&self) -> &StreamSpec {
         match self {
-            Self::I8(reader) => reader.stream_spec(),
-            Self::I16(reader) => reader.stream_spec(),
-            Self::I32(reader) => reader.stream_spec(),
-            Self::I64(reader) => reader.stream_spec(),
+            Self::I8(reader) => reader.spec(),
+            Self::I16(reader) => reader.spec(),
+            Self::I32(reader) => reader.spec(),
+            Self::I64(reader) => reader.spec(),
 
-            Self::U8(reader) => reader.stream_spec(),
-            Self::U16(reader) => reader.stream_spec(),
-            Self::U32(reader) => reader.stream_spec(),
-            Self::U64(reader) => reader.stream_spec(),
+            Self::U8(reader) => reader.spec(),
+            Self::U16(reader) => reader.spec(),
+            Self::U32(reader) => reader.spec(),
+            Self::U64(reader) => reader.spec(),
 
-            Self::F32(reader) => reader.stream_spec(),
-            Self::F64(reader) => reader.stream_spec(),
+            Self::F32(reader) => reader.spec(),
+            Self::F64(reader) => reader.spec(),
         }
     }
 }
 
+macro_rules! impl_sample_reader_into_ref {
+    ($s:ty, $f:ident) => {
+        impl From<Box<dyn SampleReader<$s>>> for SampleReaderRef {
+            fn from(reader: Box<dyn SampleReader<$s>>) -> Self {
+                Self::$f(Box::new(reader))
+            }
+        }
+    };
+}
+
+impl_sample_reader_into_ref!(i8, I8);
+impl_sample_reader_into_ref!(i16, I16);
+impl_sample_reader_into_ref!(i32, I32);
+impl_sample_reader_into_ref!(i64, I64);
+
+impl_sample_reader_into_ref!(u8, U8);
+impl_sample_reader_into_ref!(u16, U16);
+impl_sample_reader_into_ref!(u32, U32);
+impl_sample_reader_into_ref!(u64, U64);
+
+impl_sample_reader_into_ref!(f32, F32);
+impl_sample_reader_into_ref!(f64, F64);
+
 impl SampleWriterRef {
-    pub fn stream_spec(&self) -> &StreamSpec {
+    pub fn spec(&self) -> &StreamSpec {
         match self {
-            Self::I8(writer) => writer.stream_spec(),
-            Self::I16(writer) => writer.stream_spec(),
-            Self::I32(writer) => writer.stream_spec(),
-            Self::I64(writer) => writer.stream_spec(),
+            Self::I8(writer) => writer.spec(),
+            Self::I16(writer) => writer.spec(),
+            Self::I32(writer) => writer.spec(),
+            Self::I64(writer) => writer.spec(),
 
-            Self::U8(writer) => writer.stream_spec(),
-            Self::U16(writer) => writer.stream_spec(),
-            Self::U32(writer) => writer.stream_spec(),
-            Self::U64(writer) => writer.stream_spec(),
+            Self::U8(writer) => writer.spec(),
+            Self::U16(writer) => writer.spec(),
+            Self::U32(writer) => writer.spec(),
+            Self::U64(writer) => writer.spec(),
 
-            Self::F32(writer) => writer.stream_spec(),
-            Self::F64(writer) => writer.stream_spec(),
+            Self::F32(writer) => writer.spec(),
+            Self::F64(writer) => writer.spec(),
         }
     }
 }

@@ -1,3 +1,3 @@
-mod wav;
+pub mod wav;
 
-pub use wav::*;
+pub use wav::WavFormat;

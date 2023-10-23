@@ -1,8 +1,15 @@
 use crate::{
-    io::{formats::*, FormatData, FormatReader, FormatWriter, MediaSink, MediaSource},
+    io::{
+        formats::wav::{WavFormat, WAV_FORMAT_IDENTIFIERS},
+        FormatData, FormatReader, FormatWriter,
+    },
     SyphonError,
 };
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    io::{Read, Seek, Write},
+};
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum SyphonFormat {
@@ -30,6 +37,12 @@ impl FormatIdentifiers {
         }
     }
 }
+
+pub trait MediaSource: Read + Seek {}
+pub trait MediaSink: Write + Seek {}
+
+impl<T: Read + Seek> MediaSource for T {}
+impl<T: Write + Seek> MediaSink for T {}
 
 pub struct FormatRegistry {
     formats: HashMap<
@@ -174,10 +187,10 @@ pub fn syphon_format_registry() -> FormatRegistry {
     FormatRegistry::new().register_format(
         SyphonFormat::Wav,
         &WAV_FORMAT_IDENTIFIERS,
-        |source| Ok(Box::new(WavFormat::reader(source)?.into_dyn_format())),
+        |source| Ok(Box::new(WavFormat::read(source)?.into_dyn_format())),
         |sink, data| {
             Ok(Box::new(
-                WavFormat::writer(sink, data.try_into()?)?.into_dyn_format(),
+                WavFormat::write(sink, data.try_into()?)?.into_dyn_format(),
             ))
         },
     )

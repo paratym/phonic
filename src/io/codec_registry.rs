@@ -1,5 +1,8 @@
 use crate::{
-    io::{codecs::*, EncodedStreamReader, EncodedStreamWriter, SampleReaderRef, SampleWriterRef},
+    io::{
+        codecs::*, EncodedStream, EncodedStreamReader, EncodedStreamWriter, SampleReaderRef,
+        SampleWriterRef,
+    },
     SyphonError,
 };
 use std::collections::HashMap;
@@ -78,7 +81,7 @@ impl CodecRegistry {
     ) -> Result<SampleReaderRef, SyphonError> {
         let constructor = self
             .decoder_constructors
-            .get(&reader.stream_spec().codec_key)
+            .get(&reader.spec().codec_key)
             .map(|c| c.0.as_ref())
             .flatten()
             .ok_or(SyphonError::Unsupported)?;
@@ -92,7 +95,7 @@ impl CodecRegistry {
     ) -> Result<SampleWriterRef, SyphonError> {
         let constructor = self
             .decoder_constructors
-            .get(&writer.stream_spec().codec_key)
+            .get(&writer.spec().codec_key)
             .map(|c| c.1.as_ref())
             .flatten()
             .ok_or(SyphonError::Unsupported)?;
@@ -104,7 +107,7 @@ impl CodecRegistry {
 pub fn syphon_codec_registry() -> CodecRegistry {
     CodecRegistry::new().register_codec(
         SyphonCodec::Pcm,
-        |reader| Ok(PcmCodec::decoder(reader)?.into()),
-        |writer| Ok(PcmCodec::encoder(writer)?.into()),
+        |reader| Ok(PcmCodec::from_stream(reader)?.into()),
+        |writer| Ok(PcmCodec::from_stream(writer)?.into()),
     )
 }
