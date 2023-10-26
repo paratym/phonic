@@ -1,52 +1,49 @@
-use crate::{Sample, SampleReader, SampleStream, StreamSpec, SyphonError};
+use std::io::{Seek, SeekFrom, self};
+use crate::{Sample, SignalReader, Signal, SignalSpec, SyphonError, SignalWriter};
 
-pub struct BlockSizeAdapter<S: Sample> {
-    source: Box<dyn SampleReader<S>>,
-    spec: StreamSpec,
+pub struct BlockSizeAdapter<T: Signal, S: Sample> {
+    signal: T,
+    spec: SignalSpec,
     buffer: Box<[S]>,
-    block_size: usize,
+    inner_block_size: usize,
     n_buffered: usize,
     n_read: usize,
 }
 
-impl<S: Sample> BlockSizeAdapter<S> {
-    pub fn new(
-        source: impl SampleReader<S> + 'static,
-        buffer: Box<[S]>,
-        n_frames: usize,
-    ) -> Result<Self, SyphonError> {
-        let src_spec = source.spec();
-        let src_block_size = src_spec.block_size as usize;
-        let block_size = n_frames * src_spec.n_channels as usize;
+impl<T: Signal, S: Sample> BlockSizeAdapter<T, S> {
+    pub fn from_signal(signal: T, block_size: usize) -> Self {
+        let mut spec = *signal.spec();
+        let inner_block_size = spec.block_size;
+        spec.block_size = block_size;
 
-        if buffer.len() < src_block_size || buffer.len() < block_size {
-            return Err(SyphonError::StreamMismatch);
-        }
-
-        let spec = StreamSpec {
-            block_size,
-            ..*src_spec
-        };
-
-        Ok(Self {
-            source: Box::new(source),
-            spec,
-            buffer,
-            block_size,
-            n_buffered: 0,
-            n_read: 0,
-        })
+        todo!()
     }
 }
 
-impl<S: Sample> SampleStream<S> for BlockSizeAdapter<S> {
-    fn spec(&self) -> &StreamSpec {
+impl<T: Signal, S: Sample> Signal for BlockSizeAdapter<T, S> {
+    fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<S: Sample> SampleReader<S> for BlockSizeAdapter<S> {
+impl<T: SignalReader<S>, S: Sample> SignalReader<S> for BlockSizeAdapter<T, S> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+        todo!()
+    }
+}
+
+impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for BlockSizeAdapter<T, S> {
+    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        self.signal.flush()
+    }
+}
+
+impl<T: Signal + Seek, S: Sample> Seek for BlockSizeAdapter<T, S> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
         todo!()
     }
 }

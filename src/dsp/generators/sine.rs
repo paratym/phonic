@@ -1,19 +1,19 @@
-use crate::{SampleFormat, SampleReader, SampleStream, StreamSpec, SyphonError};
+use crate::{SampleFormat, SignalReader, Signal, SignalSpec, SyphonError};
 
 pub struct SineGenerator {
-    spec: StreamSpec,
+    spec: SignalSpec,
     frequency: f32,
     n_read: usize,
 }
 
 impl SineGenerator {
     pub fn new(frequency: f32, sample_rate: u32) -> Self {
-        let spec = StreamSpec {
+        let spec = SignalSpec {
             sample_format: SampleFormat::I32,
             sample_rate,
             n_channels: 1,
             block_size: 1,
-            n_frames: None,
+            n_blocks: None,
         };
 
         Self {
@@ -24,13 +24,13 @@ impl SineGenerator {
     }
 }
 
-impl SampleStream<f32> for SineGenerator {
-    fn spec(&self) -> &StreamSpec {
+impl Signal for SineGenerator {
+    fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl SampleReader<f32> for SineGenerator {
+impl SignalReader<f32> for SineGenerator {
     fn read(&mut self, buffer: &mut [f32]) -> Result<usize, SyphonError> {
         for s in buffer.iter_mut() {
             let t = self.n_read as f32 / self.spec.sample_rate as f32;

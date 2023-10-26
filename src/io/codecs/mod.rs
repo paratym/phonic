@@ -1,3 +1,3 @@
-mod pcm;
+pub mod pcm;
 
-pub use pcm::*;
+pub use pcm::PcmCodec;

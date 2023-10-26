@@ -1,3 +1,3 @@
-pub mod wav;
+pub mod wave;
 
-pub use wav::WavFormat;
+pub use wave::Wave;

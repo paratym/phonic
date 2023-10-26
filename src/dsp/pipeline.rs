@@ -1,39 +1,39 @@
-use crate::{Sample, SampleReader, SampleStream, SampleWriter, StreamSpec, SyphonError};
+use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 use std::io::{Seek, SeekFrom};
 
 pub trait Pipe<S: Sample> {
-    fn spec(&self) -> &StreamSpec;
+    fn spec(&self) -> &SignalSpec;
     fn process(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 }
 
-pub struct Pipeline<S: Sample, T: SampleStream<S>> {
-    stream: T,
+pub struct Pipeline<S: Sample, T: Signal> {
+    signal: T,
     pipes: Box<[Box<dyn Pipe<S>>]>,
 }
 
-pub struct PipelineBuilder<S: Sample, T: SampleStream<S>> {
-    stream: T,
+pub struct PipelineBuilder<S: Sample, T: Signal> {
+    signal: T,
     pipes: Vec<Box<dyn Pipe<S>>>,
 }
 
-impl<S: Sample, T: SampleStream<S>> Pipeline<S, T> {
-    pub fn from_stream(stream: T) -> PipelineBuilder<S, T> {
-        PipelineBuilder::from_stream(stream)
+impl<S: Sample, T: Signal> Pipeline<S, T> {
+    pub fn builder(signal: T) -> PipelineBuilder<S, T> {
+        PipelineBuilder::from_signal(signal)
     }
 }
 
-impl<S: Sample, T: SampleStream<S>> SampleStream<S> for Pipeline<S, T> {
-    fn spec(&self) -> &StreamSpec {
+impl<S: Sample, T: Signal> Signal for Pipeline<S, T> {
+    fn spec(&self) -> &SignalSpec {
         match self.pipes.last() {
             Some(pipe) => pipe.spec(),
-            None => self.stream.spec(),
+            None => self.signal.spec(),
         }
     }
 }
 
-impl<S: Sample, T: SampleReader<S>> SampleReader<S> for Pipeline<S, T> {
+impl<S: Sample, T: SignalReader<S>> SignalReader<S> for Pipeline<S, T> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        let n_read = self.stream.read(buffer)?;
+        let n_read = self.signal.read(buffer)?;
         for pipe in self.pipes.as_mut() {
             pipe.process(&mut buffer[..n_read])?;
         }
@@ -42,26 +42,26 @@ impl<S: Sample, T: SampleReader<S>> SampleReader<S> for Pipeline<S, T> {
     }
 }
 
-impl<S: Sample, T: SampleWriter<S>> SampleWriter<S> for Pipeline<S, T> {
+impl<S: Sample, T: SignalWriter<S>> SignalWriter<S> for Pipeline<S, T> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        self.stream.write(buffer)
+        self.signal.write(buffer)
     }
 
     fn flush(&mut self) -> Result<(), SyphonError> {
-        self.stream.flush()
+        self.signal.flush()
     }
 }
 
-impl<S: Sample, T: SampleStream<S> + Seek> Seek for Pipeline<S, T> {
+impl<S: Sample, T: Signal + Seek> Seek for Pipeline<S, T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
-        self.stream.seek(offset)
+        self.signal.seek(offset)
     }
 }
 
-impl<S: Sample, T: SampleStream<S>> PipelineBuilder<S, T> {
-    pub fn from_stream(stream: T) -> Self {
+impl<S: Sample, T: Signal> PipelineBuilder<S, T> {
+    pub fn from_signal(signal: T) -> Self {
         Self {
-            stream,
+            signal,
             pipes: vec![],
         }
     }
@@ -72,13 +72,13 @@ impl<S: Sample, T: SampleStream<S>> PipelineBuilder<S, T> {
     }
 
     pub fn build(self) -> Result<Pipeline<S, T>, SyphonError> {
-        let stream_spec = self.stream.spec();
-        if self.pipes.iter().all(|pipe| pipe.spec() == stream_spec) {
-            return Err(SyphonError::StreamMismatch);
+        let spec = self.signal.spec();
+        if self.pipes.iter().all(|pipe| pipe.spec() == spec) {
+            return Err(SyphonError::SignalMismatch);
         }
 
         Ok(Pipeline {
-            stream: self.stream,
+            signal: self.signal,
             pipes: self.pipes.into_boxed_slice(),
         })
     }

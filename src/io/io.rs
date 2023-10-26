@@ -1,21 +1,32 @@
 use crate::{
-    io::SyphonCodec, SampleReader, SampleWriter, StreamSpec, StreamSpecBuilder, SyphonError,
+    io::{SyphonCodec, SyphonFormat},
+    dsp::adapters::IntoAdapter,
+    SignalReader, SignalSpec, SignalSpecBuilder, SignalWriter, SyphonError, FromKnownSample
 };
 use std::io::{Read, Write};
 
 #[derive(Clone)]
 pub struct FormatData {
+    pub format_key: Option<SyphonFormat>,
     pub tracks: Vec<EncodedStreamSpecBuilder>,
     // pub metadata: Metadata,
 }
 
 impl FormatData {
     pub fn new() -> Self {
-        Self { tracks: Vec::new() }
+        Self {
+            format_key: None,
+            tracks: Vec::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tracks.is_empty()
+        self.format_key.is_none() && self.tracks.is_empty()
+    }
+
+    pub fn format(mut self, format: SyphonFormat) -> Self {
+        self.format_key = Some(format);
+        self
     }
 
     pub fn track(mut self, track: EncodedStreamSpecBuilder) -> Self {
@@ -72,8 +83,8 @@ impl FormatWriter for Box<dyn FormatWriter> {
 
 #[derive(Clone, Copy)]
 pub struct EncodedStreamSpec {
-    pub codec_key: SyphonCodec,
-    pub decoded_spec: StreamSpecBuilder,
+    pub codec_key: Option<SyphonCodec>,
+    pub decoded_spec: SignalSpecBuilder,
     pub block_size: usize,
     pub byte_len: Option<u64>,
 }
@@ -81,7 +92,7 @@ pub struct EncodedStreamSpec {
 #[derive(Clone, Copy, Default)]
 pub struct EncodedStreamSpecBuilder {
     pub codec_key: Option<SyphonCodec>,
-    pub decoded_spec: StreamSpecBuilder,
+    pub decoded_spec: SignalSpecBuilder,
     pub block_size: Option<usize>,
     pub byte_len: Option<u64>,
 }
@@ -109,7 +120,7 @@ impl TryFrom<EncodedStreamSpecBuilder> for EncodedStreamSpec {
         }
 
         Ok(Self {
-            codec_key: builder.codec_key.ok_or(SyphonError::InvalidData)?,
+            codec_key: builder.codec_key,
             decoded_spec: builder.decoded_spec,
             block_size: builder.block_size.ok_or(SyphonError::InvalidData)?,
             byte_len: builder.byte_len,
@@ -140,7 +151,7 @@ impl EncodedStreamSpecBuilder {
         self
     }
 
-    pub fn decoded_spec(mut self, decoded_spec: StreamSpecBuilder) -> Self {
+    pub fn decoded_spec(mut self, decoded_spec: SignalSpecBuilder) -> Self {
         self.decoded_spec = decoded_spec;
         self
     }
@@ -163,7 +174,7 @@ impl EncodedStreamSpecBuilder {
 impl From<EncodedStreamSpec> for EncodedStreamSpecBuilder {
     fn from(spec: EncodedStreamSpec) -> Self {
         Self {
-            codec_key: Some(spec.codec_key),
+            codec_key: spec.codec_key,
             decoded_spec: spec.decoded_spec,
             block_size: Some(spec.block_size),
             byte_len: spec.byte_len,
@@ -194,93 +205,66 @@ impl EncodedStream for Box<dyn EncodedStreamWriter> {
     }
 }
 
-pub enum SampleReaderRef {
-    I8(Box<dyn SampleReader<i8>>),
-    I16(Box<dyn SampleReader<i16>>),
-    I32(Box<dyn SampleReader<i32>>),
-    I64(Box<dyn SampleReader<i64>>),
+pub enum SignalReaderRef {
+    I8(Box<dyn SignalReader<i8>>),
+    I16(Box<dyn SignalReader<i16>>),
+    I32(Box<dyn SignalReader<i32>>),
+    I64(Box<dyn SignalReader<i64>>),
 
-    U8(Box<dyn SampleReader<u8>>),
-    U16(Box<dyn SampleReader<u16>>),
-    U32(Box<dyn SampleReader<u32>>),
-    U64(Box<dyn SampleReader<u64>>),
+    U8(Box<dyn SignalReader<u8>>),
+    U16(Box<dyn SignalReader<u16>>),
+    U32(Box<dyn SignalReader<u32>>),
+    U64(Box<dyn SignalReader<u64>>),
 
-    F32(Box<dyn SampleReader<f32>>),
-    F64(Box<dyn SampleReader<f64>>),
+    F32(Box<dyn SignalReader<f32>>),
+    F64(Box<dyn SignalReader<f64>>),
 }
 
-pub enum SampleWriterRef {
-    I8(Box<dyn SampleWriter<i8>>),
-    I16(Box<dyn SampleWriter<i16>>),
-    I32(Box<dyn SampleWriter<i32>>),
-    I64(Box<dyn SampleWriter<i64>>),
+pub enum SignalWriterRef {
+    I8(Box<dyn SignalWriter<i8>>),
+    I16(Box<dyn SignalWriter<i16>>),
+    I32(Box<dyn SignalWriter<i32>>),
+    I64(Box<dyn SignalWriter<i64>>),
 
-    U8(Box<dyn SampleWriter<u8>>),
-    U16(Box<dyn SampleWriter<u16>>),
-    U32(Box<dyn SampleWriter<u32>>),
-    U64(Box<dyn SampleWriter<u64>>),
+    U8(Box<dyn SignalWriter<u8>>),
+    U16(Box<dyn SignalWriter<u16>>),
+    U32(Box<dyn SignalWriter<u32>>),
+    U64(Box<dyn SignalWriter<u64>>),
 
-    F32(Box<dyn SampleWriter<f32>>),
-    F64(Box<dyn SampleWriter<f64>>),
+    F32(Box<dyn SignalWriter<f32>>),
+    F64(Box<dyn SignalWriter<f64>>),
 }
 
-impl SampleReaderRef {
-    pub fn spec(&self) -> &StreamSpec {
-        match self {
-            Self::I8(reader) => reader.spec(),
-            Self::I16(reader) => reader.spec(),
-            Self::I32(reader) => reader.spec(),
-            Self::I64(reader) => reader.spec(),
-
-            Self::U8(reader) => reader.spec(),
-            Self::U16(reader) => reader.spec(),
-            Self::U32(reader) => reader.spec(),
-            Self::U64(reader) => reader.spec(),
-
-            Self::F32(reader) => reader.spec(),
-            Self::F64(reader) => reader.spec(),
+macro_rules! match_signal_ref {
+    ($ref:ident, $self:ident, $inner:ident, $rhs:expr) => {
+        match $ref {
+            $self::I8($inner) => $rhs,
+            $self::I16($inner) => $rhs,
+            $self::I32($inner) => $rhs,
+            $self::I64($inner) => $rhs,
+            $self::U8($inner) => $rhs,
+            $self::U16($inner) => $rhs,
+            $self::U32($inner) => $rhs,
+            $self::U64($inner) => $rhs,
+            $self::F32($inner) => $rhs,
+            $self::F64($inner) => $rhs,
         }
-    }
+    };
 }
 
-macro_rules! impl_sample_reader_into_ref {
-    ($s:ty, $f:ident) => {
-        impl From<Box<dyn SampleReader<$s>>> for SampleReaderRef {
-            fn from(reader: Box<dyn SampleReader<$s>>) -> Self {
-                Self::$f(Box::new(reader))
+macro_rules! impl_signal_ref {
+    ($self:ty) => {
+        impl $self {
+            pub fn spec(&self) -> &SignalSpec {
+                match_signal_ref!(self, Self, signal, signal.spec())
+            }
+
+            pub fn adapt_sample_type<O: FromKnownSample + 'static>(self) -> Box<dyn SignalReader<O>> {
+                match_signal_ref!(self, Self, signal, Box::new(signal.adapt_sample_type::<O>()))
             }
         }
     };
 }
 
-impl_sample_reader_into_ref!(i8, I8);
-impl_sample_reader_into_ref!(i16, I16);
-impl_sample_reader_into_ref!(i32, I32);
-impl_sample_reader_into_ref!(i64, I64);
-
-impl_sample_reader_into_ref!(u8, U8);
-impl_sample_reader_into_ref!(u16, U16);
-impl_sample_reader_into_ref!(u32, U32);
-impl_sample_reader_into_ref!(u64, U64);
-
-impl_sample_reader_into_ref!(f32, F32);
-impl_sample_reader_into_ref!(f64, F64);
-
-impl SampleWriterRef {
-    pub fn spec(&self) -> &StreamSpec {
-        match self {
-            Self::I8(writer) => writer.spec(),
-            Self::I16(writer) => writer.spec(),
-            Self::I32(writer) => writer.spec(),
-            Self::I64(writer) => writer.spec(),
-
-            Self::U8(writer) => writer.spec(),
-            Self::U16(writer) => writer.spec(),
-            Self::U32(writer) => writer.spec(),
-            Self::U64(writer) => writer.spec(),
-
-            Self::F32(writer) => writer.spec(),
-            Self::F64(writer) => writer.spec(),
-        }
-    }
-}
+impl_signal_ref!(SignalReaderRef);
+// impl_signal_ref!(SignalWriterRef);

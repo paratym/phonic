@@ -2,7 +2,7 @@
 // https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html
 
 mod header;
-mod wav;
+mod wave;
 
 pub use header::*;
-pub use wav::*;
+pub use wave::*;

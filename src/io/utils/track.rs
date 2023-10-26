@@ -11,24 +11,36 @@ pub struct Track<T> {
 }
 
 impl<T> Track<T> {
-    pub fn default(inner: T) -> Result<Self, SyphonError>
+    pub fn from_format(inner: T, track_i: usize) -> Result<Self, SyphonError>
     where
         T: Format,
     {
-        let (track_i, spec) = inner
+        let spec = inner
             .format_data()
             .tracks
-            .iter()
-            .enumerate()
-            .find(|(_, spec)| spec.codec_key.is_some() && spec.decoded_spec.sample_format.is_some())
-            .map(|(i, spec)| spec.build().map(|spec| (i, spec)))
-            .ok_or(SyphonError::NotFound)??;
+            .get(track_i)
+            .ok_or(SyphonError::NotFound)?
+            .build()?;
 
         Ok(Self {
             inner,
             spec,
             track_i,
         })
+    }
+
+    pub fn default_from_format(inner: T) -> Result<Self, SyphonError>
+    where
+        T: Format,
+    {
+        let default_i = inner
+            .format_data()
+            .tracks
+            .iter()
+            .position(|spec| spec.codec_key.is_some())
+            .ok_or(SyphonError::NotFound)?;
+
+        Self::from_format(inner, default_i)
     }
 }
 

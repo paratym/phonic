@@ -1,15 +1,18 @@
 use std::io::{Read, Write};
 
 use crate::{
-    io::{EncodedStreamSpecBuilder, FormatData, SyphonCodec},
-    SampleFormat, StreamSpecBuilder, SyphonError,
+    io::{
+        EncodedStreamSpecBuilder, FormatData, SyphonCodec,
+        SyphonFormat,
+    },
+    SampleFormat, SignalSpecBuilder, SyphonError,
 };
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
-const WAV_CHUNK_ID: &[u8; 4] = b"WAVE";
+const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";
 
 #[derive(Clone, Copy)]
-pub struct WavHeader {
+pub struct WaveHeader {
     pub fmt: FmtChunk,
     pub fact: Option<FactChunk>,
     pub data: DataChunk,
@@ -49,9 +52,9 @@ pub struct DataChunk {
     pub byte_len: u32,
 }
 
-impl WavHeader {
+impl WaveHeader {
     fn byte_len(&self) -> u32 {
-        8 + WAV_CHUNK_ID.len() as u32
+        8 + WAVE_CHUNK_ID.len() as u32
             + 8
             + self.fmt.byte_len()
             + self.fact.as_ref().map_or(0, |f| 8 + f.byte_len())
@@ -63,7 +66,7 @@ impl WavHeader {
         let mut buf = [0u8; 40];
 
         reader.read_exact(&mut buf[0..12])?;
-        if &buf[0..4] != RIFF_CHUNK_ID || &buf[8..12] != WAV_CHUNK_ID {
+        if &buf[0..4] != RIFF_CHUNK_ID || &buf[8..12] != WAVE_CHUNK_ID {
             return Err(SyphonError::InvalidData);
         }
 
@@ -110,7 +113,7 @@ impl WavHeader {
 
         buf[0..4].copy_from_slice(RIFF_CHUNK_ID);
         buf[4..8].copy_from_slice(&(self.byte_len() - 8).to_le_bytes());
-        buf[8..12].copy_from_slice(WAV_CHUNK_ID);
+        buf[8..12].copy_from_slice(WAVE_CHUNK_ID);
         writer.write_all(&buf[0..12])?;
 
         buf[0..4].copy_from_slice(FMT_CHUNK_ID);
@@ -133,8 +136,8 @@ impl WavHeader {
     }
 }
 
-impl From<WavHeader> for FormatData {
-    fn from(header: WavHeader) -> Self {
+impl From<WaveHeader> for FormatData {
+    fn from(header: WaveHeader) -> Self {
         let codec_key = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
             _ => None,
@@ -150,14 +153,15 @@ impl From<WavHeader> for FormatData {
         };
 
         Self {
+            format_key: Some(SyphonFormat::Wave),
             tracks: vec![EncodedStreamSpecBuilder {
                 codec_key,
                 block_size: Some(header.fmt.block_align as usize),
                 byte_len: Some(header.data.byte_len as u64),
-                decoded_spec: StreamSpecBuilder {
+                decoded_spec: SignalSpecBuilder {
                     sample_format,
                     n_channels: Some(header.fmt.n_channels as u8),
-                    n_frames: header.fact.map(|fact| fact.n_frames as u64),
+                    n_blocks: header.fact.map(|fact| fact.n_frames as u64),
                     sample_rate: Some(header.fmt.sample_rate),
                     block_size: None,
                 },
@@ -166,7 +170,7 @@ impl From<WavHeader> for FormatData {
     }
 }
 
-impl TryFrom<FormatData> for WavHeader {
+impl TryFrom<FormatData> for WaveHeader {
     type Error = SyphonError;
 
     fn try_from(data: FormatData) -> Result<Self, Self::Error> {
@@ -206,7 +210,7 @@ impl TryFrom<FormatData> for WavHeader {
                     * 8) as u16,
                 ext: None,
             },
-            fact: spec.decoded_spec.n_frames.map(|n_frames| FactChunk {
+            fact: spec.decoded_spec.n_frames().map(|n_frames| FactChunk {
                 n_frames: n_frames as u32,
             }),
             data: DataChunk {

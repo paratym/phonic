@@ -1,30 +1,34 @@
 use crate::{
     io::{
-        formats::wav::WavHeader, EncodedStream, EncodedStreamSpec, Format, FormatData,
+        formats::wave::WaveHeader, EncodedStream, EncodedStreamSpec, Format, FormatData,
         FormatIdentifiers, FormatReadResult, FormatReader, FormatWriter,
     },
     SyphonError,
 };
 use std::io::{Read, Seek, SeekFrom, Write};
 
-pub static WAV_FORMAT_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
+pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
     mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub struct WavFormat<T> {
-    header: WavHeader,
+pub fn fill_wave_data(data: &mut FormatData) -> Result<(), SyphonError> {
+    Ok(())
+}
+
+pub struct Wave<T> {
+    header: WaveHeader,
     inner: T,
     i: u64,
 }
 
-impl<T> WavFormat<T> {
+impl<T> Wave<T> {
     pub fn read(mut inner: T) -> std::io::Result<Self>
     where
         T: Read,
     {
-        let header = WavHeader::read(&mut inner)?;
+        let header = WaveHeader::read(&mut inner)?;
 
         Ok(Self {
             header,
@@ -33,7 +37,7 @@ impl<T> WavFormat<T> {
         })
     }
 
-    pub fn write(mut inner: T, header: WavHeader) -> std::io::Result<Self>
+    pub fn write(mut inner: T, header: WaveHeader) -> std::io::Result<Self>
     where
         T: Write,
     {
@@ -46,20 +50,20 @@ impl<T> WavFormat<T> {
         })
     }
 
-    pub fn header(&self) -> &WavHeader {
+    pub fn header(&self) -> &WaveHeader {
         &self.header
     }
 
-    pub fn into_dyn_format(self) -> DynWavFormat<T> {
-        DynWavFormat::from(self)
+    pub fn into_format(self) -> WavFormat<T> {
+        WavFormat::from(self)
     }
 
-    pub fn into_dyn_stream(self) -> Result<DynWavStream<T>, SyphonError> {
-        DynWavStream::try_from(self)
+    pub fn into_stream(self) -> Result<WavEncodedStream<T>, SyphonError> {
+        WavEncodedStream::try_from(self)
     }
 }
 
-impl<T: Read> Read for WavFormat<T> {
+impl<T: Read> Read for Wave<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut buf_len = buf
             .len()
@@ -77,7 +81,7 @@ impl<T: Read> Read for WavFormat<T> {
     }
 }
 
-impl<T: Write> Write for WavFormat<T> {
+impl<T: Write> Write for Wave<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let mut buf_len = buf
             .len()
@@ -99,7 +103,7 @@ impl<T: Write> Write for WavFormat<T> {
     }
 }
 
-impl<T: Seek> Seek for WavFormat<T> {
+impl<T: Seek> Seek for Wave<T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
         todo!()
 
@@ -130,25 +134,25 @@ impl<T: Seek> Seek for WavFormat<T> {
     }
 }
 
-pub struct DynWavFormat<T> {
-    inner: WavFormat<T>,
+pub struct WavFormat<T> {
+    inner: Wave<T>,
     data: FormatData,
 }
 
-impl<T> From<WavFormat<T>> for DynWavFormat<T> {
-    fn from(inner: WavFormat<T>) -> Self {
+impl<T> From<Wave<T>> for WavFormat<T> {
+    fn from(inner: Wave<T>) -> Self {
         let data = inner.header.into();
         Self { inner, data }
     }
 }
 
-impl<T: Read> Read for DynWavFormat<T> {
+impl<T: Read> Read for WavFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-impl<T: Write> Write for DynWavFormat<T> {
+impl<T: Write> Write for WavFormat<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -158,26 +162,26 @@ impl<T: Write> Write for DynWavFormat<T> {
     }
 }
 
-impl<T: Seek> Seek for DynWavFormat<T> {
+impl<T: Seek> Seek for WavFormat<T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
         self.inner.seek(offset)
     }
 }
 
-impl<T> Format for DynWavFormat<T> {
+impl<T> Format for WavFormat<T> {
     fn format_data(&self) -> &FormatData {
         &self.data
     }
 }
 
-impl<T: Read> FormatReader for DynWavFormat<T> {
+impl<T: Read> FormatReader for WavFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
         let n = self.inner.read(buf)?;
         Ok(FormatReadResult { track: 0, n })
     }
 }
 
-impl<T: Write> FormatWriter for DynWavFormat<T> {
+impl<T: Write> FormatWriter for WavFormat<T> {
     fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
         if track_i != 0 {
             return Err(SyphonError::Unsupported);
@@ -191,15 +195,15 @@ impl<T: Write> FormatWriter for DynWavFormat<T> {
     }
 }
 
-pub struct DynWavStream<T> {
-    inner: WavFormat<T>,
+pub struct WavEncodedStream<T> {
+    inner: Wave<T>,
     spec: EncodedStreamSpec,
 }
 
-impl<T> TryFrom<WavFormat<T>> for DynWavStream<T> {
+impl<T> TryFrom<Wave<T>> for WavEncodedStream<T> {
     type Error = SyphonError;
 
-    fn try_from(inner: WavFormat<T>) -> Result<Self, Self::Error> {
+    fn try_from(inner: Wave<T>) -> Result<Self, Self::Error> {
         let spec = Into::<FormatData>::into(inner.header)
             .tracks
             .first()
@@ -210,19 +214,19 @@ impl<T> TryFrom<WavFormat<T>> for DynWavStream<T> {
     }
 }
 
-impl<T> EncodedStream for DynWavStream<T> {
+impl<T> EncodedStream for WavEncodedStream<T> {
     fn spec(&self) -> &EncodedStreamSpec {
         &self.spec
     }
 }
 
-impl<T: Read> Read for DynWavStream<T> {
+impl<T: Read> Read for WavEncodedStream<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-impl<T: Write> Write for DynWavStream<T> {
+impl<T: Write> Write for WavEncodedStream<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -232,7 +236,7 @@ impl<T: Write> Write for DynWavStream<T> {
     }
 }
 
-impl<T: Seek> Seek for DynWavStream<T> {
+impl<T: Seek> Seek for WavEncodedStream<T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
         self.inner.seek(offset)
     }

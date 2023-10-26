@@ -1,11 +1,13 @@
-mod block_size;
-mod channels;
-mod n_frames;
-mod sample_rate;
-mod sample_type;
+mod adapter;
+pub mod block_size;
+pub mod channels;
+pub mod n_blocks;
+pub mod sample_rate;
+pub mod sample_type;
 
-pub use block_size::*;
-pub use channels::*;
-pub use n_frames::*;
-pub use sample_rate::*;
-pub use sample_type::*;
+pub use adapter::*;
+pub use block_size::BlockSizeAdapter;
+pub use channels::ChannelsAdapter;
+pub use n_blocks::NBlocksAdapter;
+pub use sample_rate::SampleRateAdapter;
+pub use sample_type::SampleTypeAdapter;
