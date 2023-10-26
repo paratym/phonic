@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 use syphon::{
-    io::{codecs::PcmCodec, formats::Wave, utils::pipe},
+    io::{codecs::PcmCodec, formats::Wave, utils::copy},
     Sample, SyphonError,
 };
 
@@ -11,8 +11,7 @@ fn main() -> Result<(), SyphonError> {
     let format_reader = Wave::read(src_file)?;
     let wave_header = *format_reader.header();
 
-    let stream_reader = format_reader.into_stream()?;
-    let mut decoder = PcmCodec::from_stream(stream_reader)?;
+    let mut decoder = PcmCodec::from_stream(format_reader.into_stream()?)?;
 
     let dst_path = Path::new("./examples/samples/sine_copy.wav");
     let dst_file = File::create(dst_path)?;
@@ -21,5 +20,5 @@ fn main() -> Result<(), SyphonError> {
     let mut encoder = PcmCodec::from_stream(stream_writer)?;
 
     let mut buf = [i16::MID; 1024];
-    pipe(&mut decoder, &mut encoder, &mut buf)
+    copy(&mut decoder, &mut encoder, &mut buf)
 }

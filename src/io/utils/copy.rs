@@ -1,6 +1,6 @@
 use crate::{Sample, SignalReader, SignalWriter, SyphonError};
 
-pub fn pipe<S: Sample>(
+pub fn copy<S: Sample>(
     reader: &mut dyn SignalReader<S>,
     writer: &mut dyn SignalWriter<S>,
     mut buffer: &mut [S],

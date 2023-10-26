@@ -57,10 +57,6 @@ pub trait Sample: Copy + PartialOrd + PartialEq + Sized {
     }
 }
 
-pub trait FromSample<S: Sample>: Sample {
-    fn from(sample: S) -> Self;
-}
-
 macro_rules! impl_int_sample {
     ($s:ty, $f: ident) => {
         impl Sample for $s {
@@ -110,11 +106,26 @@ impl_uint_sample!(u64, U64);
 impl_float_sample!(f32, F32);
 impl_float_sample!(f64, F64);
 
+pub trait FromSample<S: Sample> {
+    fn from_sample(sample: S) -> Self;
+}
+
+pub trait IntoSample<S: Sample> {
+    fn into_sample(self) -> S;
+}
+
+impl<T: Sample, S: Sample + FromSample<T>> IntoSample<S> for T {
+    #[inline(always)]
+    fn into_sample(self) -> S {
+        S::from_sample(self)
+    }
+}
+
 macro_rules! impl_convert {
     ($from:ty, $to:ty, $sample:ident, $func:expr) => {
         impl FromSample<$from> for $to {
             #[inline(always)]
-            fn from($sample: $from) -> Self {
+            fn from_sample($sample: $from) -> Self {
                 $func
             }
         }
@@ -296,6 +307,21 @@ pub trait FromKnownSample:
 {
 }
 
+pub trait IntoKnownSample:
+    Sample
+    + IntoSample<i8>
+    + IntoSample<i16>
+    + IntoSample<i32>
+    + IntoSample<i64>
+    + IntoSample<u8>
+    + IntoSample<u16>
+    + IntoSample<u32>
+    + IntoSample<u64>
+    + IntoSample<f32>
+    + IntoSample<f64>
+{
+}
+
 impl<S> FromKnownSample for S where
     S: Sample
         + FromSample<i8>
@@ -308,5 +334,20 @@ impl<S> FromKnownSample for S where
         + FromSample<u64>
         + FromSample<f32>
         + FromSample<f64>
+{
+}
+
+impl<S> IntoKnownSample for S where
+    S: Sample
+        + IntoSample<i8>
+        + IntoSample<i16>
+        + IntoSample<i32>
+        + IntoSample<i64>
+        + IntoSample<u8>
+        + IntoSample<u16>
+        + IntoSample<u32>
+        + IntoSample<u64>
+        + IntoSample<f32>
+        + IntoSample<f64>
 {
 }

@@ -54,7 +54,7 @@ impl TryFrom<SignalSpecBuilder> for SignalSpec {
             sample_format: builder.sample_format.ok_or(SyphonError::InvalidData)?,
             n_channels: builder.n_channels.ok_or(SyphonError::InvalidData)?,
             sample_rate: builder.sample_rate.ok_or(SyphonError::InvalidData)?,
-            block_size: builder.block_size.ok_or(SyphonError::InvalidData)?,
+            block_size: builder.block_size.unwrap_or(1),
             n_blocks: builder.n_blocks,
         })
     }
@@ -96,6 +96,11 @@ impl SignalSpecBuilder {
 
     pub fn sample_format(mut self, sample_format: SampleFormat) -> Self {
         self.sample_format = Some(sample_format);
+        self
+    }
+
+    pub fn sample_type<S: Sample>(mut self) -> Self {
+        self.sample_format = Some(S::FORMAT);
         self
     }
 

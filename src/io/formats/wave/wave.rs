@@ -1,9 +1,10 @@
 use crate::{
     io::{
-        formats::wave::WaveHeader, EncodedStream, EncodedStreamSpec, Format, FormatData,
-        FormatIdentifiers, FormatReadResult, FormatReader, FormatWriter,
+        formats::{wave::WaveHeader, FormatIdentifiers},
+        Format, FormatData, FormatReadResult, FormatReader, FormatWriter, Stream, StreamSpec,
+        SyphonCodec,
     },
-    SyphonError,
+    SampleFormat, SyphonError,
 };
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -14,6 +15,32 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
 };
 
 pub fn fill_wave_data(data: &mut FormatData) -> Result<(), SyphonError> {
+    if data.tracks.len() != 1 {
+        return Err(SyphonError::Unsupported);
+    }
+
+    let track = data.tracks.first_mut().unwrap();
+
+    if track.codec.is_none() {
+        track.codec = match track.decoded_spec.sample_format {
+            Some(SampleFormat::U8)
+            | Some(SampleFormat::I16)
+            | Some(SampleFormat::I32)
+            | Some(SampleFormat::F32)
+            | Some(SampleFormat::F64) => Some(SyphonCodec::Pcm),
+            Some(_) => return Err(SyphonError::Unsupported),
+            None => None,
+        }
+    }
+
+    if track
+        .codec
+        .is_some_and(|codec| codec != SyphonCodec::Pcm)
+    {
+        return Err(SyphonError::Unsupported);
+    }
+
+    track.fill()?;
     Ok(())
 }
 
@@ -54,12 +81,12 @@ impl<T> Wave<T> {
         &self.header
     }
 
-    pub fn into_format(self) -> WavFormat<T> {
-        WavFormat::from(self)
+    pub fn into_format(self) -> WaveFormat<T> {
+        WaveFormat::from(self)
     }
 
-    pub fn into_stream(self) -> Result<WavEncodedStream<T>, SyphonError> {
-        WavEncodedStream::try_from(self)
+    pub fn into_stream(self) -> Result<WaveStream<T>, SyphonError> {
+        WaveStream::try_from(self)
     }
 }
 
@@ -134,25 +161,25 @@ impl<T: Seek> Seek for Wave<T> {
     }
 }
 
-pub struct WavFormat<T> {
+pub struct WaveFormat<T> {
     inner: Wave<T>,
     data: FormatData,
 }
 
-impl<T> From<Wave<T>> for WavFormat<T> {
+impl<T> From<Wave<T>> for WaveFormat<T> {
     fn from(inner: Wave<T>) -> Self {
         let data = inner.header.into();
         Self { inner, data }
     }
 }
 
-impl<T: Read> Read for WavFormat<T> {
+impl<T: Read> Read for WaveFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-impl<T: Write> Write for WavFormat<T> {
+impl<T: Write> Write for WaveFormat<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -162,26 +189,26 @@ impl<T: Write> Write for WavFormat<T> {
     }
 }
 
-impl<T: Seek> Seek for WavFormat<T> {
+impl<T: Seek> Seek for WaveFormat<T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
         self.inner.seek(offset)
     }
 }
 
-impl<T> Format for WavFormat<T> {
+impl<T> Format for WaveFormat<T> {
     fn format_data(&self) -> &FormatData {
         &self.data
     }
 }
 
-impl<T: Read> FormatReader for WavFormat<T> {
+impl<T: Read> FormatReader for WaveFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
         let n = self.inner.read(buf)?;
         Ok(FormatReadResult { track: 0, n })
     }
 }
 
-impl<T: Write> FormatWriter for WavFormat<T> {
+impl<T: Write> FormatWriter for WaveFormat<T> {
     fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
         if track_i != 0 {
             return Err(SyphonError::Unsupported);
@@ -195,12 +222,12 @@ impl<T: Write> FormatWriter for WavFormat<T> {
     }
 }
 
-pub struct WavEncodedStream<T> {
+pub struct WaveStream<T> {
     inner: Wave<T>,
-    spec: EncodedStreamSpec,
+    spec: StreamSpec,
 }
 
-impl<T> TryFrom<Wave<T>> for WavEncodedStream<T> {
+impl<T> TryFrom<Wave<T>> for WaveStream<T> {
     type Error = SyphonError;
 
     fn try_from(inner: Wave<T>) -> Result<Self, Self::Error> {
@@ -214,19 +241,19 @@ impl<T> TryFrom<Wave<T>> for WavEncodedStream<T> {
     }
 }
 
-impl<T> EncodedStream for WavEncodedStream<T> {
-    fn spec(&self) -> &EncodedStreamSpec {
+impl<T> Stream for WaveStream<T> {
+    fn spec(&self) -> &StreamSpec {
         &self.spec
     }
 }
 
-impl<T: Read> Read for WavEncodedStream<T> {
+impl<T: Read> Read for WaveStream<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-impl<T: Write> Write for WavEncodedStream<T> {
+impl<T: Write> Write for WaveStream<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -236,7 +263,7 @@ impl<T: Write> Write for WavEncodedStream<T> {
     }
 }
 
-impl<T: Seek> Seek for WavEncodedStream<T> {
+impl<T: Seek> Seek for WaveStream<T> {
     fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
         self.inner.seek(offset)
     }

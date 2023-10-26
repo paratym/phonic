@@ -1,5 +1,8 @@
-use crate::{Sample, Signal, SignalSpec, SignalReader, SyphonError, SignalWriter};
-use std::{marker::PhantomData, io::{Seek, SeekFrom, self}};
+use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use std::{
+    io::{self, Seek, SeekFrom},
+    marker::PhantomData,
+};
 
 pub struct ChannelsAdapter<T: Signal, S: Sample> {
     signal: T,

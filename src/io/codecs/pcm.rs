@@ -1,5 +1,5 @@
 use crate::{
-    io::{EncodedStream, EncodedStreamSpecBuilder, SignalReaderRef, SignalWriterRef},
+    io::{SignalReaderRef, SignalWriterRef, Stream, StreamSpecBuilder},
     Sample, SampleFormat, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
 };
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
@@ -10,7 +10,7 @@ pub struct PcmCodec<T> {
     spec: SignalSpec,
 }
 
-pub fn fill_pcm_spec(spec: &mut EncodedStreamSpecBuilder) -> Result<(), SyphonError> {
+pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     if spec.decoded_spec.block_size.is_none() {
         spec.decoded_spec.block_size = spec
             .block_size
@@ -60,7 +60,7 @@ pub fn fill_pcm_spec(spec: &mut EncodedStreamSpecBuilder) -> Result<(), SyphonEr
 impl<T> PcmCodec<T> {
     pub fn from_stream(inner: T) -> Result<Self, SyphonError>
     where
-        T: EncodedStream,
+        T: Stream,
     {
         let mut spec = inner.spec().clone().into();
         fill_pcm_spec(&mut spec)?;

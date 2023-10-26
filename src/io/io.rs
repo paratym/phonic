@@ -1,42 +1,85 @@
 use crate::{
-    io::{SyphonCodec, SyphonFormat},
-    dsp::adapters::IntoAdapter,
-    SignalReader, SignalSpec, SignalSpecBuilder, SignalWriter, SyphonError, FromKnownSample
+    dsp::adapters::SampleTypeAdapter,
+    io::{utils::Track, SyphonCodec, SyphonFormat},
+    SignalReader, SignalSpec, SignalSpecBuilder, SignalWriter, SyphonError, IntoKnownSample, FromKnownSample,
 };
 use std::io::{Read, Write};
 
 #[derive(Clone)]
 pub struct FormatData {
-    pub format_key: Option<SyphonFormat>,
-    pub tracks: Vec<EncodedStreamSpecBuilder>,
+    pub format: Option<SyphonFormat>,
+    pub tracks: Vec<StreamSpecBuilder>,
     // pub metadata: Metadata,
 }
 
 impl FormatData {
     pub fn new() -> Self {
         Self {
-            format_key: None,
+            format: None,
             tracks: Vec::new(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.format_key.is_none() && self.tracks.is_empty()
+        self.format.is_none() && self.tracks.is_empty()
     }
 
     pub fn format(mut self, format: SyphonFormat) -> Self {
-        self.format_key = Some(format);
+        self.format = Some(format);
         self
     }
 
-    pub fn track(mut self, track: EncodedStreamSpecBuilder) -> Self {
+    pub fn track(mut self, track: StreamSpecBuilder) -> Self {
         self.tracks.push(track);
         self
+    }
+
+    pub fn fill(mut self) -> Result<Self, SyphonError> {
+        if let Some(format) = self.format {
+            format.fill_data(&mut self)?;
+        }
+
+        Ok(self)
+    }
+
+    pub fn write(mut self, writer: Box<dyn Write>) -> Result<Box<dyn FormatWriter>, SyphonError> {
+        self = self.fill()?;
+        self.format
+            .ok_or(SyphonError::Unsupported)?
+            .writer(writer, self)
     }
 }
 
 pub trait Format {
     fn format_data(&self) -> &FormatData;
+
+    fn default_track_i(&self) -> Option<usize> {
+        self.format_data()
+            .tracks
+            .iter()
+            .position(|track| track.codec.is_some())
+    }
+
+    fn default_track(&self) -> Option<&StreamSpecBuilder> {
+        self.default_track_i()
+            .and_then(|i| self.format_data().tracks.get(i))
+    }
+
+    fn into_track(self, i: usize) -> Result<Track<Self>, SyphonError>
+    where
+        Self: Sized,
+    {
+        Track::from_format(self, i)
+    }
+
+    fn into_default_track(self) -> Result<Track<Self>, SyphonError>
+    where
+        Self: Sized,
+    {
+        self.default_track_i()
+            .ok_or(SyphonError::NotFound)
+            .and_then(|i| self.into_track(i))
+    }
 }
 
 pub struct FormatReadResult {
@@ -82,24 +125,24 @@ impl FormatWriter for Box<dyn FormatWriter> {
 }
 
 #[derive(Clone, Copy)]
-pub struct EncodedStreamSpec {
-    pub codec_key: Option<SyphonCodec>,
+pub struct StreamSpec {
+    pub codec: Option<SyphonCodec>,
     pub decoded_spec: SignalSpecBuilder,
     pub block_size: usize,
     pub byte_len: Option<u64>,
 }
 
 #[derive(Clone, Copy, Default)]
-pub struct EncodedStreamSpecBuilder {
-    pub codec_key: Option<SyphonCodec>,
+pub struct StreamSpecBuilder {
+    pub codec: Option<SyphonCodec>,
     pub decoded_spec: SignalSpecBuilder,
     pub block_size: Option<usize>,
     pub byte_len: Option<u64>,
 }
 
-impl EncodedStreamSpec {
-    pub fn builder() -> EncodedStreamSpecBuilder {
-        EncodedStreamSpecBuilder::new()
+impl StreamSpec {
+    pub fn builder() -> StreamSpecBuilder {
+        StreamSpecBuilder::new()
     }
 
     pub fn n_blocks(&self) -> Option<u64> {
@@ -107,10 +150,14 @@ impl EncodedStreamSpec {
     }
 }
 
-impl TryFrom<EncodedStreamSpecBuilder> for EncodedStreamSpec {
+impl TryFrom<StreamSpecBuilder> for StreamSpec {
     type Error = SyphonError;
 
-    fn try_from(builder: EncodedStreamSpecBuilder) -> Result<Self, Self::Error> {
+    fn try_from(mut builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
+        if let Some(codec) = builder.codec {
+            codec.fill_spec(&mut builder)?;
+        }
+
         if builder
             .block_size
             .zip(builder.byte_len)
@@ -120,7 +167,7 @@ impl TryFrom<EncodedStreamSpecBuilder> for EncodedStreamSpec {
         }
 
         Ok(Self {
-            codec_key: builder.codec_key,
+            codec: builder.codec,
             decoded_spec: builder.decoded_spec,
             block_size: builder.block_size.ok_or(SyphonError::InvalidData)?,
             byte_len: builder.byte_len,
@@ -128,13 +175,13 @@ impl TryFrom<EncodedStreamSpecBuilder> for EncodedStreamSpec {
     }
 }
 
-impl EncodedStreamSpecBuilder {
+impl StreamSpecBuilder {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.codec_key.is_none()
+        self.codec.is_none()
             && self.decoded_spec.is_empty()
             && self.block_size.is_none()
             && self.byte_len.is_none()
@@ -147,7 +194,7 @@ impl EncodedStreamSpecBuilder {
     }
 
     pub fn codec(mut self, codec: SyphonCodec) -> Self {
-        self.codec_key = Some(codec);
+        self.codec = Some(codec);
         self
     }
 
@@ -166,15 +213,23 @@ impl EncodedStreamSpecBuilder {
         self
     }
 
-    pub fn build(self) -> Result<EncodedStreamSpec, SyphonError> {
+    pub fn fill(mut self) -> Result<Self, SyphonError> {
+        if let Some(codec) = self.codec {
+            codec.fill_spec(&mut self)?;
+        }
+
+        Ok(self)
+    }
+
+    pub fn build(self) -> Result<StreamSpec, SyphonError> {
         self.try_into()
     }
 }
 
-impl From<EncodedStreamSpec> for EncodedStreamSpecBuilder {
-    fn from(spec: EncodedStreamSpec) -> Self {
+impl From<StreamSpec> for StreamSpecBuilder {
+    fn from(spec: StreamSpec) -> Self {
         Self {
-            codec_key: spec.codec_key,
+            codec: spec.codec,
             decoded_spec: spec.decoded_spec,
             block_size: Some(spec.block_size),
             byte_len: spec.byte_len,
@@ -182,25 +237,46 @@ impl From<EncodedStreamSpec> for EncodedStreamSpecBuilder {
     }
 }
 
-pub trait EncodedStream {
-    fn spec(&self) -> &EncodedStreamSpec;
+pub trait Stream {
+    fn spec(&self) -> &StreamSpec;
 }
 
-pub trait EncodedStreamReader: EncodedStream + Read {}
-pub trait EncodedStreamWriter: EncodedStream + Write {}
+pub trait StreamReader: Stream + Read {
+    fn decoder(self) -> Result<SignalReaderRef, SyphonError>
+    where
+        Self: Sized + 'static,
+    {
+        self.spec()
+            .codec
+            .ok_or(SyphonError::Unsupported)?
+            .decoder(Box::new(self))
+    }
+}
 
-impl<T: EncodedStream + Read> EncodedStreamReader for T {}
+pub trait StreamWriter: Stream + Write {
+    fn encoder(self) -> Result<SignalWriterRef, SyphonError>
+    where
+        Self: Sized + 'static,
+    {
+        self.spec()
+            .codec
+            .ok_or(SyphonError::Unsupported)?
+            .encoder(Box::new(self))
+    }
+}
 
-impl EncodedStream for Box<dyn EncodedStreamReader> {
-    fn spec(&self) -> &EncodedStreamSpec {
+impl<T: Stream + Read> StreamReader for T {}
+
+impl Stream for Box<dyn StreamReader> {
+    fn spec(&self) -> &StreamSpec {
         self.as_ref().spec()
     }
 }
 
-impl<T: EncodedStream + Write> EncodedStreamWriter for T {}
+impl<T: Stream + Write> StreamWriter for T {}
 
-impl EncodedStream for Box<dyn EncodedStreamWriter> {
-    fn spec(&self) -> &EncodedStreamSpec {
+impl Stream for Box<dyn StreamWriter> {
+    fn spec(&self) -> &StreamSpec {
         self.as_ref().spec()
     }
 }
@@ -258,13 +334,31 @@ macro_rules! impl_signal_ref {
             pub fn spec(&self) -> &SignalSpec {
                 match_signal_ref!(self, Self, signal, signal.spec())
             }
-
-            pub fn adapt_sample_type<O: FromKnownSample + 'static>(self) -> Box<dyn SignalReader<O>> {
-                match_signal_ref!(self, Self, signal, Box::new(signal.adapt_sample_type::<O>()))
-            }
         }
     };
 }
 
 impl_signal_ref!(SignalReaderRef);
-// impl_signal_ref!(SignalWriterRef);
+impl_signal_ref!(SignalWriterRef);
+
+impl SignalReaderRef {
+    pub fn adapt_sample_type<O: FromKnownSample + 'static>(self) -> Box<dyn SignalReader<O>> {
+        match_signal_ref!(
+            self,
+            Self,
+            signal,
+            Box::new(SampleTypeAdapter::from_signal(signal))
+        )
+    }
+}
+
+impl SignalWriterRef {
+    pub fn adapt_sample_type<O: IntoKnownSample + 'static>(self) -> Box<dyn SignalWriter<O>> {
+        match_signal_ref!(
+            self,
+            Self,
+            signal,
+            Box::new(SampleTypeAdapter::from_signal(signal))
+        )
+    }
+}

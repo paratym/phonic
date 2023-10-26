@@ -1,5 +1,5 @@
-use std::io::{Seek, SeekFrom, self};
-use crate::{Sample, SignalReader, Signal, SignalSpec, SyphonError, SignalWriter};
+use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use std::io::{self, Seek, SeekFrom};
 
 pub struct BlockSizeAdapter<T: Signal, S: Sample> {
     signal: T,

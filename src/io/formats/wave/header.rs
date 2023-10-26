@@ -1,12 +1,11 @@
 use std::io::{Read, Write};
 
 use crate::{
-    io::{
-        EncodedStreamSpecBuilder, FormatData, SyphonCodec,
-        SyphonFormat,
-    },
+    io::{codecs, FormatData, StreamSpecBuilder, SyphonCodec, SyphonFormat},
     SampleFormat, SignalSpecBuilder, SyphonError,
 };
+
+use super::fill_wave_data;
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
 const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";
@@ -138,7 +137,7 @@ impl WaveHeader {
 
 impl From<WaveHeader> for FormatData {
     fn from(header: WaveHeader) -> Self {
-        let codec_key = match header.fmt.format_tag {
+        let codec = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
             _ => None,
         };
@@ -153,9 +152,9 @@ impl From<WaveHeader> for FormatData {
         };
 
         Self {
-            format_key: Some(SyphonFormat::Wave),
-            tracks: vec![EncodedStreamSpecBuilder {
-                codec_key,
+            format: Some(SyphonFormat::Wave),
+            tracks: vec![StreamSpecBuilder {
+                codec,
                 block_size: Some(header.fmt.block_align as usize),
                 byte_len: Some(header.data.byte_len as u64),
                 decoded_spec: SignalSpecBuilder {
@@ -179,14 +178,14 @@ impl TryFrom<FormatData> for WaveHeader {
         }
 
         let spec = &data.tracks[0];
-        let format_tag = match spec.codec_key.zip(spec.decoded_spec.sample_format) {
+
+        let format_tag = match spec.codec.zip(spec.decoded_spec.sample_format) {
             Some((SyphonCodec::Pcm, SampleFormat::U8)) => 1,
             Some((SyphonCodec::Pcm, SampleFormat::I16)) => 1,
             Some((SyphonCodec::Pcm, SampleFormat::I32)) => 1,
             Some((SyphonCodec::Pcm, SampleFormat::F32)) => 3,
             Some((SyphonCodec::Pcm, SampleFormat::F64)) => 3,
-            Some(_) => return Err(SyphonError::Unsupported),
-            None => return Err(SyphonError::Unsupported),
+            _ => return Err(SyphonError::Unsupported),
         };
 
         Ok(Self {
@@ -202,12 +201,11 @@ impl TryFrom<FormatData> for WaveHeader {
                     .ok_or(SyphonError::InvalidInput)?,
                 avg_bytes_rate: 0,
                 block_align: spec.block_size.ok_or(SyphonError::InvalidInput)? as u16,
-                bits_per_sample: (spec
+                bits_per_sample: spec
                     .decoded_spec
                     .sample_format
-                    .ok_or(SyphonError::InvalidInput)?
-                    .byte_size()
-                    * 8) as u16,
+                    .map(|s| s.byte_size() as u16 * 8)
+                    .ok_or(SyphonError::InvalidInput)?,
                 ext: None,
             },
             fact: spec.decoded_spec.n_frames().map(|n_frames| FactChunk {

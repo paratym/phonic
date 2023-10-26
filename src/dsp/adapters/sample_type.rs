@@ -1,5 +1,8 @@
-use crate::{FromSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::{io::{Seek, SeekFrom, self}, marker::PhantomData};
+use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError, IntoSample};
+use std::{
+    io::{self, Seek, SeekFrom},
+    marker::PhantomData,
+};
 
 pub struct SampleTypeAdapter<T: Signal, S: Sample, O: Sample> {
     signal: T,
@@ -35,15 +38,15 @@ impl<T: Signal, S: Sample, O: Sample> Signal for SampleTypeAdapter<T, S, O> {
 impl<T, S, O> SignalReader<O> for SampleTypeAdapter<T, S, O>
 where
     T: SignalReader<S>,
-    S: Sample,
-    O: Sample + FromSample<S>,
+    S: Sample + IntoSample<O>,
+    O: Sample,
 {
     fn read(&mut self, buffer: &mut [O]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
         let n_read = self.signal.read(&mut self.buffer[..buf_len])?;
 
         for (inner, outer) in self.buffer.iter().zip(buffer[..n_read].iter_mut()) {
-            *outer = O::from(*inner);
+            *outer = inner.into_sample();
         }
 
         Ok(n_read)
@@ -53,14 +56,14 @@ where
 impl<T, S, O> SignalWriter<O> for SampleTypeAdapter<T, S, O>
 where
     T: SignalWriter<S>,
-    S: Sample + FromSample<O>,
-    O: Sample,
+    S: Sample,
+    O: Sample + IntoSample<S>,
 {
     fn write(&mut self, buffer: &[O]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
 
         for (outer, inner) in buffer[..buf_len].iter().zip(self.buffer.iter_mut()) {
-            *inner = S::from(*outer);
+            *inner = outer.into_sample();
         }
 
         self.signal.write(&self.buffer[..buf_len])
