@@ -1,32 +1,31 @@
-use std::{fs::File, path::Path};
+use std::fs::File;
 use syphon::{
     dsp::generators::Sine,
-    io::{Format, FormatData, StreamSpec, StreamWriter, SyphonFormat, utils::copy},
+    io::{utils::copy, Format, FormatData, StreamSpec, StreamWriter, SyphonFormat},
     Sample, Signal, SignalSpec, SyphonError,
 };
 
 fn main() -> Result<(), SyphonError> {
-    let dst_path = Path::new("./examples/samples/synth.wav");
-    let dst_file = Box::new(File::create(dst_path)?);
-
     let spec = SignalSpec::builder()
-        .sample_type::<f32>()
-        .sample_rate(44100)
-        .n_channels(1)
-        // .block_size(1) // default
-        .n_blocks(44100)
+        .sample::<f32>()
+        // .stereo()
+        .hz(44100)
+        .n_blocks(88200)
         .build()?;
 
     let mut sine = Sine::new(spec, 440.0);
 
-    let mut encoder = FormatData::new()
+    let file = Box::new(File::create("./examples/samples/sine.wav")?);
+    let format_writer = FormatData::builder()
         .format(SyphonFormat::Wave)
         .track(StreamSpec::builder().decoded_spec((*sine.spec()).into()))
-        .fill()?
-        .write(dst_file)?
-        .into_default_track()?
-        .encoder()?
-        .adapt_sample_type::<f32>();
+        .build()?
+        .writer(file)?;
+
+    let mut encoder = format_writer
+        .into_track_stream(0)?
+        .into_encoder()?
+        .unwrap_f32_signal()?;
 
     let mut buf = [f32::MID; 1024];
     copy(&mut sine, &mut encoder, &mut buf)

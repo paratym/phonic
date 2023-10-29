@@ -1,9 +1,8 @@
 use crate::{
-    io::{SignalReaderRef, SignalWriterRef, Stream, StreamSpecBuilder},
+    io::{SignalReaderRef, SignalWriterRef, Stream, StreamReader, StreamSpecBuilder, StreamWriter},
     Sample, SampleFormat, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
 };
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
-use std::io::{Read, Seek, SeekFrom, Write};
 
 pub struct PcmCodec<T> {
     inner: T,
@@ -15,8 +14,8 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
         spec.decoded_spec.block_size = spec
             .block_size
             .zip(spec.decoded_spec.sample_format)
-            .zip(spec.decoded_spec.n_channels)
-            .map(|((b, s), c)| b / s.byte_size() / c as usize)
+            .zip(spec.decoded_spec.channels)
+            .map(|((b, s), c)| b / s.byte_size() / c.count() as usize)
             .or(Some(1));
     }
 
@@ -78,7 +77,7 @@ impl<T> Signal for PcmCodec<T> {
     }
 }
 
-impl<T: Read, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T> {
+impl<T: StreamReader, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T> {
     fn read(&mut self, buf: &mut [S]) -> Result<usize, SyphonError> {
         if S::FORMAT != self.spec.sample_format {
             return Err(SyphonError::InvalidData);
@@ -87,16 +86,20 @@ impl<T: Read, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T> {
         let mut buf_len = buf.len();
         buf_len -= buf_len % self.spec.samples_per_block();
 
+        let buf = buf[..buf_len].as_mut_byte_slice();
+
+        let n_bytes = self.inner.read(buf)? * self.inner.spec().block_size;
         let bytes_per_block = self.spec.samples_per_block() * S::FORMAT.byte_size();
-        match self.inner.read(buf[..buf_len].as_mut_byte_slice()) {
-            Ok(n) if n % bytes_per_block == 0 => Ok(n / bytes_per_block),
-            Ok(_) => todo!(),
-            Err(e) => Err(e.into()),
+
+        if n_bytes % bytes_per_block != 0 {
+            todo!()
         }
+
+        Ok(n_bytes / bytes_per_block)
     }
 }
 
-impl<T: Write, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T> {
+impl<T: StreamWriter, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T> {
     fn write(&mut self, buf: &[S]) -> Result<usize, SyphonError> {
         if S::FORMAT != self.spec.sample_format {
             return Err(SyphonError::InvalidData);
@@ -105,20 +108,20 @@ impl<T: Write, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T> {
         let mut buf_len = buf.len();
         buf_len -= buf_len % self.spec.samples_per_block();
 
-        let bytes_per_block = self.spec.samples_per_block() * S::FORMAT.byte_size();
-        match self.inner.write(buf[..buf_len].as_byte_slice()) {
-            Ok(n) if n % bytes_per_block == 0 => Ok(n / bytes_per_block),
-            Ok(_) => todo!(),
-            Err(e) => Err(e.into()),
-        }
-    }
+        let buf = buf[..buf_len].as_byte_slice();
 
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        Ok(self.inner.flush()?)
+        let n_bytes = self.inner.write(buf)? * self.inner.spec().block_size;
+        let bytes_per_block = self.spec.samples_per_block() * S::FORMAT.byte_size();
+
+        if n_bytes % bytes_per_block != 0 {
+            todo!()
+        }
+
+        Ok(n_bytes / bytes_per_block)
     }
 }
 
-impl<T: Read + 'static> From<PcmCodec<T>> for SignalReaderRef {
+impl<T: StreamReader + 'static> From<PcmCodec<T>> for SignalReaderRef {
     fn from(decoder: PcmCodec<T>) -> Self {
         match decoder.spec.sample_format {
             SampleFormat::U8 => Self::U8(Box::new(decoder)),
@@ -137,7 +140,7 @@ impl<T: Read + 'static> From<PcmCodec<T>> for SignalReaderRef {
     }
 }
 
-impl<T: Write + 'static> From<PcmCodec<T>> for SignalWriterRef {
+impl<T: StreamWriter + 'static> From<PcmCodec<T>> for SignalWriterRef {
     fn from(encoder: PcmCodec<T>) -> Self {
         match encoder.spec.sample_format {
             SampleFormat::U8 => Self::U8(Box::new(encoder)),

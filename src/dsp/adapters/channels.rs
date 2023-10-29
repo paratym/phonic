@@ -1,4 +1,6 @@
-use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use crate::{
+    ChannelLayout, Channels, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
+};
 use std::{
     io::{self, Seek, SeekFrom},
     marker::PhantomData,
@@ -11,9 +13,9 @@ pub struct ChannelsAdapter<T: Signal, S: Sample> {
 }
 
 impl<T: Signal, S: Sample> ChannelsAdapter<T, S> {
-    pub fn from_signal(signal: T, n_channels: u8) -> Self {
+    pub fn from_signal(signal: T, channels: Channels) -> Self {
         let spec = SignalSpec {
-            n_channels,
+            channels,
             ..*signal.spec()
         };
 
@@ -40,10 +42,6 @@ impl<T: SignalReader<S>, S: Sample> SignalReader<S> for ChannelsAdapter<T, S> {
 impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for ChannelsAdapter<T, S> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
         todo!()
-    }
-
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        self.signal.flush()
     }
 }
 

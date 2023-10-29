@@ -1,12 +1,12 @@
 use crate::{
     io::{
         formats::{wave::WaveHeader, FormatIdentifiers},
-        Format, FormatData, FormatReadResult, FormatReader, FormatWriter, Stream, StreamSpec,
-        SyphonCodec,
+        Format, FormatData, FormatDataBuilder, FormatReadResult, FormatReader, FormatWriter,
+        Stream, StreamSpec, SyphonCodec,
     },
     SampleFormat, SyphonError,
 };
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 
 pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
@@ -14,7 +14,7 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub fn fill_wave_data(data: &mut FormatData) -> Result<(), SyphonError> {
+pub fn fill_wave_data(data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
     if data.tracks.len() != 1 {
         return Err(SyphonError::Unsupported);
     }
@@ -33,25 +33,21 @@ pub fn fill_wave_data(data: &mut FormatData) -> Result<(), SyphonError> {
         }
     }
 
-    if track
-        .codec
-        .is_some_and(|codec| codec != SyphonCodec::Pcm)
-    {
+    if track.codec.is_some_and(|codec| codec != SyphonCodec::Pcm) {
         return Err(SyphonError::Unsupported);
     }
 
-    track.fill()?;
     Ok(())
 }
 
 pub struct Wave<T> {
     header: WaveHeader,
     inner: T,
-    i: u64,
+    i: usize,
 }
 
 impl<T> Wave<T> {
-    pub fn read(mut inner: T) -> std::io::Result<Self>
+    pub fn read(mut inner: T) -> Result<Self, SyphonError>
     where
         T: Read,
     {
@@ -64,7 +60,7 @@ impl<T> Wave<T> {
         })
     }
 
-    pub fn write(mut inner: T, header: WaveHeader) -> std::io::Result<Self>
+    pub fn write(mut inner: T, header: WaveHeader) -> Result<Self, SyphonError>
     where
         T: Write,
     {
@@ -81,8 +77,8 @@ impl<T> Wave<T> {
         &self.header
     }
 
-    pub fn into_format(self) -> WaveFormat<T> {
-        WaveFormat::from(self)
+    pub fn into_format(self) -> Result<WaveFormat<T>, SyphonError> {
+        WaveFormat::try_from(self)
     }
 
     pub fn into_stream(self) -> Result<WaveStream<T>, SyphonError> {
@@ -91,14 +87,13 @@ impl<T> Wave<T> {
 }
 
 impl<T: Read> Read for Wave<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf
-            .len()
-            .min(self.header.data.byte_len as usize - self.i as usize);
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut buf_len = buf.len();
+        buf_len = buf_len.min(self.header.data.byte_len as usize - self.i);
         buf_len -= buf_len % self.header.fmt.block_align as usize;
 
         let n = self.inner.read(&mut buf[..buf_len])?;
-        self.i += n as u64;
+        self.i += n;
 
         if n % self.header.fmt.block_align as usize != 0 {
             todo!();
@@ -109,14 +104,13 @@ impl<T: Read> Read for Wave<T> {
 }
 
 impl<T: Write> Write for Wave<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut buf_len = buf
-            .len()
-            .min(self.header.data.byte_len as usize - self.i as usize);
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut buf_len = buf.len();
+        buf_len = buf_len.min(self.header.data.byte_len as usize - self.i);
         buf_len -= buf_len % self.header.fmt.block_align as usize;
 
         let n = self.inner.write(&buf[..buf_len])?;
-        self.i += n as u64;
+        self.i += n;
 
         if n % self.header.fmt.block_align as usize != 0 {
             todo!();
@@ -125,39 +119,14 @@ impl<T: Write> Write for Wave<T> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
 
 impl<T: Seek> Seek for Wave<T> {
-    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
         todo!()
-
-        // let new_pos = match offset {
-        //     SeekFrom::Current(offset) if offset == 0 => {
-        //         return Ok(self.media_pos());
-        //     }
-        //     SeekFrom::Current(offset) => self.source_pos as i64 + offset,
-        //     SeekFrom::Start(offset) => self.media_bounds.0 as i64 + offset as i64,
-        //     SeekFrom::End(offset) => self.media_bounds.1 as i64 + offset,
-        // };
-
-        // if new_pos < 0 {
-        //     return Err(SyphonError::BadRequest);
-        // }
-
-        // let mut new_pos = new_pos as u64;
-        // if new_pos < self.media_bounds.0 || new_pos >= self.media_bounds.1 {
-        //     return Err(SyphonError::BadRequest);
-        // }
-
-        // let new_media_pos = new_pos - self.media_bounds.0;
-        // let block_size = self.stream_spec_mut().block_size.unwrap_or(1);
-        // new_pos -= new_media_pos % block_size as u64;
-
-        // self.source_pos = self.source.seek(SeekFrom::Start(new_pos))?;
-        // Ok(self.media_pos())
     }
 }
 
@@ -166,31 +135,33 @@ pub struct WaveFormat<T> {
     data: FormatData,
 }
 
-impl<T> From<Wave<T>> for WaveFormat<T> {
-    fn from(inner: Wave<T>) -> Self {
-        let data = inner.header.into();
-        Self { inner, data }
+impl<T> TryFrom<Wave<T>> for WaveFormat<T> {
+    type Error = SyphonError;
+
+    fn try_from(inner: Wave<T>) -> Result<Self, Self::Error> {
+        let data = FormatDataBuilder::from(inner.header).build()?;
+        Ok(Self { inner, data })
     }
 }
 
 impl<T: Read> Read for WaveFormat<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
 impl<T: Write> Write for WaveFormat<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.inner.write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
 
 impl<T: Seek> Seek for WaveFormat<T> {
-    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
         self.inner.seek(offset)
     }
 }
@@ -231,7 +202,7 @@ impl<T> TryFrom<Wave<T>> for WaveStream<T> {
     type Error = SyphonError;
 
     fn try_from(inner: Wave<T>) -> Result<Self, Self::Error> {
-        let spec = Into::<FormatData>::into(inner.header)
+        let spec = FormatDataBuilder::from(inner.header)
             .tracks
             .first()
             .ok_or(SyphonError::NotFound)?
@@ -248,23 +219,23 @@ impl<T> Stream for WaveStream<T> {
 }
 
 impl<T: Read> Read for WaveStream<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
 impl<T: Write> Write for WaveStream<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.inner.write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
 
 impl<T: Seek> Seek for WaveStream<T> {
-    fn seek(&mut self, offset: SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
         self.inner.seek(offset)
     }
 }

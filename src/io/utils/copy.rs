@@ -6,6 +6,7 @@ pub fn copy<S: Sample>(
     mut buffer: &mut [S],
 ) -> Result<(), SyphonError> {
     let spec = reader.spec();
+    let samples_per_block = spec.samples_per_block();
     if spec.sample_format != S::FORMAT || spec != writer.spec() {
         return Err(SyphonError::SignalMismatch);
     }
@@ -14,7 +15,7 @@ pub fn copy<S: Sample>(
     loop {
         n = match reader.read(&mut buffer) {
             Ok(0) => return Ok(()),
-            Ok(n) => n,
+            Ok(n) => n * samples_per_block,
             Err(SyphonError::EndOfStream) => return Ok(()),
             Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
             Err(e) => return Err(e),

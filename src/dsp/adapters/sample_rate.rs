@@ -41,10 +41,6 @@ impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for SampleRateAdapter<T, S> 
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
         todo!()
     }
-
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        self.signal.flush()
-    }
 }
 
 impl<T: Signal + Seek, S: Sample> Seek for SampleRateAdapter<T, S> {

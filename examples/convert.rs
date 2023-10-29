@@ -1,8 +1,8 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{fs::File, path::Path};
 use syphon::{
     io::{
-        formats::FormatIdentifier, utils::copy, Format, FormatData, SignalWriterRef, StreamReader,
-        StreamSpec, StreamSpecBuilder, SyphonCodec, SyphonFormat, StreamWriter,
+        formats::FormatIdentifier, utils::copy, Format, FormatData, StreamReader, StreamSpec,
+        StreamWriter, SyphonFormat,
     },
     Sample, Signal, SyphonError,
 };
@@ -16,18 +16,21 @@ fn main() -> Result<(), SyphonError> {
         .map(|ext| FormatIdentifier::FileExtension(ext));
 
     let mut decoder = SyphonFormat::resolve_reader(src_file, format_identifier)?
-        .into_default_track()?
-        .decoder()?
+        .into_default_stream()?
+        .into_decoder()?
         .adapt_sample_type::<f32>();
 
-    let dst_file = Box::new(File::create("./examples/samples/sine_converted.wav")?);
-    let mut encoder = FormatData::new()
+    let data = FormatData::builder()
         .format(SyphonFormat::Wave)
         .track(StreamSpec::builder().decoded_spec(decoder.spec().clone().into()))
-        .write(dst_file)?
-        .into_default_track()?
-        .encoder()?
-        .adapt_sample_type::<f32>();
+        .build()?;
+
+    let dst_file = Box::new(File::create("./examples/samples/sine_converted.wav")?);
+    let mut encoder = data
+        .writer(dst_file)?
+        .into_default_stream()?
+        .into_encoder()?
+        .unwrap_f32_signal()?;
 
     let mut buf = [f32::MID; 1024];
     copy(&mut decoder, &mut encoder, &mut buf)

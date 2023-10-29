@@ -1,7 +1,7 @@
 use crate::{
     io::{
         formats::wave::{fill_wave_data, Wave, WAVE_IDENTIFIERS},
-        FormatData, FormatReader, FormatWriter,
+        FormatData, FormatDataBuilder, FormatReader, FormatWriter,
     },
     SyphonError,
 };
@@ -13,26 +13,39 @@ use std::{
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum SyphonFormat {
     Wave,
+    Unknown,
 }
 
-const SYPHON_CODECS: &[SyphonFormat] = &[SyphonFormat::Wave];
-
 impl SyphonFormat {
+    pub fn iter() -> impl Iterator<Item = SyphonFormat> {
+        const SYPHON_FORMATS: &[SyphonFormat] = &[SyphonFormat::Wave];
+        SYPHON_FORMATS.iter().copied()
+    }
+
     pub fn identifiers(&self) -> &'static FormatIdentifiers {
+        const UNKNOWN_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
+            file_extensions: &[],
+            mime_types: &[],
+            markers: &[],
+        };
+
         match self {
             SyphonFormat::Wave => &WAVE_IDENTIFIERS,
+            SyphonFormat::Unknown => &UNKNOWN_IDENTIFIERS,
         }
     }
 
-    pub fn fill_data(&self, data: &mut FormatData) -> Result<(), SyphonError> {
+    pub fn fill_data(&self, data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
         match self {
             SyphonFormat::Wave => fill_wave_data(data),
+            SyphonFormat::Unknown => Ok(()),
         }
     }
 
     pub fn reader(&self, source: Box<dyn Read>) -> Result<Box<dyn FormatReader>, SyphonError> {
         match self {
-            SyphonFormat::Wave => Ok(Box::new(Wave::read(source)?.into_format())),
+            SyphonFormat::Wave => Ok(Box::new(Wave::read(source)?.into_format()?)),
+            SyphonFormat::Unknown => Err(SyphonError::Unsupported),
         }
     }
 
@@ -42,11 +55,14 @@ impl SyphonFormat {
         data: FormatData,
     ) -> Result<Box<dyn FormatWriter>, SyphonError> {
         match self {
-            SyphonFormat::Wave => Ok(Box::new(Wave::write(sink, data.try_into()?)?.into_format())),
+            SyphonFormat::Wave => Ok(Box::new(
+                Wave::write(sink, data.try_into()?)?.into_format()?,
+            )),
+            SyphonFormat::Unknown => Err(SyphonError::Unsupported),
         }
     }
 
-    pub fn resolve_from_reader(reader: &mut dyn Read) -> Option<Self> {
+    fn resolve_from_reader(reader: &mut dyn Read) -> Option<Self> {
         None
     }
 
@@ -55,12 +71,7 @@ impl SyphonFormat {
         identifier: Option<FormatIdentifier>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         identifier
-            .and_then(|id| {
-                SYPHON_CODECS
-                    .iter()
-                    .find(|fmt| fmt.identifiers().contains(&id))
-                    .copied()
-            })
+            .and_then(|id| Self::iter().find(|fmt| fmt.identifiers().contains(&id)))
             .or_else(|| SyphonFormat::resolve_from_reader(&mut source))
             .ok_or(SyphonError::Unsupported)?
             .reader(source)

@@ -1,4 +1,4 @@
-use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError, IntoSample};
+use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 use std::{
     io::{self, Seek, SeekFrom},
     marker::PhantomData,
@@ -43,13 +43,14 @@ where
 {
     fn read(&mut self, buffer: &mut [O]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
-        let n_read = self.signal.read(&mut self.buffer[..buf_len])?;
+        let n_blocks = self.signal.read(&mut self.buffer[..buf_len])?;
+        let n_samples = n_blocks * self.signal.spec().samples_per_block();
 
-        for (inner, outer) in self.buffer.iter().zip(buffer[..n_read].iter_mut()) {
+        for (inner, outer) in self.buffer.iter().zip(buffer[..n_samples].iter_mut()) {
             *outer = inner.into_sample();
         }
 
-        Ok(n_read)
+        Ok(n_blocks)
     }
 }
 
@@ -67,10 +68,6 @@ where
         }
 
         self.signal.write(&self.buffer[..buf_len])
-    }
-
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        self.signal.flush()
     }
 }
 

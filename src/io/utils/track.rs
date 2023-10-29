@@ -1,32 +1,19 @@
-use crate::{
-    io::{Format, FormatReader, FormatWriter, Stream, StreamSpec},
-    SyphonError,
-};
+use crate::io::{FormatReader, FormatWriter, Stream, StreamSpec};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
 pub struct Track<T> {
     inner: T,
-    spec: StreamSpec,
     track_i: usize,
+    spec: StreamSpec,
 }
 
 impl<T> Track<T> {
-    pub fn from_format(inner: T, track_i: usize) -> Result<Self, SyphonError>
-    where
-        T: Format,
-    {
-        let spec = inner
-            .format_data()
-            .tracks
-            .get(track_i)
-            .ok_or(SyphonError::NotFound)?
-            .build()?;
-
-        Ok(Self {
+    pub fn new(inner: T, track_i: usize, spec: StreamSpec) -> Self {
+        Self {
             inner,
             spec,
             track_i,
-        })
+        }
     }
 }
 
