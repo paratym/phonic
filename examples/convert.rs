@@ -16,7 +16,7 @@ fn main() -> Result<(), SyphonError> {
         .map(|ext| FormatIdentifier::FileExtension(ext));
 
     let mut decoder = SyphonFormat::resolve_reader(src_file, format_identifier)?
-        .into_default_stream()?
+        .into_default_track()?
         .into_decoder()?
         .adapt_sample_type::<f32>();
 
@@ -28,10 +28,10 @@ fn main() -> Result<(), SyphonError> {
     let dst_file = Box::new(File::create("./examples/samples/sine_converted.wav")?);
     let mut encoder = data
         .writer(dst_file)?
-        .into_default_stream()?
+        .into_default_track()?
         .into_encoder()?
         .unwrap_f32_signal()?;
 
-    let mut buf = [f32::MID; 1024];
+    let mut buf = [f32::ORIGIN; 1024];
     copy(&mut decoder, &mut encoder, &mut buf)
 }

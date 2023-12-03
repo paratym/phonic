@@ -1,34 +1,24 @@
-use crate::{
-    ChannelLayout, Channels, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
-};
-use std::{
-    io::{self, Seek, SeekFrom},
-    marker::PhantomData,
-};
+use crate::{Channels, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use std::io::{self, Seek, SeekFrom};
 
-pub struct ChannelsAdapter<T: Signal, S: Sample> {
+pub struct ChannelsAdapter<T: Signal<S>, S: Sample> {
     signal: T,
-    spec: SignalSpec,
-    _sample_type: PhantomData<S>,
+    spec: SignalSpec<S>,
 }
 
-impl<T: Signal, S: Sample> ChannelsAdapter<T, S> {
-    pub fn from_signal(signal: T, channels: Channels) -> Self {
+impl<T: Signal<S>, S: Sample> ChannelsAdapter<T, S> {
+    pub fn new(signal: T, channels: Channels) -> Self {
         let spec = SignalSpec {
             channels,
             ..*signal.spec()
         };
 
-        Self {
-            signal,
-            spec,
-            _sample_type: PhantomData,
-        }
+        Self { signal, spec }
     }
 }
 
-impl<T: Signal, S: Sample> Signal for ChannelsAdapter<T, S> {
-    fn spec(&self) -> &SignalSpec {
+impl<T: Signal<S>, S: Sample> Signal<S> for ChannelsAdapter<T, S> {
+    fn spec(&self) -> &SignalSpec<S> {
         &self.spec
     }
 }
@@ -45,7 +35,7 @@ impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for ChannelsAdapter<T, S> {
     }
 }
 
-impl<T: Signal + Seek, S: Sample> Seek for ChannelsAdapter<T, S> {
+impl<T: Signal<S> + Seek, S: Sample> Seek for ChannelsAdapter<T, S> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
         todo!()
     }

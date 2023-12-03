@@ -1,8 +1,8 @@
 use crate::{
     dsp::adapters::SampleTypeAdapter,
     io::{utils::Track, SyphonCodec, SyphonFormat},
-    FromKnownSample, IntoKnownSample, Signal, SignalReader, SignalSpec, SignalSpecBuilder,
-    SignalWriter, SyphonError,
+    FromKnownSample, IntoKnownSample, SampleType, SignalReader, SignalSpec, SignalSpecBuilder,
+    SignalWriter, SyphonError, Sample
 };
 use std::io::{Read, Write};
 
@@ -95,7 +95,7 @@ pub trait Format {
             .ok_or(SyphonError::NotFound)
     }
 
-    fn into_track_stream(self, i: usize) -> Result<Track<Self>, SyphonError>
+    fn into_track(self, i: usize) -> Result<Track<Self>, SyphonError>
     where
         Self: Sized,
     {
@@ -108,11 +108,11 @@ pub trait Format {
         Ok(Track::new(self, i, spec))
     }
 
-    fn into_default_stream(self) -> Result<Track<Self>, SyphonError>
+    fn into_default_track(self) -> Result<Track<Self>, SyphonError>
     where
         Self: Sized,
     {
-        self.default_track().and_then(|i| self.into_track_stream(i))
+        self.default_track().and_then(|i| self.into_track(i))
     }
 }
 
@@ -164,15 +164,15 @@ impl FormatWriter for Box<dyn FormatWriter> {
 #[derive(Clone, Copy)]
 pub struct StreamSpec {
     pub codec: SyphonCodec,
-    pub decoded_spec: SignalSpec,
+    pub decoded_spec: SignalSpec<SampleType>,
     pub block_size: usize,
     pub byte_len: Option<u64>,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct StreamSpecBuilder {
     pub codec: Option<SyphonCodec>,
-    pub decoded_spec: SignalSpecBuilder,
+    pub decoded_spec: SignalSpecBuilder<SampleType>,
     pub block_size: Option<usize>,
     pub byte_len: Option<u64>,
 }
@@ -211,7 +211,12 @@ impl TryFrom<StreamSpecBuilder> for StreamSpec {
 
 impl StreamSpecBuilder {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            codec: None,
+            decoded_spec: SignalSpecBuilder::new(),
+            block_size: None,
+            byte_len: None,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -232,7 +237,7 @@ impl StreamSpecBuilder {
         self
     }
 
-    pub fn decoded_spec(mut self, decoded_spec: SignalSpecBuilder) -> Self {
+    pub fn decoded_spec(mut self, decoded_spec: SignalSpecBuilder<SampleType>) -> Self {
         self.decoded_spec = decoded_spec;
         self
     }
@@ -413,7 +418,7 @@ macro_rules! match_signal_ref {
     };
 }
 
-macro_rules! impl_try_into_inner {
+macro_rules! impl_unwrap {
     ($self:ident, $inner:ident, $name:ident, $sample:ty, $variant:ident) => {
         pub fn $name(self) -> Result<Box<dyn $inner<$sample>>, SyphonError> {
             use $self::*;
@@ -426,13 +431,19 @@ macro_rules! impl_try_into_inner {
     };
 }
 
+macro_rules! impl_from_inner {
+    ($self: ident, $inner: ident, $sample:ty, $variant:ident) => {
+        impl From<Box<dyn $inner<$sample>>> for $self {
+            fn from(signal: Box<dyn $inner<$sample>>) -> Self {
+                Self::$variant(signal)
+            }
+        }
+    };
+}
+
 macro_rules! impl_signal_ref {
     ($self:ident, $inner:ident) => {
         impl $self {
-            pub fn spec(&self) -> &SignalSpec {
-                match_signal_ref!(self, Self, signal, signal.spec())
-            }
-
             pub fn adapt_sample_type<O: FromKnownSample + IntoKnownSample + 'static>(
                 self,
             ) -> Box<dyn $inner<O>> {
@@ -440,23 +451,36 @@ macro_rules! impl_signal_ref {
                     self,
                     Self,
                     signal,
-                    Box::new(SampleTypeAdapter::from_signal(signal))
+                    Box::new(SampleTypeAdapter::new(signal))
                 )
             }
 
-            impl_try_into_inner!($self, $inner, unwrap_i8_signal, i8, I8);
-            impl_try_into_inner!($self, $inner, unwrap_i16_signal, i16, I16);
-            impl_try_into_inner!($self, $inner, unwrap_i32_signal, i32, I32);
-            impl_try_into_inner!($self, $inner, unwrap_i64_signal, i64, I64);
+            impl_unwrap!($self, $inner, unwrap_i8_signal, i8, I8);
+            impl_unwrap!($self, $inner, unwrap_i16_signal, i16, I16);
+            impl_unwrap!($self, $inner, unwrap_i32_signal, i32, I32);
+            impl_unwrap!($self, $inner, unwrap_i64_signal, i64, I64);
 
-            impl_try_into_inner!($self, $inner, unwrap_u8_signal, u8, U8);
-            impl_try_into_inner!($self, $inner, unwrap_u16_signal, u16, U16);
-            impl_try_into_inner!($self, $inner, unwrap_u32_signal, u32, U32);
-            impl_try_into_inner!($self, $inner, unwrap_u64_signal, u64, U64);
+            impl_unwrap!($self, $inner, unwrap_u8_signal, u8, U8);
+            impl_unwrap!($self, $inner, unwrap_u16_signal, u16, U16);
+            impl_unwrap!($self, $inner, unwrap_u32_signal, u32, U32);
+            impl_unwrap!($self, $inner, unwrap_u64_signal, u64, U64);
 
-            impl_try_into_inner!($self, $inner, unwrap_f32_signal, f32, F32);
-            impl_try_into_inner!($self, $inner, unwrap_f64_signal, f64, F64);
+            impl_unwrap!($self, $inner, unwrap_f32_signal, f32, F32);
+            impl_unwrap!($self, $inner, unwrap_f64_signal, f64, F64);
         }
+
+        impl_from_inner!($self, $inner, i8, I8);
+        impl_from_inner!($self, $inner, i16, I16);
+        impl_from_inner!($self, $inner, i32, I32);
+        impl_from_inner!($self, $inner, i64, I64);
+
+        impl_from_inner!($self, $inner, u8, U8);
+        impl_from_inner!($self, $inner, u16, U16);
+        impl_from_inner!($self, $inner, u32, U32);
+        impl_from_inner!($self, $inner, u64, U64);
+
+        impl_from_inner!($self, $inner, f32, F32);
+        impl_from_inner!($self, $inner, f64, F64);
     };
 }
 

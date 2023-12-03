@@ -1,14 +1,14 @@
 use crate::{FromSample, IntoSample, Sample, Signal, SignalReader, SignalSpec, SyphonError};
 use std::f32::consts::PI;
 
-pub struct Sine {
-    spec: SignalSpec,
+pub struct Sine<S: Sample> {
+    spec: SignalSpec<S>,
     frequency: f32,
     i: u64,
 }
 
-impl Sine {
-    pub fn new(spec: SignalSpec, frequency: f32) -> Self {
+impl<S: Sample> Sine<S> {
+    pub fn new(spec: SignalSpec<S>, frequency: f32) -> Self {
         Self {
             spec,
             frequency,
@@ -17,18 +17,14 @@ impl Sine {
     }
 }
 
-impl Signal for Sine {
-    fn spec(&self) -> &SignalSpec {
+impl<S: Sample> Signal<S> for Sine<S> {
+    fn spec(&self) -> &SignalSpec<S> {
         &self.spec
     }
 }
 
-impl<S: Sample + FromSample<f32>> SignalReader<S> for Sine {
+impl<S: Sample + FromSample<f32>> SignalReader<S> for Sine<S> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        if S::FORMAT != self.spec.sample_format {
-            return Err(SyphonError::SignalMismatch);
-        }
-
         let mut buf_len = buffer.len();
         if let Some(n) = self.spec.n_samples() {
             let sample_index = self.i * self.spec.channels.count() as u64;
@@ -41,7 +37,7 @@ impl<S: Sample + FromSample<f32>> SignalReader<S> for Sine {
         let n_frames = frames.len();
 
         for frame in &mut frames {
-            let t = self.i as f32 / self.spec.sample_rate as f32;
+            let t = self.i as f32 / self.spec.frame_rate as f32;
             frame.fill((t * self.frequency * 2.0 * PI).sin().into_sample());
 
             self.i += 1;

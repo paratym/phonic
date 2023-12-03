@@ -1,5 +1,5 @@
-use crate::{Sample, SampleFormat, SyphonError};
-use std::ops::{BitAnd, BitOr, BitXor};
+use crate::{dsp::adapters::{SampleTypeAdapter, FrameRateAdapter, ChannelsAdapter, BlockSizeAdapter, NBlocksAdapter, SignalChain}, Sample, SampleType, SyphonError};
+use std::{ops::{BitAnd, BitOr, BitXor}, time::Duration};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
@@ -13,12 +13,12 @@ pub struct ChannelLayout {
 }
 
 /// A set of parameters that describes a pcm signal
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct SignalSpec {
-    pub sample_format: SampleFormat,
+#[derive(Copy, Clone)]
+pub struct SignalSpec<S> {
+    pub sample_type: S,
 
-    /// The sample rate in hertz
-    pub sample_rate: u32,
+    /// The number of samples per channel per second.
+    pub frame_rate: u32,
 
     /// The layout of the channels in the signal.
     pub channels: Channels,
@@ -31,10 +31,10 @@ pub struct SignalSpec {
     pub n_blocks: Option<u64>,
 }
 
-#[derive(Default, Clone, Copy)]
-pub struct SignalSpecBuilder {
-    pub sample_format: Option<SampleFormat>,
-    pub sample_rate: Option<u32>,
+#[derive(Clone, Copy)]
+pub struct SignalSpecBuilder<S> {
+    pub sample_type: Option<S>,
+    pub frame_rate: Option<u32>,
     pub channels: Option<Channels>,
     pub block_size: Option<usize>,
     pub n_blocks: Option<u64>,
@@ -140,9 +140,23 @@ impl BitXor for ChannelLayout {
     }
 }
 
-impl SignalSpec {
-    pub fn builder() -> SignalSpecBuilder {
+impl<S> SignalSpec<S> {
+    pub fn builder() -> SignalSpecBuilder<S> {
         SignalSpecBuilder::new()
+    }
+
+    fn cast_sample_type<T>(self, sample_type: T) -> SignalSpec<T> {
+        SignalSpec {
+            sample_type,
+            channels: self.channels,
+            frame_rate: self.frame_rate,
+            block_size: self.block_size,
+            n_blocks: self.n_blocks,
+        }
+    }
+
+    pub fn block_rate(&self) -> u32 {
+        self.frame_rate / self.block_size as u32
     }
 
     pub fn samples_per_block(&self) -> usize {
@@ -158,29 +172,77 @@ impl SignalSpec {
     }
 }
 
-impl TryFrom<SignalSpecBuilder> for SignalSpec {
-    type Error = SyphonError;
-
-    fn try_from(builder: SignalSpecBuilder) -> Result<Self, Self::Error> {
-        let spec = Self {
-            sample_format: builder.sample_format.ok_or(SyphonError::InvalidData)?,
-            channels: builder.channels.ok_or(SyphonError::InvalidData)?,
-            sample_rate: builder.sample_rate.ok_or(SyphonError::InvalidData)?,
-            block_size: builder.block_size.unwrap_or(1),
-            n_blocks: builder.n_blocks,
-        };
-
-        if spec.channels.count() == 0 || spec.sample_rate == 0 || spec.block_size == 0 {
-            return Err(SyphonError::InvalidData);
+macro_rules! impl_signal_spec {
+    ($sample:ty, $dyn_sample:ident) => {
+        impl From<SignalSpec<$sample>> for SignalSpec<SampleType> {
+            fn from(spec: SignalSpec<$sample>) -> Self {
+                Self {
+                    sample_type: SampleType::$dyn_sample,
+                    channels: spec.channels,
+                    frame_rate: spec.frame_rate,
+                    block_size: spec.block_size,
+                    n_blocks: spec.n_blocks,
+                }
+            }
         }
 
-        Ok(spec)
+        
+    };
+}
+
+// impl<S: Sample> SignalSpec<S> {
+//     pub fn to_dyn_sample(self) -> SignalSpec<SampleType> {
+//         self.cast_sample_type(S::TYPE)
+//     }
+// }
+
+// impl SignalSpec<SampleType> {
+//     pub fn unwrap_sample_type<S: Sample>(self) -> Result<SignalSpec<S>, SyphonError> {
+//         if self.sample_type != S::TYPE {
+//             return Err(SyphonError::SignalMismatch);
+//         }
+
+//         Ok(self.cast_sample_type(S::ORIGIN))
+//     }
+// }
+
+impl<S: Sample> TryFrom<SignalSpecBuilder<S>> for SignalSpec<S> {
+    type Error = SyphonError;
+
+    fn try_from(builder: SignalSpecBuilder<S>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            sample_type: S::ORIGIN,
+            channels: builder.channels.ok_or(SyphonError::InvalidData)?,
+            frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
+            block_size: builder.block_size.unwrap_or(1),
+            n_blocks: builder.n_blocks,
+        })
     }
 }
 
-impl SignalSpecBuilder {
+impl TryFrom<SignalSpecBuilder<SampleType>> for SignalSpec<SampleType> {
+    type Error = SyphonError;
+
+    fn try_from(builder: SignalSpecBuilder<SampleType>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            sample_type: builder.sample_type.ok_or(SyphonError::InvalidData)?,
+            channels: builder.channels.ok_or(SyphonError::InvalidData)?,
+            frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
+            block_size: builder.block_size.unwrap_or(1),
+            n_blocks: builder.n_blocks,
+        })
+    }
+}
+
+impl<S> SignalSpecBuilder<S> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            sample_type: None,
+            frame_rate: None,
+            channels: None,
+            block_size: None,
+            n_blocks: None,
+        }
     }
 
     pub fn samples_per_block(&self) -> Option<usize> {
@@ -202,30 +264,20 @@ impl SignalSpecBuilder {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sample_format.is_none()
+        self.sample_type.is_none()
             && self.channels.is_none()
-            && self.sample_rate.is_none()
+            && self.frame_rate.is_none()
             && self.block_size.is_none()
             && self.n_blocks.is_none()
     }
 
-    pub fn sample_format(mut self, sample_format: SampleFormat) -> Self {
-        self.sample_format = Some(sample_format);
-        self
-    }
-
-    pub fn sample<S: Sample>(mut self) -> Self {
-        self.sample_format = Some(S::FORMAT);
-        self
-    }
-
-    pub fn sample_rate(mut self, sample_rate: u32) -> Self {
-        self.sample_rate = Some(sample_rate);
+    pub fn frame_rate(mut self, frame_rate: u32) -> Self {
+        self.frame_rate = Some(frame_rate);
         self
     }
 
     pub fn hz(mut self, hz: u32) -> Self {
-        self.sample_rate = Some(hz);
+        self.frame_rate = Some(hz);
         self
     }
 
@@ -244,6 +296,16 @@ impl SignalSpecBuilder {
         self
     }
 
+    pub fn mono(mut self) -> Self {
+        self.channels = Some(ChannelLayout::MONO.into());
+        self
+    }
+
+    pub fn stereo(mut self) -> Self {
+        self.channels = Some(ChannelLayout::STEREO.into());
+        self
+    }
+
     pub fn block_size(mut self, block_size: usize) -> Self {
         self.block_size = Some(block_size);
         self
@@ -254,16 +316,31 @@ impl SignalSpecBuilder {
         self
     }
 
-    pub fn build(self) -> Result<SignalSpec, SyphonError> {
+    pub fn build(self) -> Result<SignalSpec<S>, SyphonError>
+    where
+        Self: TryInto<SignalSpec<S>, Error = SyphonError>,
+    {
         self.try_into()
     }
 }
 
-impl From<SignalSpec> for SignalSpecBuilder {
-    fn from(spec: SignalSpec) -> Self {
+impl SignalSpecBuilder<SampleType> {
+    pub fn sample_type(mut self, sample_type: SampleType) -> Self {
+        self.sample_type = Some(sample_type);
+        self
+    }
+
+    pub fn const_sample_type<S: Sample>(mut self) -> Self {
+        self.sample_type = Some(S::TYPE);
+        self
+    }
+}
+
+impl<S> From<SignalSpec<S>> for SignalSpecBuilder<S> {
+    fn from(spec: SignalSpec<S>) -> Self {
         Self {
-            sample_format: Some(spec.sample_format),
-            sample_rate: Some(spec.sample_rate),
+            sample_type: Some(spec.sample_type),
+            frame_rate: Some(spec.frame_rate),
             channels: Some(spec.channels),
             block_size: Some(spec.block_size),
             n_blocks: spec.n_blocks,
@@ -271,11 +348,79 @@ impl From<SignalSpec> for SignalSpecBuilder {
     }
 }
 
-pub trait Signal {
-    fn spec(&self) -> &SignalSpec;
+impl<S: Sample> From<SignalSpec<S>> for SignalSpecBuilder<SampleType> {
+    fn from(spec: SignalSpec<S>) -> Self {
+        Self {
+            sample_type: Some(S::TYPE),
+            frame_rate: Some(spec.frame_rate),
+            channels: Some(spec.channels),
+            block_size: Some(spec.block_size),
+            n_blocks: spec.n_blocks,
+        }
+    }
 }
 
-pub trait SignalReader<S: Sample>: Signal {
+pub trait Signal<S: Sample> {
+    fn spec(&self) -> &SignalSpec<S>;
+
+    fn adapt_sample_type<O: Sample>(self) -> SampleTypeAdapter<Self, S, O>
+    where
+        Self: Sized,
+    {
+        SampleTypeAdapter::new(self)
+    }
+
+    fn adapt_frame_rate(self, frame: u32) -> FrameRateAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        FrameRateAdapter::new(self, frame)
+    }
+
+    fn adapt_channels(self, channels: Channels) -> ChannelsAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        ChannelsAdapter::new(self, channels)
+    }
+
+    fn adapt_block_size(self, block_size: usize) -> BlockSizeAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        BlockSizeAdapter::new(self, block_size)
+    }
+
+    fn adapt_n_blocks(self, n_blocks: u64) -> NBlocksAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        NBlocksAdapter::new(self, n_blocks)
+    }
+
+    fn adapt_seconds(self, seconds: f64) -> NBlocksAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        NBlocksAdapter::from_seconds(self, seconds)
+    }
+
+    fn adapt_duration(self, duration: Duration) -> NBlocksAdapter<Self, S>
+    where
+        Self: Sized,
+    {
+        NBlocksAdapter::from_duration(self, duration)
+    }
+
+    fn chain<T: Signal<S>>(self, other: T) -> SignalChain<Self, T, S>
+    where
+        Self: Sized,
+    {
+        SignalChain::new(self, other)
+    }
+}
+
+pub trait SignalReader<S: Sample>: Signal<S> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 
     fn read_exact(&mut self, buffer: &mut [S]) -> Result<(), SyphonError> {
@@ -302,7 +447,7 @@ pub trait SignalReader<S: Sample>: Signal {
     }
 }
 
-pub trait SignalWriter<S: Sample>: Signal {
+pub trait SignalWriter<S: Sample>: Signal<S> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
 
     fn write_exact(&mut self, buffer: &[S]) -> Result<(), SyphonError> {
@@ -330,8 +475,8 @@ pub trait SignalWriter<S: Sample>: Signal {
     }
 }
 
-impl<S: Sample> Signal for Box<dyn SignalReader<S>> {
-    fn spec(&self) -> &SignalSpec {
+impl<S: Sample> Signal<S> for Box<dyn SignalReader<S>> {
+    fn spec(&self) -> &SignalSpec<S> {
         self.as_ref().spec()
     }
 }
@@ -342,8 +487,8 @@ impl<S: Sample> SignalReader<S> for Box<dyn SignalReader<S>> {
     }
 }
 
-impl<S: Sample> Signal for Box<dyn SignalWriter<S>> {
-    fn spec(&self) -> &SignalSpec {
+impl<S: Sample> Signal<S> for Box<dyn SignalWriter<S>> {
+    fn spec(&self) -> &SignalSpec<S> {
         self.as_ref().spec()
     }
 }

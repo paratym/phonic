@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, time::Duration};
 use syphon::{
     dsp::generators::Sine,
     io::{utils::copy, Format, FormatData, StreamSpec, StreamWriter, SyphonFormat},
@@ -6,14 +6,8 @@ use syphon::{
 };
 
 fn main() -> Result<(), SyphonError> {
-    let spec = SignalSpec::builder()
-        .sample::<f32>()
-        // .stereo()
-        .hz(44100)
-        .n_blocks(88200)
-        .build()?;
-
-    let mut sine = Sine::new(spec, 440.0);
+    let spec = SignalSpec::<f32>::builder().stereo().hz(44100).build()?;
+    let mut sine = Sine::new(spec, 440.0).adapt_seconds(2.0);
 
     let file = Box::new(File::create("./examples/samples/sine.wav")?);
     let format_writer = FormatData::builder()
@@ -23,10 +17,10 @@ fn main() -> Result<(), SyphonError> {
         .writer(file)?;
 
     let mut encoder = format_writer
-        .into_track_stream(0)?
+        .into_track(0)?
         .into_encoder()?
         .unwrap_f32_signal()?;
 
-    let mut buf = [f32::MID; 1024];
+    let mut buf = [f32::ORIGIN; 1024];
     copy(&mut sine, &mut encoder, &mut buf)
 }

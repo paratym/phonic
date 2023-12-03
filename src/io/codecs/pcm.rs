@@ -1,19 +1,19 @@
 use crate::{
-    io::{SignalReaderRef, SignalWriterRef, Stream, StreamReader, StreamSpecBuilder, StreamWriter},
-    Sample, SampleFormat, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
+    io::{SignalReaderRef, Stream, StreamReader, StreamSpecBuilder, StreamWriter, SignalWriterRef},
+    Sample, SampleType, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
 };
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
 
-pub struct PcmCodec<T> {
+pub struct PcmCodec<T, S: Sample> {
     inner: T,
-    spec: SignalSpec,
+    spec: SignalSpec<S>,
 }
 
 pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     if spec.decoded_spec.block_size.is_none() {
         spec.decoded_spec.block_size = spec
             .block_size
-            .zip(spec.decoded_spec.sample_format)
+            .zip(spec.decoded_spec.sample_type)
             .zip(spec.decoded_spec.channels)
             .map(|((b, s), c)| b / s.byte_size() / c.count() as usize)
             .or(Some(1));
@@ -22,11 +22,11 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     let bytes_per_decoded_block = spec
         .decoded_spec
         .samples_per_block()
-        .zip(spec.decoded_spec.sample_format)
+        .zip(spec.decoded_spec.sample_type)
         .map(|(n, s)| n * s.byte_size());
 
     if bytes_per_decoded_block
-        .zip(spec.decoded_spec.sample_format)
+        .zip(spec.decoded_spec.sample_type)
         .map_or(false, |(b, s)| b % s.byte_size() != 0)
     {
         return Err(SyphonError::Unsupported);
@@ -56,40 +56,98 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     Ok(())
 }
 
-impl<T> PcmCodec<T> {
-    pub fn from_stream(inner: T) -> Result<Self, SyphonError>
-    where
-        T: Stream,
-    {
-        let mut spec = inner.spec().clone().into();
-        fill_pcm_spec(&mut spec)?;
-
-        Ok(Self {
-            inner,
-            spec: spec.decoded_spec.build()?,
+macro_rules! construct_pcm_signal_ref {
+    ($ref:ident, $ref_inner:ident, $inner:ident, $spec:ident) => {
+        Ok(match $spec.sample_type {
+            SampleType::I8 => {
+                (Box::new(PcmCodec::<_, i8>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::I16 => {
+                (Box::new(PcmCodec::<_, i16>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::I32 => {
+                (Box::new(PcmCodec::<_, i32>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::I64 => {
+                (Box::new(PcmCodec::<_, i64>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::U8 => {
+                (Box::new(PcmCodec::<_, u8>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::U16 => {
+                (Box::new(PcmCodec::<_, u16>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::U32 => {
+                (Box::new(PcmCodec::<_, u32>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::U64 => {
+                (Box::new(PcmCodec::<_, u64>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::F32 => {
+                (Box::new(PcmCodec::<_, f32>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
+            SampleType::F64 => {
+                (Box::new(PcmCodec::<_, f64>::new($inner, $spec.unwrap_sample_type()?))
+                    as Box<dyn $ref_inner<_>>)
+                    .into()
+            }
         })
+    };
+}
+
+pub fn construct_pcm_signal_reader_ref<T: StreamReader + 'static>(
+    inner: T,
+    spec: SignalSpec<SampleType>,
+) -> Result<SignalReaderRef, SyphonError> {
+    construct_pcm_signal_ref!(SignalReaderRef, SignalReader, inner, spec)
+}
+
+pub fn construct_pcm_signal_writer_ref<T: StreamWriter + 'static>(
+    inner: T,
+    spec: SignalSpec<SampleType>,
+) -> Result<SignalWriterRef, SyphonError> {
+    construct_pcm_signal_ref!(SignalWriterRef, SignalWriter, inner, spec)
+}
+
+impl<T, S: Sample> PcmCodec<T, S> {
+    pub fn new(inner: T, spec: SignalSpec<S>) -> Self {
+        Self { inner, spec }
     }
 }
 
-impl<T> Signal for PcmCodec<T> {
-    fn spec(&self) -> &SignalSpec {
+impl<T, S: Sample> Signal<S> for PcmCodec<T, S> {
+    fn spec(&self) -> &SignalSpec<S> {
         &self.spec
     }
 }
 
-impl<T: StreamReader, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T> {
+impl<T: StreamReader, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T, S> {
     fn read(&mut self, buf: &mut [S]) -> Result<usize, SyphonError> {
-        if S::FORMAT != self.spec.sample_format {
-            return Err(SyphonError::InvalidData);
-        }
-
         let mut buf_len = buf.len();
         buf_len -= buf_len % self.spec.samples_per_block();
 
         let buf = buf[..buf_len].as_mut_byte_slice();
-
         let n_bytes = self.inner.read(buf)? * self.inner.spec().block_size;
-        let bytes_per_block = self.spec.samples_per_block() * S::FORMAT.byte_size();
+        let bytes_per_sample = buf.len() / buf_len;
+        let bytes_per_block = self.spec.samples_per_block() * bytes_per_sample;
 
         if n_bytes % bytes_per_block != 0 {
             todo!()
@@ -99,62 +157,20 @@ impl<T: StreamReader, S: Sample + ToMutByteSlice> SignalReader<S> for PcmCodec<T
     }
 }
 
-impl<T: StreamWriter, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T> {
+impl<T: StreamWriter, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T, S> {
     fn write(&mut self, buf: &[S]) -> Result<usize, SyphonError> {
-        if S::FORMAT != self.spec.sample_format {
-            return Err(SyphonError::InvalidData);
-        }
-
         let mut buf_len = buf.len();
         buf_len -= buf_len % self.spec.samples_per_block();
 
         let buf = buf[..buf_len].as_byte_slice();
-
         let n_bytes = self.inner.write(buf)? * self.inner.spec().block_size;
-        let bytes_per_block = self.spec.samples_per_block() * S::FORMAT.byte_size();
+        let bytes_per_sample = buf.len() / buf_len;
+        let bytes_per_block = self.spec.samples_per_block() * bytes_per_sample;
 
         if n_bytes % bytes_per_block != 0 {
             todo!()
         }
 
         Ok(n_bytes / bytes_per_block)
-    }
-}
-
-impl<T: StreamReader + 'static> From<PcmCodec<T>> for SignalReaderRef {
-    fn from(decoder: PcmCodec<T>) -> Self {
-        match decoder.spec.sample_format {
-            SampleFormat::U8 => Self::U8(Box::new(decoder)),
-            SampleFormat::U16 => Self::U16(Box::new(decoder)),
-            SampleFormat::U32 => Self::U32(Box::new(decoder)),
-            SampleFormat::U64 => Self::U64(Box::new(decoder)),
-
-            SampleFormat::I8 => Self::I8(Box::new(decoder)),
-            SampleFormat::I16 => Self::I16(Box::new(decoder)),
-            SampleFormat::I32 => Self::I32(Box::new(decoder)),
-            SampleFormat::I64 => Self::I64(Box::new(decoder)),
-
-            SampleFormat::F32 => Self::F32(Box::new(decoder)),
-            SampleFormat::F64 => Self::F64(Box::new(decoder)),
-        }
-    }
-}
-
-impl<T: StreamWriter + 'static> From<PcmCodec<T>> for SignalWriterRef {
-    fn from(encoder: PcmCodec<T>) -> Self {
-        match encoder.spec.sample_format {
-            SampleFormat::U8 => Self::U8(Box::new(encoder)),
-            SampleFormat::U16 => Self::U16(Box::new(encoder)),
-            SampleFormat::U32 => Self::U32(Box::new(encoder)),
-            SampleFormat::U64 => Self::U64(Box::new(encoder)),
-
-            SampleFormat::I8 => Self::I8(Box::new(encoder)),
-            SampleFormat::I16 => Self::I16(Box::new(encoder)),
-            SampleFormat::I32 => Self::I32(Box::new(encoder)),
-            SampleFormat::I64 => Self::I64(Box::new(encoder)),
-
-            SampleFormat::F32 => Self::F32(Box::new(encoder)),
-            SampleFormat::F64 => Self::F64(Box::new(encoder)),
-        }
     }
 }

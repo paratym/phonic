@@ -1,36 +1,35 @@
 use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::{
-    io::{self, Seek, SeekFrom},
-    marker::PhantomData,
-};
+use std::io::{self, Seek, SeekFrom};
 
-pub struct SampleTypeAdapter<T: Signal, S: Sample, O: Sample> {
+pub struct SampleTypeAdapter<T: Signal<S>, S: Sample, O: Sample> {
     signal: T,
     buffer: Box<[S]>,
-    spec: SignalSpec,
-    _sample_type: PhantomData<O>,
+    spec: SignalSpec<O>,
 }
 
-impl<T: Signal, S: Sample, O: Sample> SampleTypeAdapter<T, S, O> {
-    pub fn from_signal(signal: T) -> Self {
+impl<T: Signal<S>, S: Sample, O: Sample> SampleTypeAdapter<T, S, O> {
+    pub fn new(signal: T) -> Self {
+        let inner_spec = signal.spec();
         let spec = SignalSpec {
-            sample_format: O::FORMAT,
-            ..*signal.spec()
+            sample_type: O::ORIGIN,
+            frame_rate: inner_spec.frame_rate,
+            channels: inner_spec.channels,
+            block_size: inner_spec.block_size,
+            n_blocks: inner_spec.n_blocks,
         };
 
-        let buffer = vec![S::MID; spec.samples_per_block()].into_boxed_slice();
+        let buffer = vec![S::ORIGIN; spec.samples_per_block()].into_boxed_slice();
 
         Self {
             signal,
             buffer,
             spec,
-            _sample_type: PhantomData,
         }
     }
 }
 
-impl<T: Signal, S: Sample, O: Sample> Signal for SampleTypeAdapter<T, S, O> {
-    fn spec(&self) -> &SignalSpec {
+impl<T: Signal<S>, S: Sample, O: Sample> Signal<O> for SampleTypeAdapter<T, S, O> {
+    fn spec(&self) -> &SignalSpec<O> {
         &self.spec
     }
 }
@@ -71,7 +70,7 @@ where
     }
 }
 
-impl<T: Signal + Seek, S: Sample, O: Sample> Seek for SampleTypeAdapter<T, S, O> {
+impl<T: Signal<S> + Seek, S: Sample, O: Sample> Seek for SampleTypeAdapter<T, S, O> {
     fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
         self.signal.seek(offset)
     }

@@ -7,9 +7,10 @@ pub fn copy<S: Sample>(
 ) -> Result<(), SyphonError> {
     let spec = reader.spec();
     let samples_per_block = spec.samples_per_block();
-    if spec.sample_format != S::FORMAT || spec != writer.spec() {
-        return Err(SyphonError::SignalMismatch);
-    }
+    // TODO: determine spec compatibility
+    // if spec != writer.spec() {
+    //     return Err(SyphonError::SignalMismatch);
+    // }
 
     let mut n;
     loop {

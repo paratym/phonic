@@ -4,7 +4,7 @@ use crate::{
         Format, FormatData, FormatDataBuilder, FormatReadResult, FormatReader, FormatWriter,
         Stream, StreamSpec, SyphonCodec,
     },
-    SampleFormat, SyphonError,
+    SampleType, SyphonError,
 };
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -22,12 +22,12 @@ pub fn fill_wave_data(data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
     let track = data.tracks.first_mut().unwrap();
 
     if track.codec.is_none() {
-        track.codec = match track.decoded_spec.sample_format {
-            Some(SampleFormat::U8)
-            | Some(SampleFormat::I16)
-            | Some(SampleFormat::I32)
-            | Some(SampleFormat::F32)
-            | Some(SampleFormat::F64) => Some(SyphonCodec::Pcm),
+        track.codec = match track.decoded_spec.sample_type {
+            Some(SampleType::U8)
+            | Some(SampleType::I16)
+            | Some(SampleType::I32)
+            | Some(SampleType::F32)
+            | Some(SampleType::F64) => Some(SyphonCodec::Pcm),
             Some(_) => return Err(SyphonError::Unsupported),
             None => None,
         }

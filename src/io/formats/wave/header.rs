@@ -5,7 +5,7 @@ use crate::{
         codecs, FormatData, FormatDataBuilder, StreamSpec, StreamSpecBuilder, SyphonCodec,
         SyphonFormat,
     },
-    ChannelLayout, Channels, SampleFormat, SignalSpecBuilder, SyphonError,
+    ChannelLayout, Channels, SampleType, SignalSpecBuilder, SyphonError,
 };
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
@@ -143,12 +143,12 @@ impl From<WaveHeader> for FormatDataBuilder {
             _ => None,
         };
 
-        let sample_format = match (header.fmt.format_tag, header.fmt.bits_per_sample) {
-            (1, 8) => Some(SampleFormat::U8),
-            (1, 16) => Some(SampleFormat::I16),
-            (1, 32) => Some(SampleFormat::I32),
-            (3, 32) => Some(SampleFormat::F32),
-            (3, 64) => Some(SampleFormat::F64),
+        let sample_type = match (header.fmt.format_tag, header.fmt.bits_per_sample) {
+            (1, 8) => Some(SampleType::U8),
+            (1, 16) => Some(SampleType::I16),
+            (1, 32) => Some(SampleType::I32),
+            (3, 32) => Some(SampleType::F32),
+            (3, 64) => Some(SampleType::F64),
             _ => None,
         };
 
@@ -159,14 +159,14 @@ impl From<WaveHeader> for FormatDataBuilder {
                 block_size: Some(header.fmt.block_align as usize),
                 byte_len: Some(header.data.byte_len as u64),
                 decoded_spec: SignalSpecBuilder {
-                    sample_format,
+                    sample_type,
                     channels: header
                         .fmt
                         .ext
                         .and_then(|ext| Some(ChannelLayout::from_bits(ext.channel_mask).into()))
                         .or_else(|| Some(Channels::Count(header.fmt.n_channels as u32))),
                     n_blocks: header.fact.map(|fact| fact.n_frames as u64),
-                    sample_rate: Some(header.fmt.sample_rate),
+                    frame_rate: Some(header.fmt.sample_rate),
                     block_size: None,
                 },
             }],
@@ -183,13 +183,12 @@ impl TryFrom<FormatData> for WaveHeader {
         }
 
         let spec = &data.tracks[0];
-
-        let format_tag = match (spec.codec, spec.decoded_spec.sample_format) {
-            (SyphonCodec::Pcm, SampleFormat::U8) => 1,
-            (SyphonCodec::Pcm, SampleFormat::I16) => 1,
-            (SyphonCodec::Pcm, SampleFormat::I32) => 1,
-            (SyphonCodec::Pcm, SampleFormat::F32) => 3,
-            (SyphonCodec::Pcm, SampleFormat::F64) => 3,
+        let format_tag = match (spec.codec, spec.decoded_spec.sample_type) {
+            (SyphonCodec::Pcm, SampleType::U8) => 1,
+            (SyphonCodec::Pcm, SampleType::I16) => 1,
+            (SyphonCodec::Pcm, SampleType::I32) => 1,
+            (SyphonCodec::Pcm, SampleType::F32) => 3,
+            (SyphonCodec::Pcm, SampleType::F64) => 3,
             _ => return Err(SyphonError::Unsupported),
         };
 
@@ -197,11 +196,11 @@ impl TryFrom<FormatData> for WaveHeader {
             fmt: FmtChunk {
                 format_tag,
                 n_channels: spec.decoded_spec.channels.count() as u16,
-                sample_rate: spec.decoded_spec.sample_rate,
-                avg_byte_rate: spec.decoded_spec.sample_rate
-                    * spec.decoded_spec.sample_format.byte_size() as u32,
+                sample_rate: spec.decoded_spec.frame_rate,
+                avg_byte_rate: spec.decoded_spec.frame_rate
+                    * spec.decoded_spec.sample_type.byte_size() as u32,
                 block_align: spec.block_size as u16,
-                bits_per_sample: spec.decoded_spec.sample_format.byte_size() as u16 * 8,
+                bits_per_sample: spec.decoded_spec.sample_type.byte_size() as u16 * 8,
                 ext: None,
             },
             fact: spec.decoded_spec.n_frames().map(|n_frames| FactChunk {

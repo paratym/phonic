@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum SampleFormat {
+pub enum SampleType {
     I8,
     I16,
     // I24,
@@ -20,7 +20,26 @@ pub enum SampleFormat {
     F64,
 }
 
-impl SampleFormat {
+pub trait Sample: Copy + Sized {
+    // const TYPE: SampleType;
+    const ORIGIN: Self;
+    const RANGE: (Self, Self);
+
+    fn clamped(self) -> Self
+    where
+        Self: PartialOrd,
+    {
+        if self < Self::RANGE.0 {
+            Self::RANGE.0
+        } else if self > Self::RANGE.1 {
+            Self::RANGE.1
+        } else {
+            self
+        }
+    }
+}
+
+impl SampleType {
     pub fn byte_size(&self) -> usize {
         match self {
             Self::I8 => size_of::<i8>(),
@@ -39,44 +58,22 @@ impl SampleFormat {
     }
 }
 
-pub trait Sample: Copy + PartialOrd + PartialEq + Sized {
-    const FORMAT: SampleFormat;
-
-    const MIN: Self;
-    const MID: Self;
-    const MAX: Self;
-
-    fn clamped(self) -> Self {
-        if self < Self::MIN {
-            Self::MIN
-        } else if self > Self::MAX {
-            Self::MAX
-        } else {
-            self
-        }
-    }
-}
-
 macro_rules! impl_int_sample {
-    ($s:ty, $f: ident) => {
+    ($s:ty, $t: ident) => {
         impl Sample for $s {
-            const FORMAT: SampleFormat = SampleFormat::$f;
-
-            const MIN: Self = <$s>::MIN;
-            const MID: Self = 0;
-            const MAX: Self = <$s>::MAX;
+            // const TYPE: SampleType = SampleType::$t;
+            const ORIGIN: Self = 0;
+            const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
         }
     };
 }
 
 macro_rules! impl_uint_sample {
-    ($s:ty, $f:ident) => {
+    ($s:ty, $t:ident) => {
         impl Sample for $s {
-            const FORMAT: SampleFormat = SampleFormat::$f;
-
-            const MIN: Self = <$s>::MIN;
-            const MID: Self = Self::MAX / 2;
-            const MAX: Self = <$s>::MAX;
+            // const TYPE: SampleType = SampleType::$t;
+            const ORIGIN: Self = Self::MAX / 2;
+            const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
         }
     };
 }
@@ -84,11 +81,9 @@ macro_rules! impl_uint_sample {
 macro_rules! impl_float_sample {
     ($s:ty, $f:ident) => {
         impl Sample for $s {
-            const FORMAT: SampleFormat = SampleFormat::$f;
-
-            const MIN: Self = -1.0;
-            const MID: Self = 0.0;
-            const MAX: Self = 1.0;
+            // const TYPE: SampleType = SampleType::$f;
+            const ORIGIN: Self = 0.0;
+            const RANGE: (Self, Self) = (-1.0, 1.0);
         }
     };
 }

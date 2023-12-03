@@ -1,17 +1,17 @@
 use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 use std::io::{self, Seek, SeekFrom};
 
-pub struct BlockSizeAdapter<T: Signal, S: Sample> {
+pub struct BlockSizeAdapter<T: Signal<S>, S: Sample> {
     signal: T,
-    spec: SignalSpec,
+    spec: SignalSpec<S>,
     buffer: Box<[S]>,
     inner_block_size: usize,
     n_buffered: usize,
     n_read: usize,
 }
 
-impl<T: Signal, S: Sample> BlockSizeAdapter<T, S> {
-    pub fn from_signal(signal: T, block_size: usize) -> Self {
+impl<T: Signal<S>, S: Sample> BlockSizeAdapter<T, S> {
+    pub fn new(signal: T, block_size: usize) -> Self {
         let mut spec = *signal.spec();
         let inner_block_size = spec.block_size;
         spec.block_size = block_size;
@@ -20,8 +20,8 @@ impl<T: Signal, S: Sample> BlockSizeAdapter<T, S> {
     }
 }
 
-impl<T: Signal, S: Sample> Signal for BlockSizeAdapter<T, S> {
-    fn spec(&self) -> &SignalSpec {
+impl<T: Signal<S>, S: Sample> Signal<S> for BlockSizeAdapter<T, S> {
+    fn spec(&self) -> &SignalSpec<S> {
         &self.spec
     }
 }
@@ -38,7 +38,7 @@ impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for BlockSizeAdapter<T, S> {
     }
 }
 
-impl<T: Signal + Seek, S: Sample> Seek for BlockSizeAdapter<T, S> {
+impl<T: Signal<S> + Seek, S: Sample> Seek for BlockSizeAdapter<T, S> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
         todo!()
     }
