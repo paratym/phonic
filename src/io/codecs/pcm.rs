@@ -13,7 +13,7 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     if spec.decoded_spec.block_size.is_none() {
         spec.decoded_spec.block_size = spec
             .block_size
-            .zip(spec.decoded_spec.sample_type)
+            .zip(spec.decoded_spec.sample_type())
             .zip(spec.decoded_spec.channels)
             .map(|((b, s), c)| b / s.byte_size() / c.count() as usize)
             .or(Some(1));
@@ -22,15 +22,8 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
     let bytes_per_decoded_block = spec
         .decoded_spec
         .samples_per_block()
-        .zip(spec.decoded_spec.sample_type)
+        .zip(spec.decoded_spec.sample_type())
         .map(|(n, s)| n * s.byte_size());
-
-    if bytes_per_decoded_block
-        .zip(spec.decoded_spec.sample_type)
-        .map_or(false, |(b, s)| b % s.byte_size() != 0)
-    {
-        return Err(SyphonError::Unsupported);
-    }
 
     if spec.block_size.is_none() {
         spec.block_size = bytes_per_decoded_block
@@ -58,7 +51,7 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
 
 macro_rules! construct_pcm_signal_ref {
     ($ref:ident, $ref_inner:ident, $inner:ident, $spec:ident) => {
-        Ok(match $spec.sample_type {
+        Ok(match $spec.sample_type() {
             SampleType::I8 => {
                 (Box::new(PcmCodec::<_, i8>::new($inner, $spec.unwrap_sample_type()?))
                     as Box<dyn $ref_inner<_>>)

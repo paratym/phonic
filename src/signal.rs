@@ -1,13 +1,13 @@
-use crate::{dsp::adapters::{SampleTypeAdapter, FrameRateAdapter, ChannelsAdapter, BlockSizeAdapter, NBlocksAdapter, SignalChain}, Sample, SampleType, SyphonError};
+use crate::{dsp::adapters::{SampleTypeAdapter, FrameRateAdapter, ChannelsAdapter, BlockSizeAdapter, NBlocksAdapter, SignalChain}, Sample, SampleType, SyphonError, KnownSample};
 use std::{ops::{BitAnd, BitOr, BitXor}, time::Duration};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
     Count(u32),
     Layout(ChannelLayout),
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelLayout {
     mask: u32,
 }
@@ -15,7 +15,7 @@ pub struct ChannelLayout {
 /// A set of parameters that describes a pcm signal
 #[derive(Copy, Clone)]
 pub struct SignalSpec<S> {
-    pub sample_type: S,
+    _sample: S,
 
     /// The number of samples per channel per second.
     pub frame_rate: u32,
@@ -31,9 +31,9 @@ pub struct SignalSpec<S> {
     pub n_blocks: Option<u64>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct SignalSpecBuilder<S> {
-    pub sample_type: Option<S>,
+    _sample: Option<S>,
     pub frame_rate: Option<u32>,
     pub channels: Option<Channels>,
     pub block_size: Option<usize>,
@@ -145,9 +145,9 @@ impl<S> SignalSpec<S> {
         SignalSpecBuilder::new()
     }
 
-    fn cast_sample_type<T>(self, sample_type: T) -> SignalSpec<T> {
+    pub fn cast_sample_type<T>(self, sample: T) -> SignalSpec<T> {
         SignalSpec {
-            sample_type,
+            _sample: sample,
             channels: self.channels,
             frame_rate: self.frame_rate,
             block_size: self.block_size,
@@ -155,8 +155,8 @@ impl<S> SignalSpec<S> {
         }
     }
 
-    pub fn block_rate(&self) -> u32 {
-        self.frame_rate / self.block_size as u32
+    pub fn block_rate(&self) -> f64 {
+        self.frame_rate as f64 / self.block_size as f64
     }
 
     pub fn samples_per_block(&self) -> usize {
@@ -172,46 +172,26 @@ impl<S> SignalSpec<S> {
     }
 }
 
-macro_rules! impl_signal_spec {
-    ($sample:ty, $dyn_sample:ident) => {
-        impl From<SignalSpec<$sample>> for SignalSpec<SampleType> {
-            fn from(spec: SignalSpec<$sample>) -> Self {
-                Self {
-                    sample_type: SampleType::$dyn_sample,
-                    channels: spec.channels,
-                    frame_rate: spec.frame_rate,
-                    block_size: spec.block_size,
-                    n_blocks: spec.n_blocks,
-                }
-            }
+impl SignalSpec<SampleType> {
+    pub fn sample_type(&self) -> SampleType {
+        self._sample
+    }
+
+    pub fn unwrap_sample_type<S: KnownSample>(self) -> Result<SignalSpec<S>, SyphonError> {
+        if self._sample != S::TYPE {
+            return Err(SyphonError::SignalMismatch);
         }
 
-        
-    };
+        Ok(self.cast_sample_type(S::ORIGIN))
+    }
 }
-
-// impl<S: Sample> SignalSpec<S> {
-//     pub fn to_dyn_sample(self) -> SignalSpec<SampleType> {
-//         self.cast_sample_type(S::TYPE)
-//     }
-// }
-
-// impl SignalSpec<SampleType> {
-//     pub fn unwrap_sample_type<S: Sample>(self) -> Result<SignalSpec<S>, SyphonError> {
-//         if self.sample_type != S::TYPE {
-//             return Err(SyphonError::SignalMismatch);
-//         }
-
-//         Ok(self.cast_sample_type(S::ORIGIN))
-//     }
-// }
 
 impl<S: Sample> TryFrom<SignalSpecBuilder<S>> for SignalSpec<S> {
     type Error = SyphonError;
 
     fn try_from(builder: SignalSpecBuilder<S>) -> Result<Self, Self::Error> {
         Ok(Self {
-            sample_type: S::ORIGIN,
+            _sample: S::ORIGIN,
             channels: builder.channels.ok_or(SyphonError::InvalidData)?,
             frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
             block_size: builder.block_size.unwrap_or(1),
@@ -225,7 +205,7 @@ impl TryFrom<SignalSpecBuilder<SampleType>> for SignalSpec<SampleType> {
 
     fn try_from(builder: SignalSpecBuilder<SampleType>) -> Result<Self, Self::Error> {
         Ok(Self {
-            sample_type: builder.sample_type.ok_or(SyphonError::InvalidData)?,
+            _sample: builder._sample.ok_or(SyphonError::InvalidData)?,
             channels: builder.channels.ok_or(SyphonError::InvalidData)?,
             frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
             block_size: builder.block_size.unwrap_or(1),
@@ -237,7 +217,7 @@ impl TryFrom<SignalSpecBuilder<SampleType>> for SignalSpec<SampleType> {
 impl<S> SignalSpecBuilder<S> {
     pub fn new() -> Self {
         Self {
-            sample_type: None,
+            _sample: None,
             frame_rate: None,
             channels: None,
             block_size: None,
@@ -264,55 +244,40 @@ impl<S> SignalSpecBuilder<S> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sample_type.is_none()
+        self._sample.is_none()
             && self.channels.is_none()
             && self.frame_rate.is_none()
             && self.block_size.is_none()
             && self.n_blocks.is_none()
     }
 
-    pub fn frame_rate(mut self, frame_rate: u32) -> Self {
-        self.frame_rate = Some(frame_rate);
+    pub fn with_frame_rate<T: Into<Option<u32>>>(mut self, frame_rate: T) -> Self {
+        self.frame_rate = frame_rate.into();
         self
     }
 
-    pub fn hz(mut self, hz: u32) -> Self {
-        self.frame_rate = Some(hz);
+    pub fn with_channels<T: Into<Option<Channels>>>(mut self, channels: T) -> Self {
+        self.channels = channels.into();
         self
     }
 
-    pub fn channels(mut self, channels: Channels) -> Self {
-        self.channels = Some(channels);
+    pub fn with_n_channels<T: Into<Option<u32>>>(mut self, n_channels: T) -> Self {
+        self.channels = n_channels.into().map(|n| Channels::Count(n));
         self
     }
 
-    pub fn n_channels(mut self, n_channels: u32) -> Self {
-        self.channels = Some(Channels::Count(n_channels));
+    pub fn with_channel_layout<T: Into<Option<ChannelLayout>>>(mut self, layout: T) -> Self {
+        self.channels = layout.into().map(|l| Channels::Layout(l));
         self
     }
 
-    pub fn channel_layout(mut self, layout: ChannelLayout) -> Self {
-        self.channels = Some(Channels::Layout(layout));
+    pub fn with_block_size<T: Into<Option<usize>>>(mut self, block_size: T) -> Self {
+        self.block_size = block_size.into();
         self
     }
 
-    pub fn mono(mut self) -> Self {
-        self.channels = Some(ChannelLayout::MONO.into());
-        self
-    }
-
-    pub fn stereo(mut self) -> Self {
-        self.channels = Some(ChannelLayout::STEREO.into());
-        self
-    }
-
-    pub fn block_size(mut self, block_size: usize) -> Self {
-        self.block_size = Some(block_size);
-        self
-    }
-
-    pub fn n_blocks(mut self, n_blocks: u64) -> Self {
-        self.n_blocks = Some(n_blocks);
+    pub fn with_n_blocks<T: Into<Option<u64>>>(mut self, n_blocks: T) -> Self {
+        self.n_blocks = n_blocks.into();
         self
     }
 
@@ -325,13 +290,18 @@ impl<S> SignalSpecBuilder<S> {
 }
 
 impl SignalSpecBuilder<SampleType> {
-    pub fn sample_type(mut self, sample_type: SampleType) -> Self {
-        self.sample_type = Some(sample_type);
+    #[inline]
+    pub fn sample_type(&self) -> Option<SampleType> {
+        self._sample
+    }
+
+    pub fn with_sample_type<T: Into<Option<SampleType>>>(mut self, sample_type: T) -> Self {
+        self._sample = sample_type.into();
         self
     }
 
-    pub fn const_sample_type<S: Sample>(mut self) -> Self {
-        self.sample_type = Some(S::TYPE);
+    pub fn with_const_sample_type<S: KnownSample>(mut self) -> Self {
+        self._sample = Some(S::TYPE);
         self
     }
 }
@@ -339,7 +309,7 @@ impl SignalSpecBuilder<SampleType> {
 impl<S> From<SignalSpec<S>> for SignalSpecBuilder<S> {
     fn from(spec: SignalSpec<S>) -> Self {
         Self {
-            sample_type: Some(spec.sample_type),
+            _sample: Some(spec._sample),
             frame_rate: Some(spec.frame_rate),
             channels: Some(spec.channels),
             block_size: Some(spec.block_size),
@@ -348,10 +318,10 @@ impl<S> From<SignalSpec<S>> for SignalSpecBuilder<S> {
     }
 }
 
-impl<S: Sample> From<SignalSpec<S>> for SignalSpecBuilder<SampleType> {
+impl<S: KnownSample> From<SignalSpec<S>> for SignalSpecBuilder<SampleType> {
     fn from(spec: SignalSpec<S>) -> Self {
         Self {
-            sample_type: Some(S::TYPE),
+            _sample: Some(S::TYPE),
             frame_rate: Some(spec.frame_rate),
             channels: Some(spec.channels),
             block_size: Some(spec.block_size),

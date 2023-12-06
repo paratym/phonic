@@ -10,10 +10,8 @@ pub struct FrameRateAdapter<T: Signal<S>, S: Sample> {
 
 impl<T: Signal<S>, S: Sample> FrameRateAdapter<T, S> {
     pub fn new(signal: T, frame_rate: u32) -> Self {
-        let spec = SignalSpec {
-            frame_rate,
-            ..*signal.spec()
-        };
+        let mut spec = *signal.spec();
+        spec.frame_rate = frame_rate;
 
         Self { signal, spec }
     }

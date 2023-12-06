@@ -2,7 +2,7 @@ use crate::{
     dsp::adapters::SampleTypeAdapter,
     io::{utils::Track, SyphonCodec, SyphonFormat},
     FromKnownSample, IntoKnownSample, SampleType, SignalReader, SignalSpec, SignalSpecBuilder,
-    SignalWriter, SyphonError, Sample
+    SignalWriter, SyphonError
 };
 use std::io::{Read, Write};
 
@@ -31,9 +31,7 @@ impl FormatData {
 impl TryFrom<FormatDataBuilder> for FormatData {
     type Error = SyphonError;
 
-    fn try_from(mut builder: FormatDataBuilder) -> Result<Self, Self::Error> {
-        builder.fill()?;
-
+    fn try_from(builder: FormatDataBuilder) -> Result<Self, Self::Error> {
         Ok(Self {
             format: builder.format.unwrap_or(SyphonFormat::Unknown),
             tracks: builder
@@ -57,12 +55,12 @@ impl FormatDataBuilder {
         self.format.is_none() && self.tracks.is_empty()
     }
 
-    pub fn format(mut self, format: SyphonFormat) -> Self {
-        self.format = Some(format);
+    pub fn with_format<T: Into<Option<SyphonFormat>>>(mut self, format: T) -> Self {
+        self.format = format.into();
         self
     }
 
-    pub fn track(mut self, track: StreamSpecBuilder) -> Self {
+    pub fn with_track(mut self, track: StreamSpecBuilder) -> Self {
         self.tracks.push(track);
         self
     }
@@ -77,6 +75,11 @@ impl FormatDataBuilder {
         }
 
         Ok(())
+    }
+
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
+        self.fill()?;
+        Ok(self)
     }
 
     pub fn build(self) -> Result<FormatData, SyphonError> {
@@ -169,7 +172,7 @@ pub struct StreamSpec {
     pub byte_len: Option<u64>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct StreamSpecBuilder {
     pub codec: Option<SyphonCodec>,
     pub decoded_spec: SignalSpecBuilder<SampleType>,
@@ -190,8 +193,7 @@ impl StreamSpec {
 impl TryFrom<StreamSpecBuilder> for StreamSpec {
     type Error = SyphonError;
 
-    fn try_from(mut builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
-        builder.fill()?;
+    fn try_from(builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
         if builder
             .block_size
             .zip(builder.byte_len)
@@ -226,29 +228,33 @@ impl StreamSpecBuilder {
             && self.byte_len.is_none()
     }
 
+    pub fn sample_type(&self) -> Option<SampleType> {
+        self.decoded_spec.sample_type()
+    }
+
     pub fn n_blocks(&self) -> Option<u64> {
         self.byte_len
             .zip(self.block_size)
             .map(|(n, b)| n / b as u64)
     }
 
-    pub fn codec(mut self, codec: SyphonCodec) -> Self {
-        self.codec = Some(codec);
+    pub fn with_codec<T: Into<Option<SyphonCodec>>>(mut self, codec: T) -> Self {
+        self.codec = codec.into();
         self
     }
 
-    pub fn decoded_spec(mut self, decoded_spec: SignalSpecBuilder<SampleType>) -> Self {
+    pub fn with_decoded_spec(mut self, decoded_spec: SignalSpecBuilder<SampleType>) -> Self {
         self.decoded_spec = decoded_spec;
         self
     }
 
-    pub fn block_size(mut self, block_size: usize) -> Self {
-        self.block_size = Some(block_size);
+    pub fn with_block_size<T: Into<Option<usize>>>(mut self, block_size: T) -> Self {
+        self.block_size = block_size.into();
         self
     }
 
-    pub fn byte_len(mut self, byte_len: u64) -> Self {
-        self.byte_len = Some(byte_len);
+    pub fn with_byte_len<T: Into<Option<u64>>>(mut self, byte_len: T) -> Self {
+        self.byte_len = byte_len.into();
         self
     }
 

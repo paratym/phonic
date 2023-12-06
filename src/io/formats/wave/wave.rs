@@ -20,22 +20,11 @@ pub fn fill_wave_data(data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
     }
 
     let track = data.tracks.first_mut().unwrap();
-
-    if track.codec.is_none() {
-        track.codec = match track.decoded_spec.sample_type {
-            Some(SampleType::U8)
-            | Some(SampleType::I16)
-            | Some(SampleType::I32)
-            | Some(SampleType::F32)
-            | Some(SampleType::F64) => Some(SyphonCodec::Pcm),
-            Some(_) => return Err(SyphonError::Unsupported),
-            None => None,
-        }
-    }
-
     if track.codec.is_some_and(|codec| codec != SyphonCodec::Pcm) {
         return Err(SyphonError::Unsupported);
     }
+
+    track.codec = Some(SyphonCodec::Pcm);
 
     Ok(())
 }

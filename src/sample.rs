@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SampleType {
     I8,
     I16,
@@ -39,6 +39,10 @@ pub trait Sample: Copy + Sized {
     }
 }
 
+pub trait KnownSample: Sample {
+    const TYPE: SampleType;
+}
+
 impl SampleType {
     pub fn byte_size(&self) -> usize {
         match self {
@@ -61,9 +65,12 @@ impl SampleType {
 macro_rules! impl_int_sample {
     ($s:ty, $t: ident) => {
         impl Sample for $s {
-            // const TYPE: SampleType = SampleType::$t;
             const ORIGIN: Self = 0;
             const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
+        }
+
+        impl KnownSample for $s {
+            const TYPE: SampleType = SampleType::$t;
         }
     };
 }
@@ -71,19 +78,25 @@ macro_rules! impl_int_sample {
 macro_rules! impl_uint_sample {
     ($s:ty, $t:ident) => {
         impl Sample for $s {
-            // const TYPE: SampleType = SampleType::$t;
             const ORIGIN: Self = Self::MAX / 2;
             const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
+        }
+
+        impl KnownSample for $s {
+            const TYPE: SampleType = SampleType::$t;
         }
     };
 }
 
 macro_rules! impl_float_sample {
-    ($s:ty, $f:ident) => {
+    ($s:ty, $t:ident) => {
         impl Sample for $s {
-            // const TYPE: SampleType = SampleType::$f;
             const ORIGIN: Self = 0.0;
             const RANGE: (Self, Self) = (-1.0, 1.0);
+        }
+
+        impl KnownSample for $s {
+            const TYPE: SampleType = SampleType::$t;
         }
     };
 }

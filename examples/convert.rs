@@ -20,12 +20,14 @@ fn main() -> Result<(), SyphonError> {
         .into_decoder()?
         .adapt_sample_type::<f32>();
 
+    let track_spec = StreamSpec::builder().with_decoded_spec((*decoder.spec()).into());
     let data = FormatData::builder()
-        .format(SyphonFormat::Wave)
-        .track(StreamSpec::builder().decoded_spec(decoder.spec().clone().into()))
+        .with_format(SyphonFormat::Wave)
+        .with_track(track_spec)
+        .filled()?
         .build()?;
 
-    let dst_file = Box::new(File::create("./examples/samples/sine_converted.wav")?);
+    let dst_file = Box::new(File::create("./examples/generated/sine_converted.wav")?);
     let mut encoder = data
         .writer(dst_file)?
         .into_default_track()?

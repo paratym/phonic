@@ -8,7 +8,7 @@ use crate::{
     SyphonError,
 };
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SyphonCodec {
     Pcm,
     Unknown,

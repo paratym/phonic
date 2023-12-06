@@ -9,15 +9,7 @@ pub struct SampleTypeAdapter<T: Signal<S>, S: Sample, O: Sample> {
 
 impl<T: Signal<S>, S: Sample, O: Sample> SampleTypeAdapter<T, S, O> {
     pub fn new(signal: T) -> Self {
-        let inner_spec = signal.spec();
-        let spec = SignalSpec {
-            sample_type: O::ORIGIN,
-            frame_rate: inner_spec.frame_rate,
-            channels: inner_spec.channels,
-            block_size: inner_spec.block_size,
-            n_blocks: inner_spec.n_blocks,
-        };
-
+        let spec = signal.spec().cast_sample_type(O::ORIGIN);
         let buffer = vec![S::ORIGIN; spec.samples_per_block()].into_boxed_slice();
 
         Self {

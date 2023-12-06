@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display, io};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SyphonError {
     InvalidInput,
     InvalidData,

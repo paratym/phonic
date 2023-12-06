@@ -8,10 +8,8 @@ pub struct ChannelsAdapter<T: Signal<S>, S: Sample> {
 
 impl<T: Signal<S>, S: Sample> ChannelsAdapter<T, S> {
     pub fn new(signal: T, channels: Channels) -> Self {
-        let spec = SignalSpec {
-            channels,
-            ..*signal.spec()
-        };
+        let mut spec = *signal.spec();
+        spec.channels = channels;
 
         Self { signal, spec }
     }
