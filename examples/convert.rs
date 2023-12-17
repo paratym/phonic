@@ -8,7 +8,7 @@ use syphon::{
 };
 
 fn main() -> Result<(), SyphonError> {
-    let src_path = Path::new("./examples/samples/sine.wav");
+    let src_path = Path::new("./examples/generated/sine.wav");
     let src_file = Box::new(File::open(src_path)?);
     let format_identifier = src_path
         .extension()
@@ -18,9 +18,9 @@ fn main() -> Result<(), SyphonError> {
     let mut decoder = SyphonFormat::resolve_reader(src_file, format_identifier)?
         .into_default_track()?
         .into_decoder()?
-        .adapt_sample_type::<f32>();
+        .adapt_sample_type::<i16>();
 
-    let track_spec = StreamSpec::builder().with_decoded_spec((*decoder.spec()).into());
+    let track_spec = StreamSpec::builder().with_decoded_spec(*decoder.spec());
     let data = FormatData::builder()
         .with_format(SyphonFormat::Wave)
         .with_track(track_spec)
@@ -32,8 +32,8 @@ fn main() -> Result<(), SyphonError> {
         .writer(dst_file)?
         .into_default_track()?
         .into_encoder()?
-        .unwrap_f32_signal()?;
+        .unwrap_i16_signal()?;
 
-    let mut buf = [f32::ORIGIN; 1024];
+    let mut buf = [i16::ORIGIN; 1024];
     copy(&mut decoder, &mut encoder, &mut buf)
 }

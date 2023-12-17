@@ -2,7 +2,7 @@ use std::fs::File;
 use syphon::{
     dsp::generators::Sine,
     io::{utils::copy, Format, FormatData, StreamSpec, StreamWriter, SyphonFormat},
-    Sample, Signal, SignalSpec, SyphonError,
+    Sample, Signal, SignalSpec, SyphonError, SignalSpecBuilder,
 };
 
 fn main() -> Result<(), SyphonError> {
@@ -13,7 +13,7 @@ fn main() -> Result<(), SyphonError> {
 
     let mut sine = Sine::new(signal_spec, 440.0).adapt_seconds(2.0);
     
-    let track_spec = StreamSpec::builder().with_decoded_spec((*sine.spec()).into());
+    let track_spec = StreamSpec::builder().with_decoded_spec(*sine.spec());
     let format_data = FormatData::builder()
         .with_format(SyphonFormat::Wave)
         .with_track(track_spec)

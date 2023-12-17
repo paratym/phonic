@@ -60,8 +60,8 @@ impl FormatDataBuilder {
         self
     }
 
-    pub fn with_track(mut self, track: StreamSpecBuilder) -> Self {
-        self.tracks.push(track);
+    pub fn with_track<T: Into<StreamSpecBuilder>>(mut self, track: T) -> Self {
+        self.tracks.push(track.into());
         self
     }
 
@@ -243,8 +243,8 @@ impl StreamSpecBuilder {
         self
     }
 
-    pub fn with_decoded_spec(mut self, decoded_spec: SignalSpecBuilder<SampleType>) -> Self {
-        self.decoded_spec = decoded_spec;
+    pub fn with_decoded_spec<T: Into<SignalSpecBuilder<SampleType>>>(mut self, decoded_spec: T) -> Self {
+        self.decoded_spec = decoded_spec.into();
         self
     }
 

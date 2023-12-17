@@ -14,7 +14,7 @@ pub struct ChannelLayout {
 
 /// A set of parameters that describes a pcm signal
 #[derive(Copy, Clone)]
-pub struct SignalSpec<S> {
+pub struct SignalSpec<S = SampleType> {
     _sample: S,
 
     /// The number of samples per channel per second.
@@ -32,7 +32,7 @@ pub struct SignalSpec<S> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct SignalSpecBuilder<S> {
+pub struct SignalSpecBuilder<S = SampleType> {
     _sample: Option<S>,
     pub frame_rate: Option<u32>,
     pub channels: Option<Channels>,
