@@ -9,7 +9,13 @@ pub struct SampleTypeAdapter<T: Signal<S>, S: Sample, O: Sample> {
 
 impl<T: Signal<S>, S: Sample, O: Sample> SampleTypeAdapter<T, S, O> {
     pub fn new(signal: T) -> Self {
-        let spec = signal.spec().cast_sample_type(O::ORIGIN);
+        let spec = signal
+            .spec()
+            .into_builder()
+            .with_sample_type(O::ORIGIN)
+            .build()
+            .expect("invalid spec");
+        
         let buffer = vec![S::ORIGIN; spec.samples_per_block()].into_boxed_slice();
 
         Self {

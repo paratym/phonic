@@ -450,6 +450,10 @@ macro_rules! impl_from_inner {
 macro_rules! impl_signal_ref {
     ($self:ident, $inner:ident) => {
         impl $self {
+            pub fn spec(&self) -> SignalSpec {
+                match_signal_ref!(self, Self, signal, (*signal.spec()).into())
+            }
+
             pub fn adapt_sample_type<O: FromKnownSample + IntoKnownSample + 'static>(
                 self,
             ) -> Box<dyn $inner<O>> {

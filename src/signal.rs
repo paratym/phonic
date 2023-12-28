@@ -1,5 +1,5 @@
-use crate::{dsp::adapters::{SampleTypeAdapter, FrameRateAdapter, ChannelsAdapter, BlockSizeAdapter, NBlocksAdapter, SignalChain}, Sample, SampleType, SyphonError, KnownSample};
-use std::{ops::{BitAnd, BitOr, BitXor}, time::Duration};
+use crate::{Sample, SampleType, SyphonError, KnownSample};
+use std::{ops::{BitAnd, BitOr, BitXor, Deref, DerefMut}, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
@@ -53,6 +53,12 @@ impl Channels {
             Self::Count(_) => None,
             Self::Layout(layout) => Some(layout),
         }
+    }
+}
+
+impl From<u32> for Channels {
+    fn from(n: u32) -> Self {
+        Self::Count(n)
     }
 }
 
@@ -145,7 +151,7 @@ impl<S> SignalSpec<S> {
         SignalSpecBuilder::new()
     }
 
-    pub fn cast_sample_type<T>(self, sample: T) -> SignalSpec<T> {
+    fn cast_sample_type<T>(self, sample: T) -> SignalSpec<T> {
         SignalSpec {
             _sample: sample,
             channels: self.channels,
@@ -170,6 +176,10 @@ impl<S> SignalSpec<S> {
     pub fn n_samples(&self) -> Option<u64> {
         self.n_frames().map(|n| n * self.channels.count() as u64)
     }
+
+    pub fn into_builder(self) -> SignalSpecBuilder<S> {
+        self.into()
+    }
 }
 
 impl SignalSpec<SampleType> {
@@ -185,6 +195,24 @@ impl SignalSpec<SampleType> {
         Ok(self.cast_sample_type(S::ORIGIN))
     }
 }
+
+impl<S: KnownSample> From<SignalSpec<S>> for SignalSpec {
+    fn from(spec: SignalSpec<S>) -> Self {
+        spec.cast_sample_type(S::TYPE)
+    }
+}
+
+// impl<S: KnownSample> TryFrom<SignalSpec<SampleType>> for SignalSpec<S> {
+//     type Error = SyphonError;
+
+//     fn try_from(spec: SignalSpec) -> Result<Self, Self::Error> {
+//         if spec._sample != S::TYPE {
+//             return Err(SyphonError::SignalMismatch);
+//         }
+
+//         Ok(spec.cast_sample_type(S::ORIGIN))
+//     }
+// }
 
 impl<S: Sample> TryFrom<SignalSpecBuilder<S>> for SignalSpec<S> {
     type Error = SyphonError;
@@ -251,6 +279,16 @@ impl<S> SignalSpecBuilder<S> {
             && self.n_blocks.is_none()
     }
 
+    pub fn with_sample_type<T>(self, sample_type: T) -> SignalSpecBuilder<T> {
+        SignalSpecBuilder {
+            _sample: Some(sample_type),
+            frame_rate: self.frame_rate,
+            channels: self.channels,
+            block_size: self.block_size,
+            n_blocks: self.n_blocks,
+        }
+    }
+
     pub fn with_frame_rate<T: Into<Option<u32>>>(mut self, frame_rate: T) -> Self {
         self.frame_rate = frame_rate.into();
         self
@@ -295,11 +333,6 @@ impl SignalSpecBuilder<SampleType> {
         self._sample
     }
 
-    pub fn with_sample_type<T: Into<Option<SampleType>>>(mut self, sample_type: T) -> Self {
-        self._sample = sample_type.into();
-        self
-    }
-
     pub fn with_const_sample_type<S: KnownSample>(mut self) -> Self {
         self._sample = Some(S::TYPE);
         self
@@ -332,62 +365,6 @@ impl<S: KnownSample> From<SignalSpec<S>> for SignalSpecBuilder<SampleType> {
 
 pub trait Signal<S: Sample> {
     fn spec(&self) -> &SignalSpec<S>;
-
-    fn adapt_sample_type<O: Sample>(self) -> SampleTypeAdapter<Self, S, O>
-    where
-        Self: Sized,
-    {
-        SampleTypeAdapter::new(self)
-    }
-
-    fn adapt_frame_rate(self, frame: u32) -> FrameRateAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        FrameRateAdapter::new(self, frame)
-    }
-
-    fn adapt_channels(self, channels: Channels) -> ChannelsAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        ChannelsAdapter::new(self, channels)
-    }
-
-    fn adapt_block_size(self, block_size: usize) -> BlockSizeAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        BlockSizeAdapter::new(self, block_size)
-    }
-
-    fn adapt_n_blocks(self, n_blocks: u64) -> NBlocksAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        NBlocksAdapter::new(self, n_blocks)
-    }
-
-    fn adapt_seconds(self, seconds: f64) -> NBlocksAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        NBlocksAdapter::from_seconds(self, seconds)
-    }
-
-    fn adapt_duration(self, duration: Duration) -> NBlocksAdapter<Self, S>
-    where
-        Self: Sized,
-    {
-        NBlocksAdapter::from_duration(self, duration)
-    }
-
-    fn chain<T: Signal<S>>(self, other: T) -> SignalChain<Self, T, S>
-    where
-        Self: Sized,
-    {
-        SignalChain::new(self, other)
-    }
 }
 
 pub trait SignalReader<S: Sample>: Signal<S> {

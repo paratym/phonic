@@ -1,10 +1,6 @@
 use std::io::{Read, Write};
-
 use crate::{
-    io::{
-        codecs, FormatData, FormatDataBuilder, StreamSpec, StreamSpecBuilder, SyphonCodec,
-        SyphonFormat,
-    },
+    io::{FormatData, FormatDataBuilder, StreamSpecBuilder, SyphonCodec, SyphonFormat},
     ChannelLayout, Channels, SampleType, SignalSpecBuilder, SyphonError,
 };
 
@@ -158,17 +154,22 @@ impl From<WaveHeader> for FormatDataBuilder {
             .and_then(|ext| Some(ChannelLayout::from_bits(ext.channel_mask).into()))
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels as u32));
 
+        let mut decoded_spec = SignalSpecBuilder::<SampleType>::new()
+            .with_channels(channels)
+            .with_n_blocks(header.fact.map(|fact| fact.n_frames as u64))
+            .with_frame_rate(header.fmt.sample_rate);
+
+        if let Some(sample_type) = sample_type {
+            decoded_spec = decoded_spec.with_sample_type(sample_type);
+        }
+
         Self {
             format: Some(SyphonFormat::Wave),
             tracks: vec![StreamSpecBuilder {
                 codec,
+                decoded_spec,
                 block_size: Some(header.fmt.block_align as usize),
                 byte_len: Some(header.data.byte_len as u64),
-                decoded_spec: SignalSpecBuilder::<SampleType>::new()
-                    .with_sample_type(sample_type)
-                    .with_channels(channels)
-                    .with_n_blocks(header.fact.map(|fact| fact.n_frames as u64))
-                    .with_frame_rate(header.fmt.sample_rate)
             }],
         }
     }
