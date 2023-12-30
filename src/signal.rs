@@ -422,26 +422,35 @@ pub trait SignalWriter<S: Sample>: Signal<S> {
     }
 }
 
-impl<S: Sample> Signal<S> for Box<dyn SignalReader<S>> {
+impl<S, T> Signal<S> for T
+where
+    S: Sample,
+    T: Deref,
+    T::Target: Signal<S>
+{
     fn spec(&self) -> &SignalSpec<S> {
-        self.as_ref().spec()
+        self.deref().spec()
     }
 }
 
-impl<S: Sample> SignalReader<S> for Box<dyn SignalReader<S>> {
+impl<S, T> SignalReader<S> for T
+where
+    S: Sample,
+    T: DerefMut,
+    T::Target: SignalReader<S>
+{
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
-        self.as_mut().read(buffer)
+        self.deref_mut().read(buffer)
     }
 }
 
-impl<S: Sample> Signal<S> for Box<dyn SignalWriter<S>> {
-    fn spec(&self) -> &SignalSpec<S> {
-        self.as_ref().spec()
-    }
-}
-
-impl<S: Sample> SignalWriter<S> for Box<dyn SignalWriter<S>> {
+impl<S, T> SignalWriter<S> for T
+where
+    S: Sample,
+    T: DerefMut,
+    T::Target: SignalWriter<S>
+{
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        self.as_mut().write(buffer)
+        self.deref_mut().write(buffer)
     }
 }

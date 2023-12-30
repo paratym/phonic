@@ -1,30 +1,44 @@
-use crate::io::{FormatReader, FormatWriter, Stream, StreamSpec};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::ops::{Deref, DerefMut};
 
-pub struct Track<T> {
-    inner: T,
+use crate::{
+    io::{Format, FormatReader, FormatWriter, Stream, StreamSpec, StreamReader, StreamWriter},
+    SyphonError,
+};
+
+pub struct Track<F: Format> {
+    inner: F,
     track_i: usize,
     spec: StreamSpec,
 }
 
-impl<T> Track<T> {
-    pub fn new(inner: T, track_i: usize, spec: StreamSpec) -> Self {
-        Self {
+impl<F: Format> Track<F> {
+    pub fn new(inner: F, track_i: usize) -> Result<Self, SyphonError> {
+        let spec = *inner
+            .format_data()
+            .tracks
+            .get(track_i)
+            .ok_or(SyphonError::NotFound)?;
+
+        Ok(Self {
             inner,
-            spec,
             track_i,
-        }
+            spec,
+        })
     }
 }
 
-impl<T> Stream for Track<T> {
+impl<F: Format> Stream for Track<F> {
     fn spec(&self) -> &StreamSpec {
         &self.spec
     }
 }
 
-impl<T: FormatReader> Read for Track<T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+impl<T> StreamReader for Track<T>
+where
+    T: DerefMut,
+    T::Target: FormatReader,
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError> {
         loop {
             let result = self.inner.read(buf)?;
             if result.track == self.track_i {
@@ -34,18 +48,16 @@ impl<T: FormatReader> Read for Track<T> {
     }
 }
 
-impl<T: FormatWriter> Write for Track<T> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl<T> StreamWriter for Track<T>
+where
+    T: DerefMut,
+    T::Target: FormatWriter,
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError> {
         Ok(self.inner.write(self.track_i, buf)?)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
+    fn flush(&mut self) -> Result<(), SyphonError> {
         Ok(self.inner.flush()?)
-    }
-}
-
-impl<T: Seek> Seek for Track<T> {
-    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
-        Ok(self.inner.seek(offset)?)
     }
 }

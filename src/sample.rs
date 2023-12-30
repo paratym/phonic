@@ -21,7 +21,6 @@ pub enum SampleType {
 }
 
 pub trait Sample: Copy + Sized {
-    // const TYPE: SampleType;
     const ORIGIN: Self;
     const RANGE: (Self, Self);
 
@@ -39,7 +38,7 @@ pub trait Sample: Copy + Sized {
     }
 }
 
-pub trait KnownSample: Sample {
+pub trait KnownSample: Sample + FromKnownSample + IntoKnownSample {
     const TYPE: SampleType;
 }
 
@@ -132,7 +131,7 @@ impl<T: Sample, S: Sample + FromSample<T>> IntoSample<S> for T {
 macro_rules! impl_convert {
     ($from:ty, $to:ty, $sample:ident, $func:expr) => {
         impl FromSample<$from> for $to {
-            #[inline(always)]
+            #[inline]
             fn from_sample($sample: $from) -> Self {
                 $func
             }

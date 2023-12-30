@@ -7,7 +7,7 @@ use crate::{
 };
 use std::{
     hash::Hash,
-    io::{Read, Write},
+    io::{Read, Seek, Write},
 };
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
@@ -17,9 +17,9 @@ pub enum SyphonFormat {
 }
 
 impl SyphonFormat {
-    pub fn iter() -> impl Iterator<Item = SyphonFormat> {
+    pub fn all() -> &'static [Self] {
         const SYPHON_FORMATS: &[SyphonFormat] = &[SyphonFormat::Wave];
-        SYPHON_FORMATS.iter().copied()
+        SYPHON_FORMATS
     }
 
     pub fn identifiers(&self) -> &'static FormatIdentifiers {
@@ -42,39 +42,40 @@ impl SyphonFormat {
         }
     }
 
-    pub fn reader(&self, source: Box<dyn Read>) -> Result<Box<dyn FormatReader>, SyphonError> {
-        match self {
-            SyphonFormat::Wave => Ok(Box::new(Wave::read(source)?.into_format()?)),
-            SyphonFormat::Unknown => Err(SyphonError::Unsupported),
-        }
+    pub fn construct_reader(
+        &self,
+        source: impl Read + 'static,
+    ) -> Result<Box<dyn FormatReader>, SyphonError> {
+        Ok(match self {
+            SyphonFormat::Wave => Box::new(Wave::read(source)?.into_format()?),
+            SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
+        })
     }
 
-    pub fn writer(
+    pub fn construct_writer(
         &self,
-        sink: Box<dyn Write>,
+        inner: impl Write + 'static,
         data: FormatData,
     ) -> Result<Box<dyn FormatWriter>, SyphonError> {
-        match self {
-            SyphonFormat::Wave => Ok(Box::new(
-                Wave::write(sink, data.try_into()?)?.into_format()?,
-            )),
-            SyphonFormat::Unknown => Err(SyphonError::Unsupported),
-        }
+        Ok(match self {
+            SyphonFormat::Wave => Box::new(Wave::write(inner, data.try_into()?)?.into_format()?),
+            SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
+        })
     }
 
-    fn resolve_from_reader(reader: &mut dyn Read) -> Option<Self> {
-        None
-    }
-
-    pub fn resolve_reader(
-        mut source: Box<dyn Read>,
+    pub fn resolve(
+        mut source: impl Read + Seek,
         identifier: Option<FormatIdentifier>,
-    ) -> Result<Box<dyn FormatReader>, SyphonError> {
-        identifier
-            .and_then(|id| Self::iter().find(|fmt| fmt.identifiers().contains(&id)))
-            .or_else(|| SyphonFormat::resolve_from_reader(&mut source))
-            .ok_or(SyphonError::Unsupported)?
-            .reader(source)
+    ) -> Result<Self, SyphonError> {
+        if let Some(id) = identifier {
+            return Self::all()
+                .iter()
+                .find(|fmt| fmt.identifiers().contains(&id))
+                .copied()
+                .ok_or(SyphonError::Unsupported);
+        }
+
+        todo!()
     }
 }
 

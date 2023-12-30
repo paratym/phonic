@@ -76,33 +76,33 @@ pub trait SignalAdapter<S: Sample>: Signal<S> + Sized {
         adapter 
     }
 
-    fn adapt_writer<O>(self, spec: &SignalSpec<O>) -> Box<dyn SignalWriter<O>>
-    where
-        S: FromSample<O> + 'static,
-        O: Sample + 'static,
-        Self: SignalWriter<S> + Sized + 'static,
-    {
-        let src_spec = *self.spec();
-        let mut adapter = Box::new(self.adapt_sample_type::<O>()) as Box<dyn SignalWriter<O>>;
+    // fn adapt_writer<O>(self, spec: &SignalSpec<O>) -> Box<dyn SignalWriter<O>>
+    // where
+    //     S: FromSample<O> + 'static,
+    //     O: Sample + 'static,
+    //     Self: SignalWriter<S> + Sized + 'static,
+    // {
+    //     let src_spec = *self.spec();
+    //     let mut adapter = Box::new(self.adapt_sample_type::<O>()) as Box<dyn SignalWriter<O>>;
 
-        if src_spec.frame_rate != spec.frame_rate {
-            adapter = Box::new(adapter.adapt_frame_rate(spec.frame_rate));
-        }
+    //     if src_spec.frame_rate != spec.frame_rate {
+    //         adapter = Box::new(adapter.adapt_frame_rate(spec.frame_rate));
+    //     }
 
-        if src_spec.channels != spec.channels {
-            adapter = Box::new(adapter.adapt_channels(spec.channels));
-        }
+    //     if src_spec.channels != spec.channels {
+    //         adapter = Box::new(adapter.adapt_channels(spec.channels));
+    //     }
 
-        if src_spec.block_size != spec.block_size {
-            adapter = Box::new(adapter.adapt_block_size(spec.block_size));
-        }
+    //     if src_spec.block_size != spec.block_size {
+    //         adapter = Box::new(adapter.adapt_block_size(spec.block_size));
+    //     }
 
-        if src_spec.n_blocks != spec.n_blocks {
-            adapter = Box::new(adapter.adapt_n_blocks(spec.n_blocks));
-        }
+    //     if src_spec.n_blocks != spec.n_blocks {
+    //         adapter = Box::new(adapter.adapt_n_blocks(spec.n_blocks));
+    //     }
 
-        adapter 
-    }
+    //     adapter 
+    // }
 }
 
 impl<S: Sample, T: Signal<S> + Sized> SignalAdapter<S> for T {}

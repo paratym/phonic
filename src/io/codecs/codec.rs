@@ -3,7 +3,7 @@ use crate::{
         codecs::pcm::{
             construct_pcm_signal_reader_ref, construct_pcm_signal_writer_ref, fill_pcm_spec,
         },
-        SignalReaderRef, SignalWriterRef, StreamReader, StreamSpecBuilder, StreamWriter,
+        TaggedSignalReader, TaggedSignalWriter, StreamReader, StreamSpecBuilder, StreamWriter,
     },
     SyphonError,
 };
@@ -22,20 +22,16 @@ impl SyphonCodec {
         }
     }
 
-    pub fn decoder(&self, reader: Box<dyn StreamReader>) -> Result<SignalReaderRef, SyphonError> {
-        let spec = reader.spec().decoded_spec;
-
+    pub fn construct_decoder(&self, reader: impl StreamReader + 'static) -> Result<TaggedSignalReader, SyphonError> {
         match self {
-            SyphonCodec::Pcm => construct_pcm_signal_reader_ref(reader, spec),
+            SyphonCodec::Pcm => construct_pcm_signal_reader_ref(reader),
             _ => Err(SyphonError::Unsupported),
         }
     }
 
-    pub fn encoder(&self, writer: Box<dyn StreamWriter>) -> Result<SignalWriterRef, SyphonError> {
-        let spec = writer.spec().decoded_spec;
-
+    pub fn construct_encoder(&self, writer: impl StreamWriter + 'static) -> Result<TaggedSignalWriter, SyphonError> {
         match self {
-            SyphonCodec::Pcm => construct_pcm_signal_writer_ref(writer, spec),
+            SyphonCodec::Pcm => construct_pcm_signal_writer_ref(writer),
             _ => Err(SyphonError::Unsupported),
         }
     }

@@ -1,10 +1,11 @@
+use std::{rc::Rc, cell::RefCell};
 use crate::{
-    io::{SignalReaderRef, Stream, StreamReader, StreamSpecBuilder, StreamWriter, SignalWriterRef},
-    Sample, SampleType, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
+    io::{TaggedSignalReader, TaggedSignalWriter, Stream, StreamReader, StreamSpecBuilder, StreamWriter},
+    Sample, SampleType, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError, KnownSample,
 };
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
 
-pub struct PcmCodec<T, S: Sample> {
+pub struct PcmCodec<T: Stream, S: Sample> {
     inner: T,
     spec: SignalSpec<S>,
 }
@@ -50,83 +51,44 @@ pub fn fill_pcm_spec(spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
 }
 
 macro_rules! construct_pcm_signal_ref {
-    ($ref:ident, $ref_inner:ident, $inner:ident, $spec:ident) => {
-        Ok(match $spec.sample_type() {
-            SampleType::I8 => {
-                (Box::new(PcmCodec::<_, i8>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::I16 => {
-                (Box::new(PcmCodec::<_, i16>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::I32 => {
-                (Box::new(PcmCodec::<_, i32>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::I64 => {
-                (Box::new(PcmCodec::<_, i64>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::U8 => {
-                (Box::new(PcmCodec::<_, u8>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::U16 => {
-                (Box::new(PcmCodec::<_, u16>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::U32 => {
-                (Box::new(PcmCodec::<_, u32>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::U64 => {
-                (Box::new(PcmCodec::<_, u64>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::F32 => {
-                (Box::new(PcmCodec::<_, f32>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
-            SampleType::F64 => {
-                (Box::new(PcmCodec::<_, f64>::new($inner, $spec.unwrap_sample_type()?))
-                    as Box<dyn $ref_inner<_>>)
-                    .into()
-            }
+    ($self:ident, $stream:ident) => {
+        Ok(match $stream.spec().decoded_spec.sample_type() {
+            SampleType::I8 => $self::I8(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::I16 => $self::I16(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::I32 => $self::I32(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::I64 => $self::I64(Box::new(PcmCodec::<_, _>::new($stream)?)),
+
+            SampleType::U8 => $self::U8(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::U16 => $self::U16(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::U32 => $self::U32(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::U64 => $self::U64(Box::new(PcmCodec::<_, _>::new($stream)?)),
+
+            SampleType::F32 => $self::F32(Box::new(PcmCodec::<_, _>::new($stream)?)),
+            SampleType::F64 => $self::F64(Box::new(PcmCodec::<_, _>::new($stream)?)),
         })
     };
 }
 
-pub fn construct_pcm_signal_reader_ref<T: StreamReader + 'static>(
-    inner: T,
-    spec: SignalSpec<SampleType>,
-) -> Result<SignalReaderRef, SyphonError> {
-    construct_pcm_signal_ref!(SignalReaderRef, SignalReader, inner, spec)
+pub fn construct_pcm_signal_reader_ref(
+    stream: impl StreamReader + 'static,
+) -> Result<TaggedSignalReader, SyphonError> {
+    construct_pcm_signal_ref!(TaggedSignalReader, stream)
 }
 
-pub fn construct_pcm_signal_writer_ref<T: StreamWriter + 'static>(
-    inner: T,
-    spec: SignalSpec<SampleType>,
-) -> Result<SignalWriterRef, SyphonError> {
-    construct_pcm_signal_ref!(SignalWriterRef, SignalWriter, inner, spec)
+pub fn construct_pcm_signal_writer_ref(
+    stream: impl StreamWriter + 'static,
+) -> Result<TaggedSignalWriter, SyphonError> {
+    construct_pcm_signal_ref!(TaggedSignalWriter, stream)
 }
 
-impl<T, S: Sample> PcmCodec<T, S> {
-    pub fn new(inner: T, spec: SignalSpec<S>) -> Self {
-        Self { inner, spec }
+impl<T: Stream, S: Sample> PcmCodec<T, S> {
+    pub fn new(inner: T) -> Result<Self, SyphonError> where S: KnownSample {
+        let spec = inner.spec().decoded_spec.unwrap_sample_type()?;
+        Ok(Self { inner, spec })
     }
 }
 
-impl<T, S: Sample> Signal<S> for PcmCodec<T, S> {
+impl<T: Stream, S: Sample> Signal<S> for PcmCodec<T, S> {
     fn spec(&self) -> &SignalSpec<S> {
         &self.spec
     }

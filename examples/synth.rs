@@ -22,7 +22,7 @@ fn main() -> Result<(), SyphonError> {
 
     let file = Box::new(File::create("./examples/generated/sine.wav")?);
     let mut signal_writer = format_data
-        .writer(file)?
+        .construct_writer(file)?
         .into_default_track()?
         .into_encoder()?
         .unwrap_f32_signal()?;
