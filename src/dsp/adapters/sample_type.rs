@@ -1,61 +1,53 @@
-use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::io::{self, Seek, SeekFrom};
+use crate::{
+    io::{DynSignalReader, DynSignalWriter},
+    FromKnownSample, IntoKnownSample, IntoSample, Sample, Signal, SignalReader, SignalSpec,
+    SignalWriter, SyphonError,
+};
 
-pub struct SampleTypeAdapter<T: Signal<S>, S: Sample, O: Sample> {
+pub struct SampleTypeAdapter<S: Sample, T: Signal> {
     signal: T,
     buffer: Box<[S]>,
-    spec: SignalSpec<O>,
 }
 
-impl<T: Signal<S>, S: Sample, O: Sample> SampleTypeAdapter<T, S, O> {
+impl<S: Sample, T: Signal> SampleTypeAdapter<S, T> {
     pub fn new(signal: T) -> Self {
-        let spec = signal
-            .spec()
-            .into_builder()
-            .with_sample_type(O::ORIGIN)
-            .build()
-            .expect("invalid spec");
-        
-        let buffer = vec![S::ORIGIN; spec.samples_per_block()].into_boxed_slice();
-
-        Self {
-            signal,
-            buffer,
-            spec,
-        }
+        let buf_len = signal.spec().channels.count() as usize;
+        let buffer = vec![S::ORIGIN; buf_len].into_boxed_slice();
+        Self { signal, buffer }
     }
 }
 
-impl<T: Signal<S>, S: Sample, O: Sample> Signal<O> for SampleTypeAdapter<T, S, O> {
-    fn spec(&self) -> &SignalSpec<O> {
-        &self.spec
+impl<S: Sample, T: Signal> Signal for SampleTypeAdapter<S, T> {
+    fn spec(&self) -> &SignalSpec {
+        self.signal.spec()
     }
 }
 
-impl<T, S, O> SignalReader<O> for SampleTypeAdapter<T, S, O>
+impl<S, O, T> SignalReader<O> for SampleTypeAdapter<S, T>
 where
-    T: SignalReader<S>,
     S: Sample + IntoSample<O>,
     O: Sample,
+    T: SignalReader<S>,
 {
     fn read(&mut self, buffer: &mut [O]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
-        let n_blocks = self.signal.read(&mut self.buffer[..buf_len])?;
-        let n_samples = n_blocks * self.signal.spec().samples_per_block();
+        let n = self.signal.read(&mut self.buffer[..buf_len])?;
 
-        for (inner, outer) in self.buffer.iter().zip(buffer[..n_samples].iter_mut()) {
+        for (inner, outer) in self.buffer.iter().zip(buffer[..n].iter_mut()) {
             *outer = inner.into_sample();
         }
 
-        Ok(n_blocks)
+        Ok(n)
     }
 }
 
-impl<T, S, O> SignalWriter<O> for SampleTypeAdapter<T, S, O>
+impl<S: Sample + IntoKnownSample, T: SignalReader<S>> DynSignalReader for SampleTypeAdapter<S, T> {}
+
+impl<S, O, T> SignalWriter<O> for SampleTypeAdapter<S, T>
 where
-    T: SignalWriter<S>,
     S: Sample,
     O: Sample + IntoSample<S>,
+    T: SignalWriter<S>,
 {
     fn write(&mut self, buffer: &[O]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
@@ -68,8 +60,4 @@ where
     }
 }
 
-impl<T: Signal<S> + Seek, S: Sample, O: Sample> Seek for SampleTypeAdapter<T, S, O> {
-    fn seek(&mut self, offset: SeekFrom) -> io::Result<u64> {
-        self.signal.seek(offset)
-    }
-}
+impl<S: Sample + FromKnownSample, T: SignalWriter<S>> DynSignalWriter for SampleTypeAdapter<S, T> {}

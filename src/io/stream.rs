@@ -4,29 +4,23 @@ use crate::{
 };
 use std::{io::{Read, Write}, ops::{Deref, DerefMut}};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct StreamSpec {
     pub codec: SyphonCodec,
-    pub decoded_spec: SignalSpec<SampleType>,
-    pub block_size: usize,
     pub byte_len: Option<u64>,
+    pub decoded_spec: SignalSpec,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct StreamSpecBuilder {
     pub codec: Option<SyphonCodec>,
-    pub decoded_spec: SignalSpecBuilder<SampleType>,
-    pub block_size: Option<usize>,
     pub byte_len: Option<u64>,
+    pub decoded_spec: SignalSpecBuilder,
 }
 
 impl StreamSpec {
     pub fn builder() -> StreamSpecBuilder {
         StreamSpecBuilder::new()
-    }
-
-    pub fn n_blocks(&self) -> Option<u64> {
-        self.byte_len.map(|n| n / self.block_size as u64)
     }
 }
 
@@ -34,19 +28,10 @@ impl TryFrom<StreamSpecBuilder> for StreamSpec {
     type Error = SyphonError;
 
     fn try_from(builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
-        if builder
-            .block_size
-            .zip(builder.byte_len)
-            .map_or(false, |(b, n)| n % b as u64 != 0)
-        {
-            return Err(SyphonError::InvalidData);
-        }
-
         Ok(Self {
             codec: builder.codec.unwrap_or(SyphonCodec::Unknown),
-            decoded_spec: builder.decoded_spec.build()?,
-            block_size: builder.block_size.ok_or(SyphonError::InvalidData)?,
             byte_len: builder.byte_len,
+            decoded_spec: builder.decoded_spec.build()?,
         })
     }
 }
@@ -55,27 +40,15 @@ impl StreamSpecBuilder {
     pub fn new() -> Self {
         Self {
             codec: None,
-            decoded_spec: SignalSpecBuilder::new(),
-            block_size: None,
             byte_len: None,
+            decoded_spec: SignalSpecBuilder::new(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         self.codec.is_none()
+        && self.byte_len.is_none()
             && self.decoded_spec.is_empty()
-            && self.block_size.is_none()
-            && self.byte_len.is_none()
-    }
-
-    pub fn sample_type(&self) -> Option<SampleType> {
-        self.decoded_spec.sample_type()
-    }
-
-    pub fn n_blocks(&self) -> Option<u64> {
-        self.byte_len
-            .zip(self.block_size)
-            .map(|(n, b)| n / b as u64)
     }
 
     pub fn with_codec<T: Into<Option<SyphonCodec>>>(mut self, codec: T) -> Self {
@@ -83,21 +56,16 @@ impl StreamSpecBuilder {
         self
     }
 
-    pub fn with_decoded_spec<T: Into<SignalSpecBuilder<SampleType>>>(
+    pub fn with_byte_len<T: Into<Option<u64>>>(mut self, byte_len: T) -> Self {
+        self.byte_len = byte_len.into();
+        self
+    }
+
+    pub fn with_decoded_spec<T: Into<SignalSpecBuilder>>(
         mut self,
         decoded_spec: T,
     ) -> Self {
         self.decoded_spec = decoded_spec.into();
-        self
-    }
-
-    pub fn with_block_size<T: Into<Option<usize>>>(mut self, block_size: T) -> Self {
-        self.block_size = block_size.into();
-        self
-    }
-
-    pub fn with_byte_len<T: Into<Option<u64>>>(mut self, byte_len: T) -> Self {
-        self.byte_len = byte_len.into();
         self
     }
 
@@ -123,9 +91,8 @@ impl From<StreamSpec> for StreamSpecBuilder {
     fn from(spec: StreamSpec) -> Self {
         Self {
             codec: Some(spec.codec),
-            decoded_spec: spec.decoded_spec.into(),
-            block_size: Some(spec.block_size),
             byte_len: spec.byte_len,
+            decoded_spec: spec.decoded_spec.into(),
         }
     }
 }
@@ -136,15 +103,6 @@ pub trait Stream {
 
 pub trait StreamReader: Stream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError>;
-
-    fn as_decoder(&'static mut self) -> Result<TaggedSignalReader, SyphonError>
-    where
-        Self: Sized,
-        &'static mut Self: StreamReader,
-    {
-        let codec = self.spec().codec;
-        codec.construct_decoder(self)
-    }
 
     fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
     where
@@ -158,15 +116,6 @@ pub trait StreamReader: Stream {
 pub trait StreamWriter: Stream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
-
-    fn as_encoder(&'static mut self) -> Result<TaggedSignalWriter, SyphonError>
-    where
-        Self: Sized,
-        &'static mut Self: StreamWriter,
-    {
-        let codec = self.spec().codec;
-        codec.construct_encoder(self)
-    }
 
     fn into_encoder(self) -> Result<TaggedSignalWriter, SyphonError>
     where

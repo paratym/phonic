@@ -1,10 +1,10 @@
-mod codec;
+mod dyn_signal;
 mod format;
-mod signal;
+mod stream;
 
-pub use codec::*;
+pub use dyn_signal::*;
 pub use format::*;
-pub use signal::*;
+pub use stream::*;
 
 pub mod codecs;
 pub mod formats;

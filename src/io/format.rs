@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{io::Write, ops::{Deref, DerefMut}};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FormatData {
     pub format: SyphonFormat,
     pub tracks: Box<[StreamSpec]>,
@@ -53,12 +53,12 @@ impl FormatDataBuilder {
         self.format.is_none() && self.tracks.is_empty()
     }
 
-    pub fn with_format<T: Into<Option<SyphonFormat>>>(mut self, format: T) -> Self {
+    pub fn with_format(mut self, format: impl Into<Option<SyphonFormat>>) -> Self {
         self.format = format.into();
         self
     }
 
-    pub fn with_track<T: Into<StreamSpecBuilder>>(mut self, track: T) -> Self {
+    pub fn with_track(mut self, track: impl Into<StreamSpecBuilder>) -> Self {
         self.tracks.push(track.into());
         self
     }
@@ -114,12 +114,6 @@ pub trait Format {
     where
         Self: Sized,
     {
-        let spec = *self
-            .format_data()
-            .tracks
-            .get(i)
-            .ok_or(SyphonError::NotFound)?;
-
         Track::new(self, i)
     }
 

@@ -15,17 +15,17 @@ fn main() -> Result<(), SyphonError> {
         .and_then(|ext| ext.to_str())
         .map(|ext| FormatIdentifier::FileExtension(ext));
 
-    let mut decoder = SyphonFormat::resolve(&mut src_file, src_fmt_id)?
+    let mut decoder = SyphonFormat::resolve(&mut src_file, src_fmt_id.as_ref())?
         .construct_reader(src_file)?
         .into_default_track()?
         .into_decoder()?
-        .adapt_sample_type();
+        .into_dyn_signal();
 
     let dst_signal_spec = decoder
         .spec()
         .into_builder()
         .with_sample_type(SampleType::I16);
-    
+
     let dst_stream_spec = StreamSpec::builder().with_decoded_spec(dst_signal_spec);
     let dst_fmt_data = FormatData::builder()
         .with_format(SyphonFormat::Wave)
@@ -41,7 +41,7 @@ fn main() -> Result<(), SyphonError> {
         .into_default_track()?
         .into_encoder()?
         .unwrap_i16_signal()?;
-
+    
     let mut buf = [i16::ORIGIN; 1024];
     copy(&mut decoder, &mut encoder, &mut buf)
 }

@@ -1,0 +1,100 @@
+use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use std::time::Duration;
+
+pub struct DurationAdapter<T: Signal> {
+    signal: T,
+    spec: SignalSpec,
+    i: u64,
+    inner_consumed: bool,
+}
+
+impl<T: Signal> DurationAdapter<T> {
+    pub fn new(signal: T, n_frames: Option<u64>) -> Self {
+        let mut spec = *signal.spec();
+        spec.n_frames = n_frames;
+
+        Self {
+            signal,
+            spec,
+            i: 0,
+            inner_consumed: false,
+        }
+    }
+
+    pub fn from_duration(signal: T, duration: Duration) -> Self {
+        let hz = signal.spec().frame_rate;
+        let n_frames = (hz as f64 * duration.as_secs_f64()) as u64;
+        Self::new(signal, Some(n_frames))
+    }
+}
+
+impl<T: Signal> Signal for DurationAdapter<T> {
+    fn spec(&self) -> &SignalSpec {
+        &self.spec
+    }
+}
+
+impl<T: SignalReader<S>, S: Sample> SignalReader<S> for DurationAdapter<T> {
+    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+        if self.spec.n_samples().is_some_and(|n| self.i >= n) {
+            return Ok(0);
+        }
+
+        let n_samples = self
+            .spec
+            .n_samples()
+            .map(|n| ((n - self.i) as usize).min(buffer.len()))
+            .unwrap_or(buffer.len());
+
+        let buffer = &mut buffer[..n_samples];
+
+        if !self.inner_consumed {
+            match self.signal.read(buffer) {
+                Ok(0) => {
+                    self.inner_consumed = true;
+                }
+                Ok(n) => {
+                    self.i += n as u64;
+                    return Ok(n);
+                }
+                err => return err,
+            }
+        }
+
+        buffer.fill(S::ORIGIN);
+        self.i += buffer.len() as u64;
+        return Ok(buffer.len());
+    }
+}
+
+impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for DurationAdapter<T> {
+    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+        if self.spec.n_samples().is_some_and(|n| self.i >= n) {
+            return Ok(0);
+        }
+
+        let n_samples = self
+            .spec
+            .n_samples()
+            .map(|n| ((n - self.i) as usize).min(buffer.len()))
+            .unwrap_or(buffer.len());
+
+        let buffer = &buffer[..n_samples];
+
+        if !self.inner_consumed {
+            match self.signal.write(buffer) {
+                Ok(0) => {
+                    self.inner_consumed = true;
+                }
+                Ok(n) => {
+                    self.i += n as u64;
+                    return Ok(n);
+                }
+                err => return err,
+            }
+        }
+
+        self.i += buffer.len() as u64;
+        return Ok(buffer.len());
+    }
+}

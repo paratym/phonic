@@ -1,12 +1,12 @@
 use crate::{Channels, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 use std::io::{self, Seek, SeekFrom};
 
-pub struct ChannelsAdapter<T: Signal<S>, S: Sample> {
+pub struct ChannelsAdapter<T: Signal> {
     signal: T,
-    spec: SignalSpec<S>,
+    spec: SignalSpec,
 }
 
-impl<T: Signal<S>, S: Sample> ChannelsAdapter<T, S> {
+impl<T: Signal> ChannelsAdapter<T> {
     pub fn new(signal: T, channels: Channels) -> Self {
         let mut spec = *signal.spec();
         spec.channels = channels;
@@ -15,26 +15,20 @@ impl<T: Signal<S>, S: Sample> ChannelsAdapter<T, S> {
     }
 }
 
-impl<T: Signal<S>, S: Sample> Signal<S> for ChannelsAdapter<T, S> {
-    fn spec(&self) -> &SignalSpec<S> {
+impl<T: Signal> Signal for ChannelsAdapter<T> {
+    fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<T: SignalReader<S>, S: Sample> SignalReader<S> for ChannelsAdapter<T, S> {
+impl<S: Sample, T: SignalReader<S>> SignalReader<S> for ChannelsAdapter<T> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
         todo!()
     }
 }
 
-impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for ChannelsAdapter<T, S> {
+impl<S: Sample, T: SignalWriter<S>> SignalWriter<S> for ChannelsAdapter<T> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        todo!()
-    }
-}
-
-impl<T: Signal<S> + Seek, S: Sample> Seek for ChannelsAdapter<T, S> {
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
         todo!()
     }
 }

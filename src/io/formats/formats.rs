@@ -10,10 +10,22 @@ use std::{
     io::{Read, Seek, Write},
 };
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub enum SyphonFormat {
     Wave,
     Unknown,
+}
+
+pub struct FormatIdentifiers {
+    pub file_extensions: &'static [&'static str],
+    pub mime_types: &'static [&'static str],
+    pub markers: &'static [&'static [u8]],
+}
+
+#[derive(Clone, Copy)]
+pub enum FormatIdentifier<'a> {
+    FileExtension(&'a str),
+    MimeType(&'a str),
 }
 
 impl SyphonFormat {
@@ -65,30 +77,18 @@ impl SyphonFormat {
 
     pub fn resolve(
         mut source: impl Read + Seek,
-        identifier: Option<FormatIdentifier>,
+        identifier: Option<&FormatIdentifier>,
     ) -> Result<Self, SyphonError> {
         if let Some(id) = identifier {
             return Self::all()
                 .iter()
-                .find(|fmt| fmt.identifiers().contains(&id))
+                .find(|fmt| fmt.identifiers().contains(id))
                 .copied()
                 .ok_or(SyphonError::Unsupported);
         }
 
         todo!()
     }
-}
-
-pub struct FormatIdentifiers {
-    pub file_extensions: &'static [&'static str],
-    pub mime_types: &'static [&'static str],
-    pub markers: &'static [&'static [u8]],
-}
-
-#[derive(Clone, Copy)]
-pub enum FormatIdentifier<'a> {
-    FileExtension(&'a str),
-    MimeType(&'a str),
 }
 
 impl FormatIdentifiers {

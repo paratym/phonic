@@ -2,5 +2,8 @@ pub mod wave;
 
 pub use wave::Wave;
 
-mod format;
-pub use format::*;
+mod formats;
+mod wrapper;
+
+pub use formats::*;
+pub use wrapper::*;

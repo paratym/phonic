@@ -1,12 +1,11 @@
 use crate::{Sample, SignalReader, SignalWriter, SyphonError};
 
 pub fn copy<S: Sample>(
-    reader: &mut dyn SignalReader<S>,
-    writer: &mut dyn SignalWriter<S>,
+    reader: &mut impl SignalReader<S>,
+    writer: &mut impl SignalWriter<S>,
     mut buffer: &mut [S],
 ) -> Result<(), SyphonError> {
     let spec = reader.spec();
-    let samples_per_block = spec.samples_per_block();
     // TODO: determine spec compatibility
     // if spec != writer.spec() {
     //     return Err(SyphonError::SignalMismatch);
@@ -16,7 +15,7 @@ pub fn copy<S: Sample>(
     loop {
         n = match reader.read(&mut buffer) {
             Ok(0) => return Ok(()),
-            Ok(n) => n * samples_per_block,
+            Ok(n) => n,
             Err(SyphonError::EndOfStream) => return Ok(()),
             Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
             Err(e) => return Err(e),

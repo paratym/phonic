@@ -3,12 +3,12 @@ use std::{
     io::{self, Seek, SeekFrom},
 };
 
-pub struct FrameRateAdapter<T: Signal<S>, S: Sample> {
+pub struct FrameRateAdapter<T: Signal> {
     signal: T,
-    spec: SignalSpec<S>,
+    spec: SignalSpec,
 }
 
-impl<T: Signal<S>, S: Sample> FrameRateAdapter<T, S> {
+impl<T: Signal> FrameRateAdapter<T> {
     pub fn new(signal: T, frame_rate: u32) -> Self {
         let mut spec = *signal.spec();
         spec.frame_rate = frame_rate;
@@ -17,26 +17,20 @@ impl<T: Signal<S>, S: Sample> FrameRateAdapter<T, S> {
     }
 }
 
-impl<T: Signal<S>, S: Sample> Signal<S> for FrameRateAdapter<T, S> {
-    fn spec(&self) -> &SignalSpec<S> {
+impl<T: Signal> Signal for FrameRateAdapter<T> {
+    fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<T: SignalReader<S>, S: Sample> SignalReader<S> for FrameRateAdapter<T, S> {
+impl<T: SignalReader<S>, S: Sample> SignalReader<S> for FrameRateAdapter<T> {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
         todo!()
     }
 }
 
-impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for FrameRateAdapter<T, S> {
+impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for FrameRateAdapter<T> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
-        todo!()
-    }
-}
-
-impl<T: Signal<S> + Seek, S: Sample> Seek for FrameRateAdapter<T, S> {
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
         todo!()
     }
 }

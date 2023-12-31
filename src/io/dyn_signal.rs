@@ -1,6 +1,5 @@
 use crate::{
-    dsp::adapters::SampleTypeAdapter, FromKnownSample, IntoKnownSample, Signal, SignalReader,
-    SignalSpec, SignalWriter, SyphonError,
+    dsp::adapters::SampleTypeAdapter, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
 };
 
 pub enum TaggedSignalReader {
@@ -33,6 +32,34 @@ pub enum TaggedSignalWriter {
     F64(Box<dyn SignalWriter<f64>>),
 }
 
+pub trait DynSignalReader:
+    SignalReader<i8>
+    + SignalReader<i16>
+    + SignalReader<i32>
+    + SignalReader<i64>
+    + SignalReader<u8>
+    + SignalReader<u16>
+    + SignalReader<u32>
+    + SignalReader<u64>
+    + SignalReader<f32>
+    + SignalReader<f64>
+{
+}
+
+pub trait DynSignalWriter:
+    SignalWriter<i8>
+    + SignalWriter<i16>
+    + SignalWriter<i32>
+    + SignalWriter<i64>
+    + SignalWriter<u8>
+    + SignalWriter<u16>
+    + SignalWriter<u32>
+    + SignalWriter<u64>
+    + SignalWriter<f32>
+    + SignalWriter<f64>
+{
+}
+
 macro_rules! match_signal_ref {
     ($ref:ident, $self:ident, $inner:pat, $rhs:expr) => {
         match $ref {
@@ -51,14 +78,14 @@ macro_rules! match_signal_ref {
 }
 
 macro_rules! impl_unwrap {
-  ($self:ident, $inner:ident, $name:ident, $sample:ty, $variant:ident) => {
-      pub fn $name(self) -> Result<Box<dyn $inner<$sample>>, SyphonError> {
-          match self {
-              $self::$variant(signal) => Ok(signal),
-              _ => Err(SyphonError::SignalMismatch),
-          }
-      }
-  };
+    ($self:ident, $inner:ident, $name:ident, $sample:ty, $variant:ident) => {
+        pub fn $name(self) -> Result<Box<dyn $inner<$sample>>, SyphonError> {
+            match self {
+                $self::$variant(signal) => Ok(signal),
+                _ => Err(SyphonError::SignalMismatch),
+            }
+        }
+    };
 }
 
 macro_rules! impl_from_inner {
@@ -72,22 +99,14 @@ macro_rules! impl_from_inner {
 }
 
 macro_rules! impl_signal_ref {
-    ($self:ident, $inner:ident) => {
+    ($self:ident, $inner:ident, $adapter:ident) => {
         impl $self {
             pub fn spec(&self) -> SignalSpec {
                 match_signal_ref!(self, Self, ref signal, (*signal.spec()).into())
             }
 
-            pub fn adapt_sample_type<O>(self) -> Box<dyn $inner<O>>
-            where
-                O: FromKnownSample + IntoKnownSample + 'static,
-            {
-                match_signal_ref!(
-                    self,
-                    Self,
-                    signal,
-                    Box::new(SampleTypeAdapter::new(signal))
-                )
+            pub fn into_dyn_signal(self) -> Box<dyn $adapter> {
+                match_signal_ref!(self, Self, signal, Box::new(SampleTypeAdapter::new(signal)))
             }
 
             impl_unwrap!($self, $inner, unwrap_i8_signal, i8, I8);
@@ -119,5 +138,5 @@ macro_rules! impl_signal_ref {
     };
 }
 
-impl_signal_ref!(TaggedSignalReader, SignalReader);
-impl_signal_ref!(TaggedSignalWriter, SignalWriter);
+impl_signal_ref!(TaggedSignalReader, SignalReader, DynSignalReader);
+impl_signal_ref!(TaggedSignalWriter, SignalWriter, DynSignalWriter);
