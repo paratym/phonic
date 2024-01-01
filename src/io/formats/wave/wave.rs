@@ -1,12 +1,11 @@
 use crate::{
     io::{
         formats::{wave::WaveHeader, FormatIdentifiers, FormatWrapper},
-        Format, FormatData, FormatDataBuilder, FormatReadResult, FormatReader, FormatWriter,
-        Stream, StreamSpec, SyphonCodec,
+        FormatDataBuilder, StreamSpec, SyphonCodec,
     },
-    SampleType, SyphonError,
+    SyphonError,
 };
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Write};
 
 pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
@@ -14,28 +13,13 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub fn fill_wave_data(data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
-    if data.tracks.len() != 1 {
-        return Err(SyphonError::Unsupported);
-    }
-
-    let track = data.tracks.first_mut().unwrap();
-    if track.codec.is_some_and(|codec| codec != SyphonCodec::Pcm) {
-        return Err(SyphonError::Unsupported);
-    }
-
-    track.codec = Some(SyphonCodec::Pcm);
-
-    Ok(())
-}
-
-pub struct Wave<T> {
+pub struct WaveFormat<T> {
     header: WaveHeader,
     inner: T,
     i: usize,
 }
 
-impl<T> Wave<T> {
+impl<T> WaveFormat<T> {
     pub fn read(mut inner: T) -> Result<Self, SyphonError>
     where
         T: Read,
@@ -70,13 +54,9 @@ impl<T> Wave<T> {
         let data = FormatDataBuilder::from(self.header).build()?;
         Ok(FormatWrapper::new(self, data))
     }
-
-    // pub fn into_stream(self) -> Result<WaveStream<T>, SyphonError> {
-    //     WaveStream::try_from(self)
-    // }
 }
 
-impl<T: Read> Read for Wave<T> {
+impl<T: Read> Read for WaveFormat<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut buf_len = buf.len();
         buf_len = buf_len.min(self.header.data.byte_len as usize - self.i);
@@ -93,7 +73,7 @@ impl<T: Read> Read for Wave<T> {
     }
 }
 
-impl<T: Write> Write for Wave<T> {
+impl<T: Write> Write for WaveFormat<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut buf_len = buf.len();
         buf_len = buf_len.min(self.header.data.byte_len as usize - self.i);

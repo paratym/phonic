@@ -1,5 +1,8 @@
-use crate::{Sample, SampleType, SyphonError, KnownSample};
-use std::{ops::{BitAnd, BitOr, BitXor, Deref, DerefMut}, time::Duration};
+use crate::{KnownSample, Sample, SampleType, SyphonError};
+use std::{
+    ops::{BitAnd, BitOr, BitXor, Deref, DerefMut},
+    time::Duration,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
@@ -15,7 +18,7 @@ pub struct ChannelLayout {
 /// A set of parameters that describes a pcm signal
 #[derive(Copy, Clone, Debug)]
 pub struct SignalSpec {
-    pub sample_type: Option<SampleType>,
+    pub sample_type: SampleType,
 
     /// The number of samples per channel per second.
     pub frame_rate: u32,
@@ -160,7 +163,7 @@ impl TryFrom<SignalSpecBuilder> for SignalSpec {
 
     fn try_from(builder: SignalSpecBuilder) -> Result<Self, Self::Error> {
         Ok(Self {
-            sample_type: builder.sample_type,
+            sample_type: builder.sample_type.ok_or(SyphonError::InvalidData)?,
             channels: builder.channels.ok_or(SyphonError::InvalidData)?,
             frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
             n_frames: builder.n_frames,
@@ -211,6 +214,14 @@ impl SignalSpecBuilder {
         self
     }
 
+    pub fn with_duration(mut self, duration: Duration) -> Self {
+        self.n_frames = self
+            .frame_rate
+            .map(|hz| (hz as f64 * duration.as_secs_f64()) as u64);
+        
+        self
+    }
+
     pub fn build(self) -> Result<SignalSpec, SyphonError>
     where
         Self: TryInto<SignalSpec, Error = SyphonError>,
@@ -222,7 +233,7 @@ impl SignalSpecBuilder {
 impl From<SignalSpec> for SignalSpecBuilder {
     fn from(spec: SignalSpec) -> Self {
         Self {
-            sample_type: spec.sample_type,
+            sample_type: Some(spec.sample_type),
             frame_rate: Some(spec.frame_rate),
             channels: Some(spec.channels),
             n_frames: spec.n_frames,
@@ -246,7 +257,7 @@ pub trait SignalReader<S: Sample>: Signal {
                 Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
-        };
+        }
 
         if n_read != buffer.len() {
             return Err(SyphonError::EndOfStream);
@@ -258,6 +269,7 @@ pub trait SignalReader<S: Sample>: Signal {
 
 pub trait SignalWriter<S: Sample>: Signal {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
+    fn flush(&mut self) -> Result<(), SyphonError>;
 
     fn write_exact(&mut self, buffer: &[S]) -> Result<(), SyphonError> {
         let mut n_written: usize = 0;
@@ -268,7 +280,7 @@ pub trait SignalWriter<S: Sample>: Signal {
                 Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
-        };
+        }
 
         if n_written != buffer.len() {
             return Err(SyphonError::EndOfStream);
@@ -281,7 +293,7 @@ pub trait SignalWriter<S: Sample>: Signal {
 impl<T> Signal for T
 where
     T: Deref,
-    T::Target: Signal
+    T::Target: Signal,
 {
     fn spec(&self) -> &SignalSpec {
         self.deref().spec()
@@ -292,7 +304,7 @@ impl<S, T> SignalReader<S> for T
 where
     S: Sample,
     T: DerefMut,
-    T::Target: SignalReader<S>
+    T::Target: SignalReader<S>,
 {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
         self.deref_mut().read(buffer)
@@ -303,9 +315,13 @@ impl<S, T> SignalWriter<S> for T
 where
     S: Sample,
     T: DerefMut,
-    T::Target: SignalWriter<S>
+    T::Target: SignalWriter<S>,
 {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
         self.deref_mut().write(buffer)
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        self.deref_mut().flush()
     }
 }

@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::{
-    io::{Format, FormatReader, FormatWriter, Stream, StreamSpec, StreamReader, StreamWriter},
+    io::{Format, FormatReader, FormatWriter, Stream, StreamReader, StreamSpec, StreamWriter},
     SyphonError,
 };
 

@@ -1,8 +1,11 @@
 use crate::{
-    io::{TaggedSignalReader, TaggedSignalWriter, SyphonCodec},
+    io::{SyphonCodec, TaggedSignalReader, TaggedSignalWriter},
     SampleType, SignalSpec, SignalSpecBuilder, SyphonError,
 };
-use std::{io::{Read, Write}, ops::{Deref, DerefMut}};
+use std::{
+    io::{Read, Write},
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct StreamSpec {
@@ -46,40 +49,22 @@ impl StreamSpecBuilder {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.codec.is_none()
-        && self.byte_len.is_none()
-            && self.decoded_spec.is_empty()
+        self.codec.is_none() && self.byte_len.is_none() && self.decoded_spec.is_empty()
     }
 
-    pub fn with_codec<T: Into<Option<SyphonCodec>>>(mut self, codec: T) -> Self {
-        self.codec = codec.into();
+    pub fn with_codec(mut self, codec: impl Into<SyphonCodec>) -> Self {
+        self.codec = Some(codec.into());
         self
     }
 
-    pub fn with_byte_len<T: Into<Option<u64>>>(mut self, byte_len: T) -> Self {
+    pub fn with_byte_len(mut self, byte_len: impl Into<Option<u64>>) -> Self {
         self.byte_len = byte_len.into();
         self
     }
 
-    pub fn with_decoded_spec<T: Into<SignalSpecBuilder>>(
-        mut self,
-        decoded_spec: T,
-    ) -> Self {
+    pub fn with_decoded_spec(mut self, decoded_spec: impl Into<SignalSpecBuilder>) -> Self {
         self.decoded_spec = decoded_spec.into();
         self
-    }
-
-    pub fn fill(&mut self) -> Result<(), SyphonError> {
-        if let Some(codec) = self.codec {
-            codec.fill_spec(self)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn filled(mut self) -> Result<Self, SyphonError> {
-        self.fill()?;
-        Ok(self)
     }
 
     pub fn build(self) -> Result<StreamSpec, SyphonError> {

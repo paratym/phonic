@@ -1,6 +1,5 @@
 use crate::{
-    io::{DynSignalReader, DynSignalWriter},
-    FromKnownSample, IntoKnownSample, IntoSample, Sample, Signal, SignalReader, SignalSpec,
+    IntoSample, Sample, Signal, SignalReader, SignalSpec,
     SignalWriter, SyphonError,
 };
 
@@ -41,8 +40,6 @@ where
     }
 }
 
-impl<S: Sample + IntoKnownSample, T: SignalReader<S>> DynSignalReader for SampleTypeAdapter<S, T> {}
-
 impl<S, O, T> SignalWriter<O> for SampleTypeAdapter<S, T>
 where
     S: Sample,
@@ -58,6 +55,8 @@ where
 
         self.signal.write(&self.buffer[..buf_len])
     }
-}
 
-impl<S: Sample + FromKnownSample, T: SignalWriter<S>> DynSignalWriter for SampleTypeAdapter<S, T> {}
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        self.signal.flush()
+    }
+}

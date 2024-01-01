@@ -1,7 +1,6 @@
 use crate::{
     io::{
-        codecs::pcm::fill_pcm_spec, StreamReader, StreamSpecBuilder, StreamWriter,
-        TaggedSignalReader, TaggedSignalWriter,
+        codecs::pcm::PcmCodec, StreamReader, StreamWriter, TaggedSignalReader, TaggedSignalWriter,
     },
     SyphonError,
 };
@@ -13,19 +12,14 @@ pub enum SyphonCodec {
 }
 
 impl SyphonCodec {
-    pub fn fill_spec(&self, spec: &mut StreamSpecBuilder) -> Result<(), SyphonError> {
-        match self {
-            SyphonCodec::Pcm => fill_pcm_spec(spec),
-            SyphonCodec::Unknown => Ok(()),
-        }
-    }
-
     pub fn construct_decoder(
         &self,
         reader: impl StreamReader + 'static,
     ) -> Result<TaggedSignalReader, SyphonError> {
         match self {
-            // SyphonCodec::Pcm ,
+            SyphonCodec::Pcm => {
+                TaggedSignalReader::from_dyn_signal(Box::new(PcmCodec::new(reader)?))
+            }
             _ => Err(SyphonError::Unsupported),
         }
     }
@@ -35,8 +29,16 @@ impl SyphonCodec {
         writer: impl StreamWriter + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError> {
         match self {
-            // SyphonCodec::Pcm => construct_pcm_signal_writer_ref(writer),
+            SyphonCodec::Pcm => {
+                TaggedSignalWriter::from_dyn_signal(Box::new(PcmCodec::new(writer)?))
+            }
             _ => Err(SyphonError::Unsupported),
         }
+    }
+}
+
+impl Default for SyphonCodec {
+    fn default() -> Self {
+        Self::Unknown
     }
 }

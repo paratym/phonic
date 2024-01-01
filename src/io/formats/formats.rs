@@ -1,6 +1,7 @@
 use crate::{
     io::{
-        formats::wave::{fill_wave_data, Wave, WAVE_IDENTIFIERS},
+        format,
+        formats::wave::{WaveFormat, WAVE_IDENTIFIERS},
         FormatData, FormatDataBuilder, FormatReader, FormatWriter,
     },
     SyphonError,
@@ -24,6 +25,7 @@ pub struct FormatIdentifiers {
 
 #[derive(Clone, Copy)]
 pub enum FormatIdentifier<'a> {
+    None,
     FileExtension(&'a str),
     MimeType(&'a str),
 }
@@ -47,19 +49,12 @@ impl SyphonFormat {
         }
     }
 
-    pub fn fill_data(&self, data: &mut FormatDataBuilder) -> Result<(), SyphonError> {
-        match self {
-            SyphonFormat::Wave => fill_wave_data(data),
-            SyphonFormat::Unknown => Ok(()),
-        }
-    }
-
     pub fn construct_reader(
         &self,
-        source: impl Read + 'static,
+        inner: impl Read + Seek + 'static,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         Ok(match self {
-            SyphonFormat::Wave => Box::new(Wave::read(source)?.into_format()?),
+            SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()?),
             SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
         })
     }
@@ -67,27 +62,40 @@ impl SyphonFormat {
     pub fn construct_writer(
         &self,
         inner: impl Write + 'static,
-        data: FormatData,
+        mut data: FormatDataBuilder,
     ) -> Result<Box<dyn FormatWriter>, SyphonError> {
+        if data.format.is_some_and(|f| f != *self) {
+            return Err(SyphonError::InvalidData);
+        }
+
+        data = data.with_format(*self);
+
         Ok(match self {
-            SyphonFormat::Wave => Box::new(Wave::write(inner, data.try_into()?)?.into_format()?),
+            SyphonFormat::Wave => {
+                Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format()?)
+            }
             SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
         })
     }
 
-    pub fn resolve(
-        mut source: impl Read + Seek,
-        identifier: Option<&FormatIdentifier>,
-    ) -> Result<Self, SyphonError> {
-        if let Some(id) = identifier {
-            return Self::all()
-                .iter()
-                .find(|fmt| fmt.identifiers().contains(id))
-                .copied()
-                .ok_or(SyphonError::Unsupported);
-        }
-
+    pub fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError> {
         todo!()
+    }
+}
+
+impl Default for SyphonFormat {
+    fn default() -> Self {
+        SyphonFormat::Unknown
+    }
+}
+
+impl<'a> From<&FormatIdentifier<'a>> for SyphonFormat {
+    fn from(identifier: &FormatIdentifier) -> Self {
+        Self::all()
+            .iter()
+            .find(|fmt| fmt.identifiers().contains(identifier))
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -96,6 +104,13 @@ impl FormatIdentifiers {
         match identifier {
             FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
             FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
+            FormatIdentifier::None => false,
         }
+    }
+}
+
+impl<'a> Default for FormatIdentifier<'a> {
+    fn default() -> Self {
+        FormatIdentifier::None
     }
 }

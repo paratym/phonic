@@ -31,4 +31,8 @@ impl<S: Sample, T: SignalWriter<S>> SignalWriter<S> for ChannelsAdapter<T> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
         todo!()
     }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        todo!()
+    }
 }

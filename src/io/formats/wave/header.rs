@@ -169,42 +169,56 @@ impl From<WaveHeader> for FormatDataBuilder {
     }
 }
 
-impl TryFrom<FormatData> for WaveHeader {
+impl TryFrom<FormatDataBuilder> for WaveHeader {
     type Error = SyphonError;
 
-    fn try_from(data: FormatData) -> Result<Self, Self::Error> {
+    fn try_from(mut data: FormatDataBuilder) -> Result<Self, Self::Error> {
         if data.tracks.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
 
-        let spec = &data.tracks[0];
+        let spec = &mut data.tracks[0];
+
+        spec.codec = spec.codec.or(Some(SyphonCodec::Pcm));
         let sample_type = spec
             .decoded_spec
             .sample_type
             .ok_or(SyphonError::Unsupported)?;
 
         let format_tag = match (spec.codec, sample_type) {
-            (SyphonCodec::Pcm, SampleType::U8) => 1,
-            (SyphonCodec::Pcm, SampleType::I16) => 1,
-            (SyphonCodec::Pcm, SampleType::I32) => 1,
-            (SyphonCodec::Pcm, SampleType::F32) => 3,
-            (SyphonCodec::Pcm, SampleType::F64) => 3,
+            (Some(SyphonCodec::Pcm), SampleType::U8) => 1,
+            (Some(SyphonCodec::Pcm), SampleType::I16) => 1,
+            (Some(SyphonCodec::Pcm), SampleType::I32) => 1,
+            (Some(SyphonCodec::Pcm), SampleType::F32) => 3,
+            (Some(SyphonCodec::Pcm), SampleType::F64) => 3,
             _ => return Err(SyphonError::Unsupported),
         };
+
+        let n_channels = spec
+            .decoded_spec
+            .channels
+            .ok_or(SyphonError::InvalidData)?
+            .count() as u16;
+
+        let sample_rate = spec
+            .decoded_spec
+            .frame_rate
+            .ok_or(SyphonError::InvalidData)?;
 
         Ok(Self {
             fmt: FmtChunk {
                 format_tag,
-                n_channels: spec.decoded_spec.channels.count() as u16,
-                sample_rate: spec.decoded_spec.frame_rate,
-                avg_byte_rate: spec.decoded_spec.frame_rate * sample_type.byte_size() as u32,
-                block_align: sample_type.byte_size() as u16 * spec.decoded_spec.channels.count() as u16,
+                n_channels,
+                sample_rate,
+                avg_byte_rate: sample_rate * sample_type.byte_size() as u32,
+                block_align: sample_type.byte_size() as u16 * n_channels,
                 bits_per_sample: sample_type.byte_size() as u16 * 8,
                 ext: None,
             },
-            fact: spec.decoded_spec.n_frames.map(|n| FactChunk {
-                n_frames: n as u32,
-            }),
+            fact: spec
+                .decoded_spec
+                .n_frames
+                .map(|n| FactChunk { n_frames: n as u32 }),
             data: DataChunk {
                 byte_len: spec.byte_len.ok_or(SyphonError::Unsupported)? as u32,
             },
@@ -260,7 +274,7 @@ impl FmtChunk {
     fn write(&self, buf: &mut [u8]) -> Result<usize, SyphonError> {
         let byte_len = self.byte_len() as usize;
         if buf.len() < byte_len {
-            return Err(SyphonError::InvalidInput);
+            return Err(SyphonError::InvalidData);
         }
 
         buf[0..2].copy_from_slice(&self.format_tag.to_le_bytes());

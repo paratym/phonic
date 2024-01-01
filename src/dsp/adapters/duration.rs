@@ -22,8 +22,7 @@ impl<T: Signal> DurationAdapter<T> {
     }
 
     pub fn from_duration(signal: T, duration: Duration) -> Self {
-        let hz = signal.spec().frame_rate;
-        let n_frames = (hz as f64 * duration.as_secs_f64()) as u64;
+        let n_frames = (signal.spec().frame_rate as f64 * duration.as_secs_f64()) as u64;
         Self::new(signal, Some(n_frames))
     }
 }
@@ -96,5 +95,9 @@ impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for DurationAdapter<T> {
 
         self.i += buffer.len() as u64;
         return Ok(buffer.len());
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        self.signal.flush()
     }
 }

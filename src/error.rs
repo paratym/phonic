@@ -2,7 +2,6 @@ use std::{error::Error, fmt::Display, io};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SyphonError {
-    InvalidInput,
     InvalidData,
     Unsupported,
     SignalMismatch,
@@ -19,7 +18,6 @@ impl Error for SyphonError {}
 impl Display for SyphonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidInput => write!(f, "invalid input"),
             Self::InvalidData => write!(f, "invalid data"),
             Self::Unsupported => write!(f, "unsupported"),
             Self::SignalMismatch => write!(f, "signal mismatch"),
@@ -36,7 +34,6 @@ impl Display for SyphonError {
 impl From<io::Error> for SyphonError {
     fn from(error: io::Error) -> Self {
         match error.kind() {
-            io::ErrorKind::InvalidInput => Self::InvalidInput,
             io::ErrorKind::InvalidData => Self::InvalidData,
             io::ErrorKind::Unsupported => Self::Unsupported,
             io::ErrorKind::NotFound => Self::NotFound,
@@ -51,7 +48,6 @@ impl From<io::Error> for SyphonError {
 impl From<SyphonError> for io::Error {
     fn from(e: SyphonError) -> Self {
         let kind = match e {
-            SyphonError::InvalidInput => io::ErrorKind::InvalidInput,
             SyphonError::InvalidData => io::ErrorKind::InvalidData,
             SyphonError::Unsupported => io::ErrorKind::Unsupported,
             SyphonError::SignalMismatch => io::ErrorKind::InvalidData,

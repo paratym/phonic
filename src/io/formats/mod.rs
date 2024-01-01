@@ -1,6 +1,6 @@
 pub mod wave;
 
-pub use wave::Wave;
+pub use wave::WaveFormat;
 
 mod formats;
 mod wrapper;

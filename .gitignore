@@ -4,3 +4,4 @@ generated
 .idea
 .vscode
 .DS_Store
+.direnv

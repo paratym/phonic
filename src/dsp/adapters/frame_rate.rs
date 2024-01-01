@@ -1,7 +1,5 @@
 use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::{
-    io::{self, Seek, SeekFrom},
-};
+use std::io::{self, Seek, SeekFrom};
 
 pub struct FrameRateAdapter<T: Signal> {
     signal: T,
@@ -31,6 +29,10 @@ impl<T: SignalReader<S>, S: Sample> SignalReader<S> for FrameRateAdapter<T> {
 
 impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for FrameRateAdapter<T> {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
         todo!()
     }
 }

@@ -1,13 +1,13 @@
 use crate::{FromSample, IntoSample, Sample, Signal, SignalReader, SignalSpec, SyphonError};
 use std::f32::consts::PI;
 
-pub struct Sine {
+pub struct SineGenerator {
     spec: SignalSpec,
     frequency: f32,
     i: u64,
 }
 
-impl Sine {
+impl SineGenerator {
     pub fn new(spec: SignalSpec, frequency: f32) -> Self {
         Self {
             spec,
@@ -17,13 +17,13 @@ impl Sine {
     }
 }
 
-impl Signal for Sine {
+impl Signal for SineGenerator {
     fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<S: Sample + FromSample<f32>> SignalReader<S> for Sine {
+impl<S: Sample + FromSample<f32>> SignalReader<S> for SineGenerator {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
         let buf_len = self
             .spec
