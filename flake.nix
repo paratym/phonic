@@ -14,7 +14,6 @@
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            nodejs
             rust-bin.stable.latest.default
           ];
           buildInputs = with pkgs; [];

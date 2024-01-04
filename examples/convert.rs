@@ -1,10 +1,13 @@
-use std::{fs::File, path::Path};
+use std::{
+    fs::{create_dir_all, File},
+    path::Path,
+};
 use syphon::{
     io::{
-        formats::FormatIdentifier, utils::copy, Format, FormatData, StreamReader, StreamSpec,
-        StreamWriter, TryIntoFormatReader, TryIntoFormatWriter,
+        formats::FormatIdentifier, utils::copy, Format, FormatData, IntoFormatReader,
+        IntoFormatWriter, Stream, StreamSpec,
     },
-    Sample, SampleType, Signal, SyphonError,
+    Sample, SampleType, SyphonError,
 };
 
 fn main() -> Result<(), SyphonError> {
@@ -12,34 +15,35 @@ fn main() -> Result<(), SyphonError> {
     let src_fmt_id = src_path
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| FormatIdentifier::FileExtension(ext))
-        .unwrap_or_default();
+        .map(|ext| FormatIdentifier::FileExtension(ext));
 
     let mut decoder = File::open(src_path)?
-        .try_into_format_reader(&src_fmt_id)?
+        .resolve_format_reader(src_fmt_id.as_ref())?
         .into_default_track()?
         .into_decoder()?
         .into_adapter();
 
     let dst_path = Path::new("./examples/generated/sine_converted.wav");
-    let dst_fmt_id = dst_path
+    create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
+
+    let dst_fmt = dst_path
         .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| FormatIdentifier::FileExtension(ext))
-        .unwrap_or_default();
+        .and_then(|ref id| id.try_into().ok())
+        .ok_or(SyphonError::Unsupported)?;
 
-    let dst_signal_spec = decoder
-        .spec()
-        .into_builder()
-        .with_sample_type(SampleType::I16);
+    let dst_stream_spec = StreamSpec::new()
+        .with_sample_type(SampleType::I16)
+        .with_decoded_spec((*decoder.spec()).into());
 
-    let dst_stream_spec = StreamSpec::builder().with_decoded_spec(dst_signal_spec);
-    let dst_fmt_data = FormatData::builder()
-        .with_format(&dst_fmt_id)
-        .with_track(dst_stream_spec);
+    let dst_fmt_data = FormatData::new()
+        .with_format(dst_fmt)
+        .with_track(dst_stream_spec)
+        .filled()?;
 
     let mut encoder = File::create(dst_path)?
-        .try_into_format_writer(dst_fmt_data)?
+        .into_format_writer(dst_fmt_data)?
         .into_default_track()?
         .into_encoder()?
         .unwrap_i16_signal()?;

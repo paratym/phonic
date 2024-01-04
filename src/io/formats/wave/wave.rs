@@ -1,7 +1,8 @@
 use crate::{
     io::{
-        formats::{wave::WaveHeader, FormatIdentifiers, FormatWrapper},
-        FormatDataBuilder, StreamSpec, SyphonCodec,
+        formats::{wave::WaveHeader, FormatIdentifiers},
+        utils::SingleStreamFormat,
+        FormatData, SyphonCodec, SyphonFormat,
     },
     SyphonError,
 };
@@ -12,6 +13,20 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
     markers: &[b"RIFF", b"WAVE"],
 };
+
+pub fn fill_wave_format_data(data: &mut FormatData) -> Result<(), SyphonError> {
+    if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
+        return Err(SyphonError::InvalidData);
+    }
+
+    for track in data.tracks.iter_mut() {
+        if track.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
+            return Err(SyphonError::Unsupported);
+        }
+    }
+
+    Ok(())
+}
 
 pub struct WaveFormat<T> {
     header: WaveHeader,
@@ -50,9 +65,11 @@ impl<T> WaveFormat<T> {
         &self.header
     }
 
-    pub fn into_format(self) -> Result<FormatWrapper<Self>, SyphonError> {
-        let data = FormatDataBuilder::from(self.header).build()?;
-        Ok(FormatWrapper::new(self, data))
+    pub fn into_format(self) -> SingleStreamFormat<Self> {
+        let data = self.header.into();
+        SingleStreamFormat::new(self, data)
+            .with_format(SyphonFormat::Wave)
+            .with_codec(SyphonCodec::Pcm)
     }
 }
 

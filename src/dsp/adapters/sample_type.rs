@@ -1,7 +1,4 @@
-use crate::{
-    IntoSample, Sample, Signal, SignalReader, SignalSpec,
-    SignalWriter, SyphonError,
-};
+use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 
 pub struct SampleTypeAdapter<S: Sample, T: Signal> {
     signal: T,

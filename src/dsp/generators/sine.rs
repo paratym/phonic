@@ -38,10 +38,11 @@ impl<S: Sample + FromSample<f32>> SignalReader<S> for SineGenerator {
         for frame in &mut frames {
             let t = self.i as f32 / self.spec.frame_rate as f32;
             frame.fill((t * self.frequency * 2.0 * PI).sin().into_sample());
+
+            self.i += 1;
         }
 
         let n_samples = n_frames * n_channels;
-        self.i += n_samples as u64;
         Ok(n_samples)
     }
 }

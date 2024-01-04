@@ -1,8 +1,7 @@
 use crate::{
     io::{
-        format,
         formats::wave::{WaveFormat, WAVE_IDENTIFIERS},
-        FormatData, FormatDataBuilder, FormatReader, FormatWriter,
+        FormatData, FormatReader, FormatWriter, SyphonCodec,
     },
     SyphonError,
 };
@@ -11,10 +10,11 @@ use std::{
     io::{Read, Seek, Write},
 };
 
+use super::wave::fill_wave_format_data;
+
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub enum SyphonFormat {
     Wave,
-    Unknown,
 }
 
 pub struct FormatIdentifiers {
@@ -23,9 +23,8 @@ pub struct FormatIdentifiers {
     pub markers: &'static [&'static [u8]],
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FormatIdentifier<'a> {
-    None,
     FileExtension(&'a str),
     MimeType(&'a str),
 }
@@ -37,65 +36,57 @@ impl SyphonFormat {
     }
 
     pub fn identifiers(&self) -> &'static FormatIdentifiers {
-        const UNKNOWN_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
-            file_extensions: &[],
-            mime_types: &[],
-            markers: &[],
-        };
-
         match self {
             SyphonFormat::Wave => &WAVE_IDENTIFIERS,
-            SyphonFormat::Unknown => &UNKNOWN_IDENTIFIERS,
         }
     }
 
-    pub fn construct_reader(
-        &self,
-        inner: impl Read + Seek + 'static,
-    ) -> Result<Box<dyn FormatReader>, SyphonError> {
-        Ok(match self {
-            SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()?),
-            SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
-        })
-    }
-
-    pub fn construct_writer(
-        &self,
-        inner: impl Write + 'static,
-        mut data: FormatDataBuilder,
-    ) -> Result<Box<dyn FormatWriter>, SyphonError> {
-        if data.format.is_some_and(|f| f != *self) {
-            return Err(SyphonError::InvalidData);
+    pub fn fill_data(data: &mut FormatData) -> Result<(), SyphonError> {
+        match data.format.ok_or(SyphonError::MissingData)? {
+            SyphonFormat::Wave => fill_wave_format_data(data)?,
         }
 
-        data = data.with_format(*self);
+        for track in data.tracks.iter_mut() {
+            SyphonCodec::fill_spec(track)?;
+        }
 
-        Ok(match self {
-            SyphonFormat::Wave => {
-                Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format()?)
-            }
-            SyphonFormat::Unknown => return Err(SyphonError::Unsupported),
-        })
+        Ok(())
     }
 
     pub fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError> {
         todo!()
     }
-}
 
-impl Default for SyphonFormat {
-    fn default() -> Self {
-        SyphonFormat::Unknown
+    pub fn construct_reader(
+        &self,
+        inner: impl Read + 'static,
+    ) -> Result<Box<dyn FormatReader>, SyphonError> {
+        Ok(match self {
+            SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()),
+        })
+    }
+
+    pub fn construct_writer(
+        data: FormatData,
+        inner: impl Write + 'static,
+    ) -> Result<Box<dyn FormatWriter>, SyphonError> {
+        Ok(match data.format.ok_or(SyphonError::MissingData)? {
+            SyphonFormat::Wave => {
+                Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format())
+            }
+        })
     }
 }
 
-impl<'a> From<&FormatIdentifier<'a>> for SyphonFormat {
-    fn from(identifier: &FormatIdentifier) -> Self {
+impl<'a> TryFrom<&FormatIdentifier<'a>> for SyphonFormat {
+    type Error = SyphonError;
+
+    fn try_from(id: &FormatIdentifier<'a>) -> Result<Self, Self::Error> {
         Self::all()
             .iter()
-            .find(|fmt| fmt.identifiers().contains(identifier))
+            .find(|fmt| fmt.identifiers().contains(id))
             .copied()
-            .unwrap_or_default()
+            .ok_or(SyphonError::Unsupported)
     }
 }
 
@@ -104,13 +95,6 @@ impl FormatIdentifiers {
         match identifier {
             FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
             FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
-            FormatIdentifier::None => false,
         }
-    }
-}
-
-impl<'a> Default for FormatIdentifier<'a> {
-    fn default() -> Self {
-        FormatIdentifier::None
     }
 }

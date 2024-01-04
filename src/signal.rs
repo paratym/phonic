@@ -16,10 +16,8 @@ pub struct ChannelLayout {
 }
 
 /// A set of parameters that describes a pcm signal
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SignalSpec {
-    pub sample_type: SampleType,
-
     /// The number of samples per channel per second.
     pub frame_rate: u32,
 
@@ -32,7 +30,6 @@ pub struct SignalSpec {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SignalSpecBuilder {
-    pub sample_type: Option<SampleType>,
     pub frame_rate: Option<u32>,
     pub channels: Option<Channels>,
     pub n_frames: Option<u64>,
@@ -153,8 +150,9 @@ impl SignalSpec {
         self.n_frames.map(|n| n * self.channels.count() as u64)
     }
 
-    pub fn into_builder(self) -> SignalSpecBuilder {
-        self.into()
+    pub fn duration(&self) -> Option<Duration> {
+        self.n_frames
+            .map(|n| Duration::from_secs_f64(n as f64 / self.frame_rate as f64))
     }
 }
 
@@ -163,9 +161,8 @@ impl TryFrom<SignalSpecBuilder> for SignalSpec {
 
     fn try_from(builder: SignalSpecBuilder) -> Result<Self, Self::Error> {
         Ok(Self {
-            sample_type: builder.sample_type.ok_or(SyphonError::InvalidData)?,
-            channels: builder.channels.ok_or(SyphonError::InvalidData)?,
-            frame_rate: builder.frame_rate.ok_or(SyphonError::InvalidData)?,
+            channels: builder.channels.ok_or(SyphonError::MissingData)?,
+            frame_rate: builder.frame_rate.ok_or(SyphonError::MissingData)?,
             n_frames: builder.n_frames,
         })
     }
@@ -174,7 +171,6 @@ impl TryFrom<SignalSpecBuilder> for SignalSpec {
 impl SignalSpecBuilder {
     pub fn new() -> Self {
         Self {
-            sample_type: None,
             frame_rate: None,
             channels: None,
             n_frames: None,
@@ -187,16 +183,12 @@ impl SignalSpecBuilder {
             .map(|(n_frames, channels)| n_frames * channels.count() as u64)
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.sample_type.is_none()
-            && self.channels.is_none()
-            && self.frame_rate.is_none()
-            && self.n_frames.is_none()
-    }
-
-    pub fn with_sample_type(mut self, sample_type: impl Into<Option<SampleType>>) -> Self {
-        self.sample_type = sample_type.into();
-        self
+    pub fn duration(&self) -> Option<Duration> {
+        self.n_frames
+            .zip(self.frame_rate)
+            .map(|(n_frames, frame_rate)| {
+                Duration::from_secs_f64(n_frames as f64 / frame_rate as f64)
+            })
     }
 
     pub fn with_frame_rate(mut self, frame_rate: u32) -> Self {
@@ -218,7 +210,7 @@ impl SignalSpecBuilder {
         self.n_frames = self
             .frame_rate
             .map(|hz| (hz as f64 * duration.as_secs_f64()) as u64);
-        
+
         self
     }
 
@@ -233,7 +225,6 @@ impl SignalSpecBuilder {
 impl From<SignalSpec> for SignalSpecBuilder {
     fn from(spec: SignalSpec) -> Self {
         Self {
-            sample_type: Some(spec.sample_type),
             frame_rate: Some(spec.frame_rate),
             channels: Some(spec.channels),
             n_frames: spec.n_frames,
@@ -248,18 +239,17 @@ pub trait Signal {
 pub trait SignalReader<S: Sample>: Signal {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
 
-    fn read_exact(&mut self, buffer: &mut [S]) -> Result<(), SyphonError> {
-        let mut n_read: usize = 0;
-        while n_read < buffer.len() {
-            match self.read(&mut buffer[n_read..]) {
+    fn read_exact(&mut self, mut buffer: &mut [S]) -> Result<(), SyphonError> {
+        while !buffer.is_empty() {
+            match self.read(&mut buffer) {
                 Ok(0) => break,
-                Ok(n) => n_read + n,
+                Ok(n) => buffer = &mut buffer[n..],
                 Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
         }
 
-        if n_read != buffer.len() {
+        if buffer.len() > 0 {
             return Err(SyphonError::EndOfStream);
         }
 
@@ -271,18 +261,17 @@ pub trait SignalWriter<S: Sample>: Signal {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 
-    fn write_exact(&mut self, buffer: &[S]) -> Result<(), SyphonError> {
-        let mut n_written: usize = 0;
-        while n_written < buffer.len() {
-            match self.write(&buffer[n_written..]) {
+    fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
+        while !buffer.is_empty() {
+            match self.write(&buffer) {
                 Ok(0) => break,
-                Ok(n) => n_written += n,
+                Ok(n) => buffer = &buffer[n..],
                 Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
         }
 
-        if n_written != buffer.len() {
+        if buffer.len() > 0 {
             return Err(SyphonError::EndOfStream);
         }
 

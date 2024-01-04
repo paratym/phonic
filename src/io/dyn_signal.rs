@@ -169,21 +169,6 @@ macro_rules! impl_signal_ref {
                 match_signal_ref!(self, Self, ref signal, (*signal.spec()).into())
             }
 
-            pub fn from_dyn_signal(signal: Box<dyn $dyn_inner>) -> Result<Self, SyphonError> {
-                match signal.spec().sample_type {
-                    SampleType::I8 => Ok(Self::I8(signal.into_i8_signal())),
-                    SampleType::I16 => Ok(Self::I16(signal.into_i16_signal())),
-                    SampleType::I32 => Ok(Self::I32(signal.into_i32_signal())),
-                    SampleType::I64 => Ok(Self::I64(signal.into_i64_signal())),
-                    SampleType::U8 => Ok(Self::U8(signal.into_u8_signal())),
-                    SampleType::U16 => Ok(Self::U16(signal.into_u16_signal())),
-                    SampleType::U32 => Ok(Self::U32(signal.into_u32_signal())),
-                    SampleType::U64 => Ok(Self::U64(signal.into_u64_signal())),
-                    SampleType::F32 => Ok(Self::F32(signal.into_f32_signal())),
-                    SampleType::F64 => Ok(Self::F64(signal.into_f64_signal())),
-                }
-            }
-
             pub fn into_adapter(self) -> Box<dyn $dyn_inner> {
                 match_signal_ref!(self, Self, signal, Box::new(SampleTypeAdapter::new(signal)))
             }

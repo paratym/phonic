@@ -1,67 +1,71 @@
 use crate::{
-    io::{Stream, StreamReader, StreamWriter},
+    io::{StreamSpec, SyphonCodec},
     KnownSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
 };
 use byte_slice_cast::{AsByteSlice, AsMutByteSlice, ToByteSlice, ToMutByteSlice};
+use std::io::{Read, Write};
 
-pub struct PcmCodec<T: Stream> {
-    stream: T,
+pub fn fill_pcm_stream_spec(spec: &mut StreamSpec) -> Result<(), SyphonError> {
+    if spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
+        return Err(SyphonError::InvalidData);
+    }
+
+    spec.set_compression_ratio(1.0)
 }
 
-impl<T: Stream> PcmCodec<T> {
-    pub fn new(stream: T) -> Result<Self, SyphonError> {
-        let spec = stream.spec();
+pub struct PcmCodec<T> {
+    inner: T,
+    spec: SignalSpec,
+}
 
-        let calculated_bytes_per_frame = spec
-            .byte_len
-            .zip(spec.decoded_spec.n_frames)
-            .map(|(n, f)| n / f as u64);
-
-        let actual_bytes_per_frame = spec.decoded_spec.sample_type.byte_size() as u64
-            * spec.decoded_spec.channels.count() as u64;
-
-        if calculated_bytes_per_frame.is_some_and(|c| c != actual_bytes_per_frame) {
-            return Err(SyphonError::Unsupported);
-        }
-
-        Ok(Self { stream })
+impl<T> PcmCodec<T> {
+    pub fn new(inner: T, spec: SignalSpec) -> Self {
+        Self { inner, spec }
     }
 }
 
-impl<T: Stream> Signal for PcmCodec<T> {
+impl<T> Signal for PcmCodec<T> {
     fn spec(&self) -> &SignalSpec {
-        &self.stream.spec().decoded_spec
+        &self.spec
     }
 }
 
-impl<T: StreamReader, S: KnownSample + ToMutByteSlice> SignalReader<S> for PcmCodec<T> {
+impl<T, S> SignalReader<S> for PcmCodec<T>
+where
+    T: Read,
+    S: KnownSample + ToMutByteSlice,
+{
     fn read(&mut self, buf: &mut [S]) -> Result<usize, SyphonError> {
         let byte_buf = buf.as_mut_byte_slice();
-        let n = self.stream.read(byte_buf)?;
+        let n = self.inner.read(byte_buf)?;
 
         let bytes_per_sample = byte_buf.len() / buf.len();
         if n % bytes_per_sample != 0 {
             todo!()
         }
 
-        Ok(n)
+        Ok(n / bytes_per_sample)
     }
 }
 
-impl<T: StreamWriter, S: Sample + ToByteSlice> SignalWriter<S> for PcmCodec<T> {
+impl<T, S> SignalWriter<S> for PcmCodec<T>
+where
+    T: Write,
+    S: Sample + ToByteSlice,
+{
     fn write(&mut self, buf: &[S]) -> Result<usize, SyphonError> {
         let byte_buf = buf.as_byte_slice();
-        let n = self.stream.write(byte_buf)?;
+        let n = self.inner.write(byte_buf)?;
 
         let bytes_per_sample = byte_buf.len() / buf.len();
         if n % bytes_per_sample != 0 {
             todo!()
         }
 
-        Ok(n)
+        Ok(n / bytes_per_sample)
     }
 
     fn flush(&mut self) -> Result<(), SyphonError> {
-        self.stream.flush()
+        self.inner.flush().map_err(Into::into)
     }
 }

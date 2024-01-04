@@ -1,5 +1,5 @@
 use crate::{
-    io::{utils::Track, StreamSpec, StreamSpecBuilder, SyphonCodec, SyphonFormat},
+    io::{utils::Track, StreamSpec, SyphonFormat},
     SyphonError,
 };
 use std::{
@@ -9,41 +9,11 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub struct FormatData {
-    pub format: SyphonFormat,
-    pub tracks: Box<[StreamSpec]>,
-}
-
-pub struct FormatDataBuilder {
     pub format: Option<SyphonFormat>,
-    pub tracks: Vec<StreamSpecBuilder>,
+    pub tracks: Vec<StreamSpec>,
 }
 
 impl FormatData {
-    pub fn builder() -> FormatDataBuilder {
-        FormatDataBuilder::new()
-    }
-
-    pub fn into_builder(self) -> FormatDataBuilder {
-        self.into()
-    }
-}
-
-impl TryFrom<FormatDataBuilder> for FormatData {
-    type Error = SyphonError;
-
-    fn try_from(builder: FormatDataBuilder) -> Result<Self, Self::Error> {
-        Ok(Self {
-            format: builder.format.unwrap_or(SyphonFormat::Unknown),
-            tracks: builder
-                .tracks
-                .into_iter()
-                .map(|track| track.try_into())
-                .collect::<Result<_, _>>()?,
-        })
-    }
-}
-
-impl FormatDataBuilder {
     pub fn new() -> Self {
         Self {
             format: None,
@@ -51,43 +21,27 @@ impl FormatDataBuilder {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.format.is_none() && self.tracks.is_empty()
-    }
-
-    pub fn with_format(mut self, format: impl Into<SyphonFormat>) -> Self {
-        self.format = Some(format.into());
+    pub fn with_format(mut self, format: SyphonFormat) -> Self {
+        self.format = Some(format);
         self
     }
 
-    pub fn with_track(mut self, track: impl Into<StreamSpecBuilder>) -> Self {
-        self.tracks.push(track.into());
+    pub fn with_track(mut self, track: StreamSpec) -> Self {
+        self.tracks.push(track);
         self
     }
 
-    pub fn build(self) -> Result<FormatData, SyphonError> {
-        self.try_into()
-    }
-}
-
-impl From<FormatData> for FormatDataBuilder {
-    fn from(data: FormatData) -> Self {
-        Self {
-            format: Some(data.format),
-            tracks: data.tracks.into_iter().map(|&t| t.into()).collect(),
-        }
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
+        SyphonFormat::fill_data(&mut self)?;
+        Ok(self)
     }
 }
 
 pub trait Format {
-    fn format_data(&self) -> &FormatData;
+    fn data(&self) -> &FormatData;
 
-    fn default_track(&self) -> Result<usize, SyphonError> {
-        self.format_data()
-            .tracks
-            .iter()
-            .position(|track| track.codec != SyphonCodec::Unknown)
-            .ok_or(SyphonError::NotFound)
+    fn default_track(&self) -> Option<usize> {
+        self.data().tracks.iter().position(|t| t.codec.is_some())
     }
 
     fn as_track(&mut self, i: usize) -> Result<Track<&mut Self>, SyphonError>
@@ -101,7 +55,9 @@ pub trait Format {
     where
         Self: Sized,
     {
-        self.default_track().and_then(|i| self.as_track(i))
+        self.default_track()
+            .ok_or(SyphonError::NotFound)
+            .and_then(|i| self.as_track(i))
     }
 
     fn into_track(self, i: usize) -> Result<Track<Self>, SyphonError>
@@ -115,21 +71,27 @@ pub trait Format {
     where
         Self: Sized,
     {
-        self.default_track().and_then(|i| self.into_track(i))
+        self.default_track()
+            .ok_or(SyphonError::NotFound)
+            .and_then(|i| self.into_track(i))
     }
 }
 
-pub struct FormatReadResult {
-    pub track: usize,
-    pub n: usize,
+pub struct TrackChunk<'a> {
+    pub i: usize,
+    pub buf: &'a [u8],
+}
+
+pub enum FormatChunk<'a> {
+    Track(TrackChunk<'a>),
 }
 
 pub trait FormatReader: Format {
-    fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError>;
+    fn read<'a>(&mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError>;
 }
 
 pub trait FormatWriter: Format {
-    fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError>;
+    fn write_track_chunk(&mut self, chunk: TrackChunk) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 }
 
@@ -138,8 +100,8 @@ where
     T: Deref,
     T::Target: Format,
 {
-    fn format_data(&self) -> &FormatData {
-        self.deref().format_data()
+    fn data(&self) -> &FormatData {
+        self.deref().data()
     }
 }
 
@@ -148,7 +110,7 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<FormatReadResult, SyphonError> {
+    fn read<'a>(&mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError> {
         self.deref_mut().read(buf)
     }
 }
@@ -158,8 +120,8 @@ where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write(&mut self, track_i: usize, buf: &[u8]) -> Result<usize, SyphonError> {
-        self.deref_mut().write(track_i, buf)
+    fn write_track_chunk(&mut self, chunk: TrackChunk) -> Result<usize, SyphonError> {
+        self.deref_mut().write_track_chunk(chunk)
     }
 
     fn flush(&mut self) -> Result<(), SyphonError> {
@@ -167,40 +129,43 @@ where
     }
 }
 
-pub trait TryIntoFormatReader {
-    fn try_into_format_reader(
+pub trait IntoFormatReader {
+    fn into_format_reader(self, format: SyphonFormat)
+        -> Result<Box<dyn FormatReader>, SyphonError>;
+
+    fn resolve_format_reader(
         self,
-        format: impl TryInto<SyphonFormat>,
+        format: Option<impl TryInto<SyphonFormat>>,
     ) -> Result<Box<dyn FormatReader>, SyphonError>;
 }
 
-pub trait TryIntoFormatWriter {
-    fn try_into_format_writer(
-        self,
-        data: impl TryInto<FormatDataBuilder>,
-    ) -> Result<Box<dyn FormatWriter>, SyphonError>;
+pub trait IntoFormatWriter {
+    fn into_format_writer(self, data: FormatData) -> Result<Box<dyn FormatWriter>, SyphonError>;
 }
 
-impl<T: Read + Seek + 'static> TryIntoFormatReader for T {
-    fn try_into_format_reader(
-        mut self,
-        format: impl TryInto<SyphonFormat>,
+impl<T: Read + Seek + 'static> IntoFormatReader for T {
+    fn into_format_reader(
+        self,
+        format: SyphonFormat,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
-        format
-            .try_into()
-            .or_else(|_| SyphonFormat::resolve(&mut self))
-            .ok()
-            .unwrap_or_default()
-            .construct_reader(self)
+        format.construct_reader(self)
+    }
+
+    fn resolve_format_reader(
+        mut self,
+        format: Option<impl TryInto<SyphonFormat>>,
+    ) -> Result<Box<dyn FormatReader>, SyphonError> {
+        let format = format
+            .and_then(|f| f.try_into().ok())
+            .or_else(|| SyphonFormat::resolve(&mut self).ok())
+            .ok_or(SyphonError::Unsupported)?;
+
+        self.into_format_reader(format)
     }
 }
 
-impl<T: Write + 'static> TryIntoFormatWriter for T {
-    fn try_into_format_writer(
-        self,
-        data: impl TryInto<FormatDataBuilder>,
-    ) -> Result<Box<dyn FormatWriter>, SyphonError> {
-        let data: FormatDataBuilder = data.try_into().or(Err(SyphonError::InvalidData))?;
-        data.format.unwrap_or_default().construct_writer(self, data)
+impl<T: Write + 'static> IntoFormatWriter for T {
+    fn into_format_writer(self, data: FormatData) -> Result<Box<dyn FormatWriter>, SyphonError> {
+        SyphonFormat::construct_writer(data, self)
     }
 }

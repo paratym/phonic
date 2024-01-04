@@ -1,113 +1,130 @@
 use crate::{
     io::{SyphonCodec, TaggedSignalReader, TaggedSignalWriter},
-    SampleType, SignalSpec, SignalSpecBuilder, SyphonError,
+    Channels, SampleType, SignalSpecBuilder, SyphonError,
 };
 use std::{
     io::{Read, Write},
-    ops::{Deref, DerefMut},
+    ops::Deref,
 };
 
-#[derive(Clone, Copy, Debug)]
-pub struct StreamSpec {
-    pub codec: SyphonCodec,
-    pub byte_len: Option<u64>,
-    pub decoded_spec: SignalSpec,
-}
-
 #[derive(Debug, Clone, Copy)]
-pub struct StreamSpecBuilder {
+pub struct StreamSpec {
     pub codec: Option<SyphonCodec>,
     pub byte_len: Option<u64>,
+    pub sample_type: Option<SampleType>,
     pub decoded_spec: SignalSpecBuilder,
 }
 
 impl StreamSpec {
-    pub fn builder() -> StreamSpecBuilder {
-        StreamSpecBuilder::new()
-    }
-}
-
-impl TryFrom<StreamSpecBuilder> for StreamSpec {
-    type Error = SyphonError;
-
-    fn try_from(builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
-        Ok(Self {
-            codec: builder.codec.unwrap_or(SyphonCodec::Unknown),
-            byte_len: builder.byte_len,
-            decoded_spec: builder.decoded_spec.build()?,
-        })
-    }
-}
-
-impl StreamSpecBuilder {
     pub fn new() -> Self {
         Self {
             codec: None,
             byte_len: None,
+            sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.codec.is_none() && self.byte_len.is_none() && self.decoded_spec.is_empty()
-    }
-
-    pub fn with_codec(mut self, codec: impl Into<SyphonCodec>) -> Self {
-        self.codec = Some(codec.into());
+    pub fn with_codec(mut self, codec: SyphonCodec) -> Self {
+        self.codec = Some(codec);
         self
     }
 
-    pub fn with_byte_len(mut self, byte_len: impl Into<Option<u64>>) -> Self {
-        self.byte_len = byte_len.into();
+    pub fn with_byte_len(mut self, byte_len: Option<u64>) -> Self {
+        self.byte_len = byte_len;
         self
     }
 
-    pub fn with_decoded_spec(mut self, decoded_spec: impl Into<SignalSpecBuilder>) -> Self {
-        self.decoded_spec = decoded_spec.into();
+    pub fn with_sample_type(mut self, sample_type: SampleType) -> Self {
+        self.sample_type = Some(sample_type);
         self
     }
 
-    pub fn build(self) -> Result<StreamSpec, SyphonError> {
-        self.try_into()
+    pub fn with_decoded_spec(mut self, decoded_spec: SignalSpecBuilder) -> Self {
+        self.decoded_spec = decoded_spec;
+        self
     }
-}
 
-impl From<StreamSpec> for StreamSpecBuilder {
-    fn from(spec: StreamSpec) -> Self {
-        Self {
-            codec: Some(spec.codec),
-            byte_len: spec.byte_len,
-            decoded_spec: spec.decoded_spec.into(),
+    pub fn compression_ratio(&self) -> Option<f64> {
+        let decoded_byte_len = self
+            .sample_type
+            .zip(self.decoded_spec.n_samples())
+            .map(|(s, n)| s.byte_size() as u64 * n);
+
+        self.byte_len
+            .zip(decoded_byte_len)
+            .map(|(encoded, decoded)| decoded as f64 / encoded as f64)
+    }
+
+    pub fn set_compression_ratio(&mut self, ratio: f64) -> Result<(), SyphonError> {
+        let bytes_per_encoded_sample = self.sample_type.map(|s| s.byte_size() as f64 * ratio);
+
+        let calculated_byte_len = self
+            .decoded_spec
+            .n_samples()
+            .zip(bytes_per_encoded_sample)
+            .map(|(n_samples, bytes_per_sample)| (n_samples as f64 * bytes_per_sample) as u64);
+
+        if calculated_byte_len.is_some_and(|n| self.byte_len.get_or_insert(n) != &n) {
+            return Err(SyphonError::InvalidData);
         }
+
+        let calculated_n_frames = self
+            .byte_len
+            .zip(bytes_per_encoded_sample)
+            .zip(self.decoded_spec.channels)
+            .map(|((byte_len, bytes_per_sample), channels)| {
+                ((byte_len as f64 / bytes_per_sample) / channels.count() as f64) as u64
+            });
+
+        if calculated_n_frames.is_some_and(|n| self.decoded_spec.n_frames.get_or_insert(n) != &n) {
+            return Err(SyphonError::InvalidData);
+        }
+
+        let calculated_channels = self
+            .byte_len
+            .zip(bytes_per_encoded_sample)
+            .zip(self.decoded_spec.n_frames)
+            .map(|((byte_len, bytes_per_sample), n_frames)| {
+                ((byte_len as f64 / bytes_per_sample) / n_frames as f64) as u32
+            });
+
+        if calculated_channels
+            .is_some_and(|c| self.decoded_spec.channels.get_or_insert(c.into()).count() != c)
+        {
+            return Err(SyphonError::InvalidData);
+        }
+
+        Ok(())
+    }
+
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
+        SyphonCodec::fill_spec(&mut self)?;
+        Ok(self)
     }
 }
 
 pub trait Stream {
     fn spec(&self) -> &StreamSpec;
-}
-
-pub trait StreamReader: Stream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError>;
-
-    fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
-    where
-        Self: Sized + 'static,
-    {
-        let codec = self.spec().codec;
-        codec.construct_decoder(self)
-    }
-}
-
-pub trait StreamWriter: Stream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError>;
-    fn flush(&mut self) -> Result<(), SyphonError>;
 
     fn into_encoder(self) -> Result<TaggedSignalWriter, SyphonError>
     where
-        Self: Sized + 'static,
+        Self: Sized + Write + 'static,
     {
-        let codec = self.spec().codec;
-        codec.construct_encoder(self)
+        let spec = *self.spec();
+        spec.codec
+            .ok_or(SyphonError::MissingData)?
+            .construct_encoder(self, spec)
+    }
+
+    fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
+    where
+        Self: Sized + Read + 'static,
+    {
+        let spec = *self.spec();
+        spec.codec
+            .ok_or(SyphonError::MissingData)?
+            .construct_decoder(self, spec)
     }
 }
 
@@ -118,29 +135,5 @@ where
 {
     fn spec(&self) -> &StreamSpec {
         self.deref().spec()
-    }
-}
-
-impl<T> StreamReader for T
-where
-    T: DerefMut,
-    T::Target: StreamReader,
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError> {
-        self.deref_mut().read(buf)
-    }
-}
-
-impl<T> StreamWriter for T
-where
-    T: DerefMut,
-    T::Target: StreamWriter,
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError> {
-        self.deref_mut().write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), SyphonError> {
-        self.deref_mut().flush()
     }
 }

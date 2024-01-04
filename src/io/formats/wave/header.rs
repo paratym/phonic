@@ -1,5 +1,5 @@
 use crate::{
-    io::{FormatData, FormatDataBuilder, StreamSpecBuilder, SyphonCodec, SyphonFormat},
+    io::{FormatData, StreamSpec, SyphonCodec, SyphonFormat},
     ChannelLayout, Channels, SampleType, SignalSpecBuilder, SyphonError,
 };
 use std::io::{Read, Write};
@@ -132,7 +132,7 @@ impl WaveHeader {
     }
 }
 
-impl From<WaveHeader> for FormatDataBuilder {
+impl From<WaveHeader> for FormatData {
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
@@ -156,11 +156,11 @@ impl From<WaveHeader> for FormatDataBuilder {
 
         Self {
             format: Some(SyphonFormat::Wave),
-            tracks: vec![StreamSpecBuilder {
-                codec,
+            tracks: vec![StreamSpec {
+                codec: Some(SyphonCodec::Pcm),
                 byte_len: Some(header.data.byte_len as u64),
+                sample_type: sample_type,
                 decoded_spec: SignalSpecBuilder::new()
-                    .with_sample_type(sample_type)
                     .with_channels(channels)
                     .with_frame_rate(header.fmt.sample_rate)
                     .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
@@ -169,10 +169,10 @@ impl From<WaveHeader> for FormatDataBuilder {
     }
 }
 
-impl TryFrom<FormatDataBuilder> for WaveHeader {
+impl TryFrom<FormatData> for WaveHeader {
     type Error = SyphonError;
 
-    fn try_from(mut data: FormatDataBuilder) -> Result<Self, Self::Error> {
+    fn try_from(mut data: FormatData) -> Result<Self, Self::Error> {
         if data.tracks.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
@@ -180,10 +180,7 @@ impl TryFrom<FormatDataBuilder> for WaveHeader {
         let spec = &mut data.tracks[0];
 
         spec.codec = spec.codec.or(Some(SyphonCodec::Pcm));
-        let sample_type = spec
-            .decoded_spec
-            .sample_type
-            .ok_or(SyphonError::Unsupported)?;
+        let sample_type = spec.sample_type.ok_or(SyphonError::Unsupported)?;
 
         let format_tag = match (spec.codec, sample_type) {
             (Some(SyphonCodec::Pcm), SampleType::U8) => 1,

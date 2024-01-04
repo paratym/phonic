@@ -1,7 +1,10 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    io::{self, Read, Write},
+    ops::{Deref, DerefMut},
+};
 
 use crate::{
-    io::{Format, FormatReader, FormatWriter, Stream, StreamReader, StreamSpec, StreamWriter},
+    io::{Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec, TrackChunk},
     SyphonError,
 };
 
@@ -14,7 +17,7 @@ pub struct Track<F: Format> {
 impl<F: Format> Track<F> {
     pub fn new(inner: F, track_i: usize) -> Result<Self, SyphonError> {
         let spec = *inner
-            .format_data()
+            .data()
             .tracks
             .get(track_i)
             .ok_or(SyphonError::NotFound)?;
@@ -33,31 +36,38 @@ impl<F: Format> Stream for Track<F> {
     }
 }
 
-impl<T> StreamReader for Track<T>
+impl<T> Read for Track<T>
 where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         loop {
-            let result = self.inner.read(buf)?;
-            if result.track == self.track_i {
-                return Ok(result.n);
+            match self.inner.read(buf)? {
+                FormatChunk::Track(TrackChunk { i, buf }) if i == self.track_i => {
+                    return Ok(buf.len());
+                }
+                _ => continue,
             }
         }
     }
 }
 
-impl<T> StreamWriter for Track<T>
+impl<T> Write for Track<T>
 where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError> {
-        Ok(self.inner.write(self.track_i, buf)?)
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        let chunk = TrackChunk {
+            i: self.track_i,
+            buf,
+        };
+
+        self.inner.write_track_chunk(chunk).map_err(Into::into)
     }
 
-    fn flush(&mut self) -> Result<(), SyphonError> {
+    fn flush(&mut self) -> Result<(), io::Error> {
         Ok(self.inner.flush()?)
     }
 }

@@ -1,15 +1,16 @@
+use std::fmt::Debug;
+
 use crate::{Sample, SignalReader, SignalWriter, SyphonError};
 
-pub fn copy<S: Sample>(
+pub fn copy<S: Sample + Debug>(
     reader: &mut impl SignalReader<S>,
     writer: &mut impl SignalWriter<S>,
     mut buffer: &mut [S],
 ) -> Result<(), SyphonError> {
     let spec = reader.spec();
-    // TODO: determine spec compatibility
-    // if spec != writer.spec() {
-    //     return Err(SyphonError::SignalMismatch);
-    // }
+    if spec != writer.spec() {
+        return Err(SyphonError::SignalMismatch);
+    }
 
     let mut n;
     loop {
