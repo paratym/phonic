@@ -1,4 +1,4 @@
-use crate::{KnownSample, Sample, SampleType, SyphonError};
+use crate::{Sample, SyphonError};
 use std::{
     ops::{BitAnd, BitOr, BitXor, Deref, DerefMut},
     time::Duration,
@@ -233,13 +233,15 @@ impl From<SignalSpec> for SignalSpecBuilder {
 }
 
 pub trait Signal {
+    type Sample: Sample;
+
     fn spec(&self) -> &SignalSpec;
 }
 
-pub trait SignalReader<S: Sample>: Signal {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError>;
+pub trait SignalReader: Signal {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError>;
 
-    fn read_exact(&mut self, mut buffer: &mut [S]) -> Result<(), SyphonError> {
+    fn read_exact(&mut self, mut buffer: &mut [Self::Sample]) -> Result<(), SyphonError> {
         while !buffer.is_empty() {
             match self.read(&mut buffer) {
                 Ok(0) => break,
@@ -257,11 +259,11 @@ pub trait SignalReader<S: Sample>: Signal {
     }
 }
 
-pub trait SignalWriter<S: Sample>: Signal {
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError>;
+pub trait SignalWriter: Signal {
+    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 
-    fn write_exact(&mut self, mut buffer: &[S]) -> Result<(), SyphonError> {
+    fn write_exact(&mut self, mut buffer: &[Self::Sample]) -> Result<(), SyphonError> {
         while !buffer.is_empty() {
             match self.write(&buffer) {
                 Ok(0) => break,
@@ -279,32 +281,35 @@ pub trait SignalWriter<S: Sample>: Signal {
     }
 }
 
-impl<T> Signal for T
+impl<T, S> Signal for T
 where
+    S: Sample,
     T: Deref,
-    T::Target: Signal,
+    T::Target: Signal<Sample = S>,
 {
+    type Sample = S;
+
     fn spec(&self) -> &SignalSpec {
         self.deref().spec()
     }
 }
 
-impl<S, T> SignalReader<S> for T
+impl<S, T> SignalReader for T
 where
     S: Sample,
     T: DerefMut,
-    T::Target: SignalReader<S>,
+    T::Target: SignalReader<Sample = S>,
 {
     fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
         self.deref_mut().read(buffer)
     }
 }
 
-impl<S, T> SignalWriter<S> for T
+impl<S, T> SignalWriter for T
 where
     S: Sample,
     T: DerefMut,
-    T::Target: SignalWriter<S>,
+    T::Target: SignalWriter<Sample = S>,
 {
     fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
         self.deref_mut().write(buffer)

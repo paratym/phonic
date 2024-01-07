@@ -1,5 +1,4 @@
 use crate::{Channels, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::io::{self, Seek, SeekFrom};
 
 pub struct ChannelsAdapter<T: Signal> {
     signal: T,
@@ -16,19 +15,21 @@ impl<T: Signal> ChannelsAdapter<T> {
 }
 
 impl<T: Signal> Signal for ChannelsAdapter<T> {
+    type Sample = T::Sample;
+
     fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<S: Sample, T: SignalReader<S>> SignalReader<S> for ChannelsAdapter<T> {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+impl<T: SignalReader> SignalReader for ChannelsAdapter<T> {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }
 }
 
-impl<S: Sample, T: SignalWriter<S>> SignalWriter<S> for ChannelsAdapter<T> {
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+impl<T: SignalWriter> SignalWriter for ChannelsAdapter<T> {
+    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }
 

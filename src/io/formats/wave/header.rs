@@ -1,8 +1,11 @@
 use crate::{
-    io::{FormatData, StreamSpec, SyphonCodec, SyphonFormat},
-    ChannelLayout, Channels, SampleType, SignalSpecBuilder, SyphonError,
+    io::{FormatData, StreamSpecBuilder, SyphonCodec, SyphonFormat},
+    sample, ChannelLayout, Channels, SignalSpecBuilder, SyphonError, KnownSample, KnownSampleType,
 };
-use std::io::{Read, Write};
+use std::{
+    any::TypeId,
+    io::{Read, Write},
+};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
 const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";
@@ -140,11 +143,11 @@ impl From<WaveHeader> for FormatData {
         };
 
         let sample_type = match (header.fmt.format_tag, header.fmt.bits_per_sample) {
-            (1, 8) => Some(SampleType::U8),
-            (1, 16) => Some(SampleType::I16),
-            (1, 32) => Some(SampleType::I32),
-            (3, 32) => Some(SampleType::F32),
-            (3, 64) => Some(SampleType::F64),
+            (1, 8) => Some(TypeId::of::<u8>()),
+            (1, 16) => Some(TypeId::of::<i16>()),
+            (1, 32) => Some(TypeId::of::<i32>()),
+            (3, 32) => Some(TypeId::of::<f32>()),
+            (3, 64) => Some(TypeId::of::<f64>()),
             _ => None,
         };
 
@@ -156,8 +159,8 @@ impl From<WaveHeader> for FormatData {
 
         Self {
             format: Some(SyphonFormat::Wave),
-            tracks: vec![StreamSpec {
-                codec: Some(SyphonCodec::Pcm),
+            tracks: vec![StreamSpecBuilder {
+                codec,
                 byte_len: Some(header.data.byte_len as u64),
                 sample_type: sample_type,
                 decoded_spec: SignalSpecBuilder::new()
@@ -173,21 +176,21 @@ impl TryFrom<FormatData> for WaveHeader {
     type Error = SyphonError;
 
     fn try_from(mut data: FormatData) -> Result<Self, Self::Error> {
+        println!("{:?}", data);
+
         if data.tracks.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
 
         let spec = &mut data.tracks[0];
+        if spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
+            return Err(SyphonError::Unsupported);
+        }
 
-        spec.codec = spec.codec.or(Some(SyphonCodec::Pcm));
-        let sample_type = spec.sample_type.ok_or(SyphonError::Unsupported)?;
-
-        let format_tag = match (spec.codec, sample_type) {
-            (Some(SyphonCodec::Pcm), SampleType::U8) => 1,
-            (Some(SyphonCodec::Pcm), SampleType::I16) => 1,
-            (Some(SyphonCodec::Pcm), SampleType::I32) => 1,
-            (Some(SyphonCodec::Pcm), SampleType::F32) => 3,
-            (Some(SyphonCodec::Pcm), SampleType::F64) => 3,
+        let sample_type = spec.sample_type.ok_or(SyphonError::MissingData)?.try_into()?;
+        let format_tag = match sample_type {
+            KnownSampleType::U8 | KnownSampleType::I16 | KnownSampleType::I32 => 1,
+            KnownSampleType::F32 | KnownSampleType::F64 => 3,
             _ => return Err(SyphonError::Unsupported),
         };
 

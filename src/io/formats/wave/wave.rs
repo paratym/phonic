@@ -14,7 +14,7 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub fn fill_wave_format_data(data: &mut FormatData) -> Result<(), SyphonError> {
+pub fn fill_wave_format_data(mut data: FormatData) -> Result<FormatData, SyphonError> {
     if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
         return Err(SyphonError::InvalidData);
     }
@@ -25,7 +25,7 @@ pub fn fill_wave_format_data(data: &mut FormatData) -> Result<(), SyphonError> {
         }
     }
 
-    Ok(())
+    Ok(data)
 }
 
 pub struct WaveFormat<T> {

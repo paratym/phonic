@@ -1,10 +1,8 @@
-use std::fmt::Debug;
-
 use crate::{Sample, SignalReader, SignalWriter, SyphonError};
 
-pub fn copy<S: Sample + Debug>(
-    reader: &mut impl SignalReader<S>,
-    writer: &mut impl SignalWriter<S>,
+pub fn copy<S: Sample>(
+    reader: &mut impl SignalReader<Sample = S>,
+    writer: &mut impl SignalWriter<Sample = S>,
     mut buffer: &mut [S],
 ) -> Result<(), SyphonError> {
     let spec = reader.spec();

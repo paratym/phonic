@@ -1,24 +1,8 @@
-use std::mem::size_of;
+use std::{any::TypeId, mem::size_of};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum SampleType {
-    I8,
-    I16,
-    // I24,
-    I32,
-    // I48,
-    I64,
+use byte_slice_cast::{FromByteSlice, ToByteSlice, ToMutByteSlice};
 
-    U8,
-    U16,
-    // U24,
-    U32,
-    // U48,
-    U64,
-
-    F32,
-    F64,
-}
+use crate::SyphonError;
 
 pub trait Sample: Copy + Sized {
     const ORIGIN: Self;
@@ -38,29 +22,6 @@ pub trait Sample: Copy + Sized {
     }
 }
 
-pub trait KnownSample: Sample + FromKnownSample + IntoKnownSample {
-    const TYPE: SampleType;
-}
-
-impl SampleType {
-    pub fn byte_size(&self) -> usize {
-        match self {
-            Self::I8 => size_of::<i8>(),
-            Self::I16 => size_of::<i16>(),
-            Self::I32 => size_of::<i32>(),
-            Self::I64 => size_of::<i64>(),
-
-            Self::U8 => size_of::<u8>(),
-            Self::U16 => size_of::<u16>(),
-            Self::U32 => size_of::<u32>(),
-            Self::U64 => size_of::<u64>(),
-
-            Self::F32 => size_of::<f32>(),
-            Self::F64 => size_of::<f64>(),
-        }
-    }
-}
-
 macro_rules! impl_int_sample {
     ($s:ty, $t: ident) => {
         impl Sample for $s {
@@ -69,7 +30,7 @@ macro_rules! impl_int_sample {
         }
 
         impl KnownSample for $s {
-            const TYPE: SampleType = SampleType::$t;
+            const TYPE: KnownSampleType = KnownSampleType::$t;
         }
     };
 }
@@ -82,7 +43,7 @@ macro_rules! impl_uint_sample {
         }
 
         impl KnownSample for $s {
-            const TYPE: SampleType = SampleType::$t;
+            const TYPE: KnownSampleType = KnownSampleType::$t;
         }
     };
 }
@@ -95,7 +56,7 @@ macro_rules! impl_float_sample {
         }
 
         impl KnownSample for $s {
-            const TYPE: SampleType = SampleType::$t;
+            const TYPE: KnownSampleType = KnownSampleType::$t;
         }
     };
 }
@@ -299,6 +260,32 @@ impl_convert!(f64, i64, s, todo!());
 impl_convert!(f64, f32, s, s as f32);
 impl_convert!(f64, f64, s, s);
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KnownSampleType {
+    I8,
+    I16,
+    // I24,
+    I32,
+    // I48,
+    I64,
+
+    U8,
+    U16,
+    // U24,
+    U32,
+    // U48,
+    U64,
+
+    F32,
+    F64,
+}
+
+pub trait KnownSample:
+    Sample + FromKnownSample + IntoKnownSample
+{
+    const TYPE: KnownSampleType;
+}
+
 pub trait FromKnownSample:
     Sample
     + FromSample<i8>
@@ -327,6 +314,59 @@ pub trait IntoKnownSample:
     + IntoSample<f32>
     + IntoSample<f64>
 {
+}
+
+impl KnownSampleType {
+    pub fn byte_size(self) -> usize {
+        match self {
+            Self::I8 => size_of::<i8>(),
+            Self::I16 => size_of::<i16>(),
+            Self::I32 => size_of::<i32>(),
+            Self::I64 => size_of::<i64>(),
+            Self::U8 => size_of::<u8>(),
+            Self::U16 => size_of::<u16>(),
+            Self::U32 => size_of::<u32>(),
+            Self::U64 => size_of::<u64>(),
+            Self::F32 => size_of::<f32>(),
+            Self::F64 => size_of::<f64>(),
+        }
+    }
+}
+
+impl TryFrom<TypeId> for KnownSampleType {
+    type Error = SyphonError;
+
+    fn try_from(id: TypeId) -> Result<Self, Self::Error> {
+        if id == TypeId::of::<u8>() {
+            Ok(Self::U8)
+        } else if id == TypeId::of::<u16>() {
+            Ok(Self::U16)
+        } else if id == TypeId::of::<u32>() {
+            Ok(Self::U32)
+        } else if id == TypeId::of::<u64>() {
+            Ok(Self::U64)
+        } else if id == TypeId::of::<i8>() {
+            Ok(Self::I8)
+        } else if id == TypeId::of::<i16>() {
+            Ok(Self::I16)
+        } else if id == TypeId::of::<i32>() {
+            Ok(Self::I32)
+        } else if id == TypeId::of::<i64>() {
+            Ok(Self::I64)
+        } else if id == TypeId::of::<f32>() {
+            Ok(Self::F32)
+        } else if id == TypeId::of::<f64>() {
+            Ok(Self::F64)
+        } else {
+            Err(SyphonError::Unsupported)
+        }
+    }
+}
+
+impl From<KnownSampleType> for TypeId {
+    fn from(value: KnownSampleType) -> Self {
+        todo!()
+    }
 }
 
 impl<S> FromKnownSample for S where

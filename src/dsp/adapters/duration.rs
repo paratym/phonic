@@ -28,13 +28,15 @@ impl<T: Signal> DurationAdapter<T> {
 }
 
 impl<T: Signal> Signal for DurationAdapter<T> {
+    type Sample = T::Sample;
+
     fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<T: SignalReader<S>, S: Sample> SignalReader<S> for DurationAdapter<T> {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+impl<T: SignalReader> SignalReader for DurationAdapter<T> {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         if self.spec.n_samples().is_some_and(|n| self.i >= n) {
             return Ok(0);
         }
@@ -60,14 +62,14 @@ impl<T: SignalReader<S>, S: Sample> SignalReader<S> for DurationAdapter<T> {
             }
         }
 
-        buffer.fill(S::ORIGIN);
+        buffer.fill(Self::Sample::ORIGIN);
         self.i += buffer.len() as u64;
         return Ok(buffer.len());
     }
 }
 
-impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for DurationAdapter<T> {
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+impl<T: SignalWriter> SignalWriter for DurationAdapter<T> {
+    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError> {
         if self.spec.n_samples().is_some_and(|n| self.i >= n) {
             return Ok(0);
         }

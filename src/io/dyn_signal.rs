@@ -1,127 +1,127 @@
 use crate::{
-    dsp::adapters::SampleTypeAdapter, KnownSample, SampleType, Signal, SignalReader, SignalSpec,
-    SignalWriter, SyphonError,
+    dsp::adapters::SampleTypeAdapter, Signal, SignalReader, SignalSpec,
+    SignalWriter, SyphonError, KnownSample
 };
 
-macro_rules! impl_upcast {
-    ($name:ident, $inner:ident, $sample:ty) => {
-        fn $name(self) -> Box<dyn $inner<$sample>>
-        where
-            Self: Sized + 'static,
-        {
-            Box::new(self)
-        }
-    };
-}
+// macro_rules! impl_upcast {
+//     ($name:ident, $inner:ident, $sample:ty) => {
+//         fn $name(self) -> Box<dyn $inner<Sample = $sample>>
+//         where
+//             Self: Sized + 'static,
+//         {
+//             Box::new(self)
+//         }
+//     };
+// }
 
-pub trait DynSignalReader:
-    SignalReader<i8>
-    + SignalReader<i16>
-    + SignalReader<i32>
-    + SignalReader<i64>
-    + SignalReader<u8>
-    + SignalReader<u16>
-    + SignalReader<u32>
-    + SignalReader<u64>
-    + SignalReader<f32>
-    + SignalReader<f64>
-{
-    impl_upcast!(into_i8_signal, SignalReader, i8);
-    impl_upcast!(into_i16_signal, SignalReader, i16);
-    impl_upcast!(into_i32_signal, SignalReader, i32);
-    impl_upcast!(into_i64_signal, SignalReader, i64);
+// pub trait DynSignalReader:
+//     SignalReader<Sample = i8>
+//     + SignalReader<Sample = i16>
+//     + SignalReader<Sample = i32>
+//     + SignalReader<Sample = i64>
+//     + SignalReader<Sample = u8>
+//     + SignalReader<Sample = u16>
+//     + SignalReader<Sample = u32>
+//     + SignalReader<Sample = u64>
+//     + SignalReader<Sample = f32>
+//     + SignalReader<Sample = f64>
+// {
+//     impl_upcast!(into_i8_signal, SignalReader, i8);
+//     impl_upcast!(into_i16_signal, SignalReader, i16);
+//     impl_upcast!(into_i32_signal, SignalReader, i32);
+//     impl_upcast!(into_i64_signal, SignalReader, i64);
 
-    impl_upcast!(into_u8_signal, SignalReader, u8);
-    impl_upcast!(into_u16_signal, SignalReader, u16);
-    impl_upcast!(into_u32_signal, SignalReader, u32);
-    impl_upcast!(into_u64_signal, SignalReader, u64);
+//     impl_upcast!(into_u8_signal, SignalReader, u8);
+//     impl_upcast!(into_u16_signal, SignalReader, u16);
+//     impl_upcast!(into_u32_signal, SignalReader, u32);
+//     impl_upcast!(into_u64_signal, SignalReader, u64);
 
-    impl_upcast!(into_f32_signal, SignalReader, f32);
-    impl_upcast!(into_f64_signal, SignalReader, f64);
-}
+//     impl_upcast!(into_f32_signal, SignalReader, f32);
+//     impl_upcast!(into_f64_signal, SignalReader, f64);
+// }
 
-pub trait DynSignalWriter:
-    SignalWriter<i8>
-    + SignalWriter<i16>
-    + SignalWriter<i32>
-    + SignalWriter<i64>
-    + SignalWriter<u8>
-    + SignalWriter<u16>
-    + SignalWriter<u32>
-    + SignalWriter<u64>
-    + SignalWriter<f32>
-    + SignalWriter<f64>
-{
-    impl_upcast!(into_i8_signal, SignalWriter, i8);
-    impl_upcast!(into_i16_signal, SignalWriter, i16);
-    impl_upcast!(into_i32_signal, SignalWriter, i32);
-    impl_upcast!(into_i64_signal, SignalWriter, i64);
+// pub trait DynSignalWriter:
+//     SignalWriter<Sample = i8>
+//     + SignalWriter<Sample = i16>
+//     + SignalWriter<Sample = i32>
+//     + SignalWriter<Sample = i64>
+//     + SignalWriter<Sample = u8>
+//     + SignalWriter<Sample = u16>
+//     + SignalWriter<Sample = u32>
+//     + SignalWriter<Sample = u64>
+//     + SignalWriter<Sample = f32>
+//     + SignalWriter<Sample = f64>
+// {
+//     impl_upcast!(into_i8_signal, SignalWriter, i8);
+//     impl_upcast!(into_i16_signal, SignalWriter, i16);
+//     impl_upcast!(into_i32_signal, SignalWriter, i32);
+//     impl_upcast!(into_i64_signal, SignalWriter, i64);
 
-    impl_upcast!(into_u8_signal, SignalWriter, u8);
-    impl_upcast!(into_u16_signal, SignalWriter, u16);
-    impl_upcast!(into_u32_signal, SignalWriter, u32);
-    impl_upcast!(into_u64_signal, SignalWriter, u64);
+//     impl_upcast!(into_u8_signal, SignalWriter, u8);
+//     impl_upcast!(into_u16_signal, SignalWriter, u16);
+//     impl_upcast!(into_u32_signal, SignalWriter, u32);
+//     impl_upcast!(into_u64_signal, SignalWriter, u64);
 
-    impl_upcast!(into_f32_signal, SignalWriter, f32);
-    impl_upcast!(into_f64_signal, SignalWriter, f64);
-}
+//     impl_upcast!(into_f32_signal, SignalWriter, f32);
+//     impl_upcast!(into_f64_signal, SignalWriter, f64);
+// }
 
-impl<T> DynSignalReader for T where
-    T: SignalReader<i8>
-        + SignalReader<i16>
-        + SignalReader<i32>
-        + SignalReader<i64>
-        + SignalReader<u8>
-        + SignalReader<u16>
-        + SignalReader<u32>
-        + SignalReader<u64>
-        + SignalReader<f32>
-        + SignalReader<f64>
-{
-}
+// impl<T> DynSignalReader for T where
+//     T: SignalReader<Sample = i8>
+//         + SignalReader<Sample = i16>
+//         + SignalReader<Sample = i32>
+//         + SignalReader<Sample = i64>
+//         + SignalReader<Sample = u8>
+//         + SignalReader<Sample = u16>
+//         + SignalReader<Sample = u32>
+//         + SignalReader<Sample = u64>
+//         + SignalReader<Sample = f32>
+//         + SignalReader<Sample = f64>
+// {
+// }
 
-impl<T> DynSignalWriter for T where
-    T: SignalWriter<i8>
-        + SignalWriter<i16>
-        + SignalWriter<i32>
-        + SignalWriter<i64>
-        + SignalWriter<u8>
-        + SignalWriter<u16>
-        + SignalWriter<u32>
-        + SignalWriter<u64>
-        + SignalWriter<f32>
-        + SignalWriter<f64>
-{
-}
+// impl<T> DynSignalWriter for T where
+//     T: SignalWriter<Sample = i8>
+//         + SignalWriter<Sample = i16>
+//         + SignalWriter<Sample = i32>
+//         + SignalWriter<Sample = i64>
+//         + SignalWriter<Sample = u8>
+//         + SignalWriter<Sample = u16>
+//         + SignalWriter<Sample = u32>
+//         + SignalWriter<Sample = u64>
+//         + SignalWriter<Sample = f32>
+//         + SignalWriter<Sample = f64>
+// {
+// }
 
 pub enum TaggedSignalReader {
-    I8(Box<dyn SignalReader<i8>>),
-    I16(Box<dyn SignalReader<i16>>),
-    I32(Box<dyn SignalReader<i32>>),
-    I64(Box<dyn SignalReader<i64>>),
+    I8(Box<dyn SignalReader<Sample = i8>>),
+    I16(Box<dyn SignalReader<Sample = i16>>),
+    I32(Box<dyn SignalReader<Sample = i32>>),
+    I64(Box<dyn SignalReader<Sample = i64>>),
 
-    U8(Box<dyn SignalReader<u8>>),
-    U16(Box<dyn SignalReader<u16>>),
-    U32(Box<dyn SignalReader<u32>>),
-    U64(Box<dyn SignalReader<u64>>),
+    U8(Box<dyn SignalReader<Sample = u8>>),
+    U16(Box<dyn SignalReader<Sample = u16>>),
+    U32(Box<dyn SignalReader<Sample = u32>>),
+    U64(Box<dyn SignalReader<Sample = u64>>),
 
-    F32(Box<dyn SignalReader<f32>>),
-    F64(Box<dyn SignalReader<f64>>),
+    F32(Box<dyn SignalReader<Sample = f32>>),
+    F64(Box<dyn SignalReader<Sample = f64>>),
 }
 
 pub enum TaggedSignalWriter {
-    I8(Box<dyn SignalWriter<i8>>),
-    I16(Box<dyn SignalWriter<i16>>),
-    I32(Box<dyn SignalWriter<i32>>),
-    I64(Box<dyn SignalWriter<i64>>),
+    I8(Box<dyn SignalWriter<Sample = i8>>),
+    I16(Box<dyn SignalWriter<Sample = i16>>),
+    I32(Box<dyn SignalWriter<Sample = i32>>),
+    I64(Box<dyn SignalWriter<Sample = i64>>),
 
-    U8(Box<dyn SignalWriter<u8>>),
-    U16(Box<dyn SignalWriter<u16>>),
-    U32(Box<dyn SignalWriter<u32>>),
-    U64(Box<dyn SignalWriter<u64>>),
+    U8(Box<dyn SignalWriter<Sample = u8>>),
+    U16(Box<dyn SignalWriter<Sample = u16>>),
+    U32(Box<dyn SignalWriter<Sample = u32>>),
+    U64(Box<dyn SignalWriter<Sample = u64>>),
 
-    F32(Box<dyn SignalWriter<f32>>),
-    F64(Box<dyn SignalWriter<f64>>),
+    F32(Box<dyn SignalWriter<Sample = f32>>),
+    F64(Box<dyn SignalWriter<Sample = f64>>),
 }
 
 macro_rules! match_signal_ref {
@@ -143,7 +143,7 @@ macro_rules! match_signal_ref {
 
 macro_rules! impl_unwrap {
     ($self:ident, $inner:ident, $name:ident, $sample:ty, $variant:ident) => {
-        pub fn $name(self) -> Result<Box<dyn $inner<$sample>>, SyphonError> {
+        pub fn $name(self) -> Result<Box<dyn $inner<Sample = $sample>>, SyphonError> {
             match self {
                 $self::$variant(signal) => Ok(signal),
                 _ => Err(SyphonError::SignalMismatch),
@@ -154,8 +154,8 @@ macro_rules! impl_unwrap {
 
 macro_rules! impl_from_inner {
     ($self: ident, $inner:ident, $sample:ty, $variant:ident) => {
-        impl From<Box<dyn $inner<$sample>>> for $self {
-            fn from(signal: Box<dyn $inner<$sample>>) -> Self {
+        impl From<Box<dyn $inner<Sample = $sample>>> for $self {
+            fn from(signal: Box<dyn $inner<Sample = $sample>>) -> Self {
                 Self::$variant(signal)
             }
         }
@@ -163,13 +163,13 @@ macro_rules! impl_from_inner {
 }
 
 macro_rules! impl_signal_ref {
-    ($self:ident, $tag_inner:ident, $dyn_inner:ident) => {
+    ($self:ident, $tag_inner:ident) => {
         impl $self {
             pub fn spec(&self) -> SignalSpec {
                 match_signal_ref!(self, Self, ref signal, (*signal.spec()).into())
             }
 
-            pub fn into_adapter(self) -> Box<dyn $dyn_inner> {
+            pub fn adapt_sample_type<S: KnownSample + 'static>(self) -> Box<dyn $tag_inner<Sample = S>> {
                 match_signal_ref!(self, Self, signal, Box::new(SampleTypeAdapter::new(signal)))
             }
 
@@ -202,5 +202,5 @@ macro_rules! impl_signal_ref {
     };
 }
 
-impl_signal_ref!(TaggedSignalReader, SignalReader, DynSignalReader);
-impl_signal_ref!(TaggedSignalWriter, SignalWriter, DynSignalWriter);
+impl_signal_ref!(TaggedSignalReader, SignalReader);
+impl_signal_ref!(TaggedSignalWriter, SignalWriter);

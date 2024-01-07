@@ -16,19 +16,21 @@ impl<T: Signal> FrameRateAdapter<T> {
 }
 
 impl<T: Signal> Signal for FrameRateAdapter<T> {
+    type Sample = T::Sample;
+
     fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<T: SignalReader<S>, S: Sample> SignalReader<S> for FrameRateAdapter<T> {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+impl<T: Signal> SignalReader for FrameRateAdapter<T> {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }
 }
 
-impl<T: SignalWriter<S>, S: Sample> SignalWriter<S> for FrameRateAdapter<T> {
-    fn write(&mut self, buffer: &[S]) -> Result<usize, SyphonError> {
+impl<T: Signal> SignalWriter for FrameRateAdapter<T> {
+    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }
 

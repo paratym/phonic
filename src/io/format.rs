@@ -1,5 +1,5 @@
 use crate::{
-    io::{utils::Track, StreamSpec, SyphonFormat},
+    io::{utils::Track, StreamSpec, StreamSpecBuilder, SyphonFormat},
     SyphonError,
 };
 use std::{
@@ -10,7 +10,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct FormatData {
     pub format: Option<SyphonFormat>,
-    pub tracks: Vec<StreamSpec>,
+    pub tracks: Vec<StreamSpecBuilder>,
 }
 
 impl FormatData {
@@ -26,14 +26,13 @@ impl FormatData {
         self
     }
 
-    pub fn with_track(mut self, track: StreamSpec) -> Self {
+    pub fn with_track(mut self, track: StreamSpecBuilder) -> Self {
         self.tracks.push(track);
         self
     }
 
-    pub fn filled(mut self) -> Result<Self, SyphonError> {
-        SyphonFormat::fill_data(&mut self)?;
-        Ok(self)
+    pub fn filled(self) -> Result<Self, SyphonError> {
+        SyphonFormat::fill_data(self)
     }
 }
 
@@ -132,10 +131,12 @@ where
 pub trait IntoFormatReader {
     fn into_format_reader(self, format: SyphonFormat)
         -> Result<Box<dyn FormatReader>, SyphonError>;
+}
 
+pub trait ResolveFormatReader {
     fn resolve_format_reader(
         self,
-        format: Option<impl TryInto<SyphonFormat>>,
+        identifier: Option<impl TryInto<SyphonFormat>>,
     ) -> Result<Box<dyn FormatReader>, SyphonError>;
 }
 
@@ -143,19 +144,21 @@ pub trait IntoFormatWriter {
     fn into_format_writer(self, data: FormatData) -> Result<Box<dyn FormatWriter>, SyphonError>;
 }
 
-impl<T: Read + Seek + 'static> IntoFormatReader for T {
+impl<T: Read + 'static> IntoFormatReader for T {
     fn into_format_reader(
         self,
         format: SyphonFormat,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         format.construct_reader(self)
     }
+}
 
+impl<T: Read + Seek + 'static> ResolveFormatReader for T {
     fn resolve_format_reader(
         mut self,
-        format: Option<impl TryInto<SyphonFormat>>,
+        identifier: Option<impl TryInto<SyphonFormat>>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
-        let format = format
+        let format = identifier
             .and_then(|f| f.try_into().ok())
             .or_else(|| SyphonFormat::resolve(&mut self).ok())
             .ok_or(SyphonError::Unsupported)?;

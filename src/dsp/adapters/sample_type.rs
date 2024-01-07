@@ -1,31 +1,35 @@
+use std::marker::PhantomData;
 use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 
-pub struct SampleTypeAdapter<S: Sample, T: Signal> {
+pub struct SampleTypeAdapter<T: Signal, S: Sample> {
     signal: T,
-    buffer: Box<[S]>,
+    buffer: Box<[T::Sample]>,
+    _sample: PhantomData<S>
 }
 
-impl<S: Sample, T: Signal> SampleTypeAdapter<S, T> {
+impl<T: Signal, S: Sample> SampleTypeAdapter<T, S> {
     pub fn new(signal: T) -> Self {
         let buf_len = signal.spec().channels.count() as usize;
-        let buffer = vec![S::ORIGIN; buf_len].into_boxed_slice();
-        Self { signal, buffer }
+        let buffer = vec![T::Sample::ORIGIN; buf_len].into_boxed_slice();
+        Self { signal, buffer, _sample: PhantomData }
     }
 }
 
-impl<S: Sample, T: Signal> Signal for SampleTypeAdapter<S, T> {
+impl<T: Signal, S: Sample> Signal for SampleTypeAdapter<T, S> {
+    type Sample = S;
+
     fn spec(&self) -> &SignalSpec {
         self.signal.spec()
     }
 }
 
-impl<S, O, T> SignalReader<O> for SampleTypeAdapter<S, T>
+impl<T, S> SignalReader for SampleTypeAdapter<T, S>
 where
-    S: Sample + IntoSample<O>,
-    O: Sample,
-    T: SignalReader<S>,
+    T: SignalReader,
+    T::Sample: IntoSample<S>,
+    S: Sample,
 {
-    fn read(&mut self, buffer: &mut [O]) -> Result<usize, SyphonError> {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
         let n = self.signal.read(&mut self.buffer[..buf_len])?;
 
@@ -37,13 +41,13 @@ where
     }
 }
 
-impl<S, O, T> SignalWriter<O> for SampleTypeAdapter<S, T>
+impl<T, S> SignalWriter for SampleTypeAdapter<T, S>
 where
+    T: SignalWriter,
     S: Sample,
-    O: Sample + IntoSample<S>,
-    T: SignalWriter<S>,
+    Self::Sample: IntoSample<T::Sample>,
 {
-    fn write(&mut self, buffer: &[O]) -> Result<usize, SyphonError> {
+    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError> {
         let buf_len = buffer.len().min(self.buffer.len());
 
         for (outer, inner) in buffer[..buf_len].iter().zip(self.buffer.iter_mut()) {

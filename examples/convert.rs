@@ -4,10 +4,10 @@ use std::{
 };
 use syphon::{
     io::{
-        formats::FormatIdentifier, utils::copy, Format, FormatData, IntoFormatReader,
-        IntoFormatWriter, Stream, StreamSpec,
+        formats::FormatIdentifier, utils::copy, Format, FormatData, IntoFormatWriter,
+        ResolveFormatReader, StreamReader, StreamSpecBuilder, StreamWriter,
     },
-    Sample, SampleType, SyphonError,
+    Sample, SyphonError,
 };
 
 fn main() -> Result<(), SyphonError> {
@@ -21,7 +21,7 @@ fn main() -> Result<(), SyphonError> {
         .resolve_format_reader(src_fmt_id.as_ref())?
         .into_default_track()?
         .into_decoder()?
-        .into_adapter();
+        .adapt_sample_type();
 
     let dst_path = Path::new("./examples/generated/sine_converted.wav");
     create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
@@ -33,9 +33,9 @@ fn main() -> Result<(), SyphonError> {
         .and_then(|ref id| id.try_into().ok())
         .ok_or(SyphonError::Unsupported)?;
 
-    let dst_stream_spec = StreamSpec::new()
-        .with_sample_type(SampleType::I16)
-        .with_decoded_spec((*decoder.spec()).into());
+    let dst_stream_spec = StreamSpecBuilder::new()
+        .with_sample_type::<i16>()
+        .with_decoded_spec(decoder.spec().clone().into());
 
     let dst_fmt_data = FormatData::new()
         .with_format(dst_fmt)

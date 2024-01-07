@@ -5,7 +5,7 @@ use crate::{
 use std::time::Duration;
 
 pub trait SignalAdapter: Signal + Sized {
-    fn adapt_sample_type<S: Sample>(self) -> SampleTypeAdapter<S, Self> {
+    fn adapt_sample_type<S: Sample>(self) -> SampleTypeAdapter<Self, S> {
         SampleTypeAdapter::new(self)
     }
 
@@ -25,14 +25,14 @@ pub trait SignalAdapter: Signal + Sized {
         DurationAdapter::from_duration(self, duration)
     }
 
-    fn adapt_reader_spec<S, O>(self, spec: &SignalSpec) -> Box<dyn SignalReader<O>>
+    fn adapt_reader_spec<S>(self, spec: &SignalSpec) -> Box<dyn SignalReader<Sample = S>>
     where
-        S: Sample + IntoSample<O> + 'static,
-        O: Sample + 'static,
-        Self: SignalReader<S> + Sized + 'static,
+        S: Sample + 'static,
+        Self: SignalReader + Sized + 'static,
+        Self::Sample: IntoSample<S>,
     {
         let src_spec = *self.spec();
-        let mut adapter = Box::new(self.adapt_sample_type()) as Box<dyn SignalReader<O>>;
+        let mut adapter = Box::new(self.adapt_sample_type()) as Box<dyn SignalReader<Sample = S>>;
 
         if src_spec.frame_rate != spec.frame_rate {
             adapter = Box::new(adapter.adapt_frame_rate(spec.frame_rate));
@@ -49,14 +49,13 @@ pub trait SignalAdapter: Signal + Sized {
         adapter
     }
 
-    fn adapt_writer_spec<S, O>(self, spec: &SignalSpec) -> Box<dyn SignalWriter<O>>
+    fn adapt_writer_spec<S>(self, spec: &SignalSpec) -> Box<dyn SignalWriter<Sample = S>>
     where
-        S: Sample + 'static,
-        O: Sample + IntoSample<S> + 'static,
-        Self: SignalWriter<S> + Sized + 'static,
+        S: Sample + IntoSample<Self::Sample> + 'static,
+        Self: SignalWriter + Sized + 'static,
     {
         let src_spec = *self.spec();
-        let mut adapter = Box::new(self.adapt_sample_type()) as Box<dyn SignalWriter<O>>;
+        let mut adapter = Box::new(self.adapt_sample_type()) as Box<dyn SignalWriter<Sample = S>>;
 
         if src_spec.frame_rate != spec.frame_rate {
             adapter = Box::new(adapter.adapt_frame_rate(spec.frame_rate));

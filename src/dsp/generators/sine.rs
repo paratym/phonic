@@ -18,13 +18,15 @@ impl SineGenerator {
 }
 
 impl Signal for SineGenerator {
+    type Sample = f32;
+
     fn spec(&self) -> &SignalSpec {
         &self.spec
     }
 }
 
-impl<S: Sample + FromSample<f32>> SignalReader<S> for SineGenerator {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, SyphonError> {
+impl SignalReader for SineGenerator {
+    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         let buf_len = self
             .spec
             .n_samples()
@@ -37,7 +39,7 @@ impl<S: Sample + FromSample<f32>> SignalReader<S> for SineGenerator {
 
         for frame in &mut frames {
             let t = self.i as f32 / self.spec.frame_rate as f32;
-            frame.fill((t * self.frequency * 2.0 * PI).sin().into_sample());
+            frame.fill((t * self.frequency * 2.0 * PI).sin());
 
             self.i += 1;
         }

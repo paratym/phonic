@@ -1,7 +1,7 @@
 use crate::{
     io::{
         formats::wave::{WaveFormat, WAVE_IDENTIFIERS},
-        FormatData, FormatReader, FormatWriter, SyphonCodec,
+        FormatData, FormatReader, FormatWriter, StreamSpecBuilder, SyphonCodec,
     },
     SyphonError,
 };
@@ -41,16 +41,19 @@ impl SyphonFormat {
         }
     }
 
-    pub fn fill_data(data: &mut FormatData) -> Result<(), SyphonError> {
-        match data.format.ok_or(SyphonError::MissingData)? {
+    pub fn fill_data(mut data: FormatData) -> Result<FormatData, SyphonError> {
+        data = match data.format.ok_or(SyphonError::MissingData)? {
             SyphonFormat::Wave => fill_wave_format_data(data)?,
-        }
+        };
 
-        for track in data.tracks.iter_mut() {
-            SyphonCodec::fill_spec(track)?;
-        }
 
-        Ok(())
+        data.tracks = data
+            .tracks
+            .into_iter()
+            .map(StreamSpecBuilder::filled)
+            .collect::<Result<_, _>>()?;
+
+        Ok(data)
     }
 
     pub fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError> {
