@@ -10,7 +10,7 @@ This project is very early in development. It's untested, and the api changes wi
 ## Roadmap
 [ ] Extensible "known" formats/codecs \
 [ ] Rewrite & implement drop semantics for wave format \
-[ ] Add endianess considerations for pcm codec \ 
+[ ] Add endianess considerations for pcm codec \
 [ ] Write format resolver for byte string identifiers \
 [ ] Finish the sample conversions \
 [ ] Complete the core signal adapters \
