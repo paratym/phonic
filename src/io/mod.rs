@@ -1,9 +1,9 @@
-mod dyn_signal;
 mod format;
+mod known_sample;
 mod stream;
 
-pub use dyn_signal::*;
 pub use format::*;
+pub use known_sample::*;
 pub use stream::*;
 
 pub mod codecs;

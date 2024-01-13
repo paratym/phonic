@@ -1,4 +1,7 @@
-use crate::{FromSample, IntoSample, Sample, Signal, SignalReader, SignalSpec, SyphonError};
+use crate::{
+    signal::{Signal, SignalReader, SignalSpec},
+    SyphonError,
+};
 use std::f32::consts::PI;
 
 pub struct SineGenerator {

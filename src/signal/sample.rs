@@ -1,9 +1,3 @@
-use std::{any::TypeId, mem::size_of};
-
-use byte_slice_cast::{FromByteSlice, ToByteSlice, ToMutByteSlice};
-
-use crate::SyphonError;
-
 pub trait Sample: Copy + Sized {
     const ORIGIN: Self;
     const RANGE: (Self, Self);
@@ -28,10 +22,6 @@ macro_rules! impl_int_sample {
             const ORIGIN: Self = 0;
             const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
         }
-
-        impl KnownSample for $s {
-            const TYPE: KnownSampleType = KnownSampleType::$t;
-        }
     };
 }
 
@@ -41,10 +31,6 @@ macro_rules! impl_uint_sample {
             const ORIGIN: Self = Self::MAX / 2;
             const RANGE: (Self, Self) = (Self::MIN, Self::MAX);
         }
-
-        impl KnownSample for $s {
-            const TYPE: KnownSampleType = KnownSampleType::$t;
-        }
     };
 }
 
@@ -53,10 +39,6 @@ macro_rules! impl_float_sample {
         impl Sample for $s {
             const ORIGIN: Self = 0.0;
             const RANGE: (Self, Self) = (-1.0, 1.0);
-        }
-
-        impl KnownSample for $s {
-            const TYPE: KnownSampleType = KnownSampleType::$t;
         }
     };
 }
@@ -236,12 +218,22 @@ impl_convert!(
     s,
     ((s.clamped() + 1.0) as f64 * 2_147_483_648.0) as u32
 );
-impl_convert!(f32, u64, s, todo!());
+impl_convert!(
+    f32,
+    u64,
+    s,
+    (s.clamped() as f64 * 9_223_372_036_854_775_808.0) as u64
+);
 
 impl_convert!(f32, i8, s, (s.clamped() * 128.0) as i8);
 impl_convert!(f32, i16, s, (s.clamped() * 32_768.0) as i16);
 impl_convert!(f32, i32, s, (s.clamped() as f64 * 2_147_483_648.0) as i32);
-impl_convert!(f32, i64, s, todo!());
+impl_convert!(
+    f32,
+    i64,
+    s,
+    (s.clamped() as f64 * 9_223_372_036_854_775_808.0) as i64
+);
 
 impl_convert!(f32, f32, s, s);
 impl_convert!(f32, f64, s, s as f64);
@@ -250,151 +242,22 @@ impl_convert!(f32, f64, s, s as f64);
 impl_convert!(f64, u8, s, ((s.clamped() + 1.0) * 128.0) as u8);
 impl_convert!(f64, u16, s, ((s.clamped() + 1.0) * 32_768.0) as u16);
 impl_convert!(f64, u32, s, ((s.clamped() + 1.0) * 2_147_483_648.0) as u32);
-impl_convert!(f64, u64, s, todo!());
+impl_convert!(
+    f64,
+    u64,
+    s,
+    ((s.clamped() + 1.0) * 9_223_372_036_854_775_808.0) as u64
+);
 
 impl_convert!(f64, i8, s, (s.clamped() * 128.0) as i8);
 impl_convert!(f64, i16, s, (s.clamped() * 32_768.0) as i16);
 impl_convert!(f64, i32, s, (s.clamped() * 2_147_483_648.0) as i32);
-impl_convert!(f64, i64, s, todo!());
+impl_convert!(
+    f64,
+    i64,
+    s,
+    (s.clamped() * 9_223_372_036_854_775_808.0) as i64
+);
 
 impl_convert!(f64, f32, s, s as f32);
 impl_convert!(f64, f64, s, s);
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KnownSampleType {
-    I8,
-    I16,
-    // I24,
-    I32,
-    // I48,
-    I64,
-
-    U8,
-    U16,
-    // U24,
-    U32,
-    // U48,
-    U64,
-
-    F32,
-    F64,
-}
-
-pub trait KnownSample:
-    Sample + FromKnownSample + IntoKnownSample
-{
-    const TYPE: KnownSampleType;
-}
-
-pub trait FromKnownSample:
-    Sample
-    + FromSample<i8>
-    + FromSample<i16>
-    + FromSample<i32>
-    + FromSample<i64>
-    + FromSample<u8>
-    + FromSample<u16>
-    + FromSample<u32>
-    + FromSample<u64>
-    + FromSample<f32>
-    + FromSample<f64>
-{
-}
-
-pub trait IntoKnownSample:
-    Sample
-    + IntoSample<i8>
-    + IntoSample<i16>
-    + IntoSample<i32>
-    + IntoSample<i64>
-    + IntoSample<u8>
-    + IntoSample<u16>
-    + IntoSample<u32>
-    + IntoSample<u64>
-    + IntoSample<f32>
-    + IntoSample<f64>
-{
-}
-
-impl KnownSampleType {
-    pub fn byte_size(self) -> usize {
-        match self {
-            Self::I8 => size_of::<i8>(),
-            Self::I16 => size_of::<i16>(),
-            Self::I32 => size_of::<i32>(),
-            Self::I64 => size_of::<i64>(),
-            Self::U8 => size_of::<u8>(),
-            Self::U16 => size_of::<u16>(),
-            Self::U32 => size_of::<u32>(),
-            Self::U64 => size_of::<u64>(),
-            Self::F32 => size_of::<f32>(),
-            Self::F64 => size_of::<f64>(),
-        }
-    }
-}
-
-impl TryFrom<TypeId> for KnownSampleType {
-    type Error = SyphonError;
-
-    fn try_from(id: TypeId) -> Result<Self, Self::Error> {
-        if id == TypeId::of::<u8>() {
-            Ok(Self::U8)
-        } else if id == TypeId::of::<u16>() {
-            Ok(Self::U16)
-        } else if id == TypeId::of::<u32>() {
-            Ok(Self::U32)
-        } else if id == TypeId::of::<u64>() {
-            Ok(Self::U64)
-        } else if id == TypeId::of::<i8>() {
-            Ok(Self::I8)
-        } else if id == TypeId::of::<i16>() {
-            Ok(Self::I16)
-        } else if id == TypeId::of::<i32>() {
-            Ok(Self::I32)
-        } else if id == TypeId::of::<i64>() {
-            Ok(Self::I64)
-        } else if id == TypeId::of::<f32>() {
-            Ok(Self::F32)
-        } else if id == TypeId::of::<f64>() {
-            Ok(Self::F64)
-        } else {
-            Err(SyphonError::Unsupported)
-        }
-    }
-}
-
-impl From<KnownSampleType> for TypeId {
-    fn from(value: KnownSampleType) -> Self {
-        todo!()
-    }
-}
-
-impl<S> FromKnownSample for S where
-    S: Sample
-        + FromSample<i8>
-        + FromSample<i16>
-        + FromSample<i32>
-        + FromSample<i64>
-        + FromSample<u8>
-        + FromSample<u16>
-        + FromSample<u32>
-        + FromSample<u64>
-        + FromSample<f32>
-        + FromSample<f64>
-{
-}
-
-impl<S> IntoKnownSample for S where
-    S: Sample
-        + IntoSample<i8>
-        + IntoSample<i16>
-        + IntoSample<i32>
-        + IntoSample<i64>
-        + IntoSample<u8>
-        + IntoSample<u16>
-        + IntoSample<u32>
-        + IntoSample<u64>
-        + IntoSample<f32>
-        + IntoSample<f64>
-{
-}

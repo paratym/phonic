@@ -1,5 +1,5 @@
 use crate::{
-    io::{utils::Track, StreamSpec, StreamSpecBuilder, SyphonFormat},
+    io::{utils::Track, StreamSpec, SyphonFormat},
     SyphonError,
 };
 use std::{
@@ -10,7 +10,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct FormatData {
     pub format: Option<SyphonFormat>,
-    pub tracks: Vec<StreamSpecBuilder>,
+    pub tracks: Vec<StreamSpec>,
 }
 
 impl FormatData {
@@ -26,7 +26,7 @@ impl FormatData {
         self
     }
 
-    pub fn with_track(mut self, track: StreamSpecBuilder) -> Self {
+    pub fn with_track(mut self, track: StreamSpec) -> Self {
         self.tracks.push(track);
         self
     }
@@ -136,7 +136,7 @@ pub trait IntoFormatReader {
 pub trait ResolveFormatReader {
     fn resolve_format_reader(
         self,
-        identifier: Option<impl TryInto<SyphonFormat>>,
+        identifier: Option<impl TryInto<SyphonFormat, Error = SyphonError>>,
     ) -> Result<Box<dyn FormatReader>, SyphonError>;
 }
 
@@ -156,12 +156,12 @@ impl<T: Read + 'static> IntoFormatReader for T {
 impl<T: Read + Seek + 'static> ResolveFormatReader for T {
     fn resolve_format_reader(
         mut self,
-        identifier: Option<impl TryInto<SyphonFormat>>,
+        identifier: Option<impl TryInto<SyphonFormat, Error = SyphonError>>,
     ) -> Result<Box<dyn FormatReader>, SyphonError> {
         let format = identifier
-            .and_then(|f| f.try_into().ok())
-            .or_else(|| SyphonFormat::resolve(&mut self).ok())
-            .ok_or(SyphonError::Unsupported)?;
+            .map(TryInto::try_into)
+            .unwrap_or(Err(SyphonError::MissingData))
+            .or_else(|_| SyphonFormat::resolve(&mut self))?;
 
         self.into_format_reader(format)
     }

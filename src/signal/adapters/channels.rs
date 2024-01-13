@@ -1,21 +1,23 @@
-use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
-use std::io::{self, Seek, SeekFrom};
+use crate::{
+    signal::{Channels, Signal, SignalReader, SignalSpec, SignalWriter},
+    SyphonError,
+};
 
-pub struct FrameRateAdapter<T: Signal> {
+pub struct ChannelsAdapter<T: Signal> {
     signal: T,
     spec: SignalSpec,
 }
 
-impl<T: Signal> FrameRateAdapter<T> {
-    pub fn new(signal: T, frame_rate: u32) -> Self {
+impl<T: Signal> ChannelsAdapter<T> {
+    pub fn new(signal: T, channels: Channels) -> Self {
         let mut spec = *signal.spec();
-        spec.frame_rate = frame_rate;
+        spec.channels = channels;
 
         Self { signal, spec }
     }
 }
 
-impl<T: Signal> Signal for FrameRateAdapter<T> {
+impl<T: Signal> Signal for ChannelsAdapter<T> {
     type Sample = T::Sample;
 
     fn spec(&self) -> &SignalSpec {
@@ -23,13 +25,13 @@ impl<T: Signal> Signal for FrameRateAdapter<T> {
     }
 }
 
-impl<T: Signal> SignalReader for FrameRateAdapter<T> {
+impl<T: SignalReader> SignalReader for ChannelsAdapter<T> {
     fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }
 }
 
-impl<T: Signal> SignalWriter for FrameRateAdapter<T> {
+impl<T: SignalWriter> SignalWriter for ChannelsAdapter<T> {
     fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError> {
         todo!()
     }

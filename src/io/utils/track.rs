@@ -1,10 +1,10 @@
 use std::{
     io::{self, Read, Write},
-    ops::{Deref, DerefMut},
+    ops::DerefMut,
 };
 
 use crate::{
-    io::{Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpecBuilder, TrackChunk, StreamSpec},
+    io::{Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec, TrackChunk},
     SyphonError,
 };
 
@@ -16,13 +16,11 @@ pub struct Track<F: Format> {
 
 impl<F: Format> Track<F> {
     pub fn new(inner: F, track_i: usize) -> Result<Self, SyphonError> {
-        let spec = inner
+        let spec = *inner
             .data()
             .tracks
             .get(track_i)
-            .ok_or(SyphonError::NotFound)?
-            .clone()
-            .build()?;
+            .ok_or(SyphonError::NotFound)?;
 
         Ok(Self {
             inner,

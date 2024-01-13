@@ -1,6 +1,7 @@
 use crate::{
-    io::{Stream, StreamSpec, StreamSpecBuilder, SyphonCodec},
-    Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError,
+    io::{Stream, StreamSpec, SyphonCodec},
+    signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter},
+    SyphonError,
 };
 use byte_slice_cast::{
     AsByteSlice, AsMutByteSlice, AsMutSliceOf, AsSliceOf, FromByteSlice, ToByteSlice,
@@ -12,27 +13,53 @@ use std::{
     mem::{align_of, size_of},
 };
 
-pub fn fill_pcm_stream_spec(mut spec: StreamSpecBuilder) -> Result<StreamSpecBuilder, SyphonError> {
+pub fn fill_pcm_stream_spec(mut spec: StreamSpec) -> Result<StreamSpec, SyphonError> {
     if spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
-        return Err(SyphonError::InvalidData);
+        return Err(SyphonError::SignalMismatch);
     }
 
-    spec.with_compression_ratio(1.0)
+    if spec.compression_ratio.get_or_insert(1.0) != &1.0 {
+        return Err(SyphonError::Unsupported);
+    }
+
+    Ok(spec)
 }
 
 pub struct PcmCodec<T, S: Sample> {
     inner: T,
-    spec: StreamSpec,
+    stream_spec: StreamSpec,
+    signal_spec: SignalSpec,
     _sample: PhantomData<S>,
 }
 
 impl<T, S: Sample> PcmCodec<T, S> {
-    pub fn new(inner: T, mut spec: StreamSpecBuilder) -> Result<Self, SyphonError> {
-        spec = fill_pcm_stream_spec(spec)?;
+    pub fn from_stream(inner: T) -> Result<Self, SyphonError>
+    where
+        T: Stream,
+    {
+        let stream_spec = fill_pcm_stream_spec(*inner.spec())?;
+        let signal_spec = stream_spec.decoded_spec.build()?;
 
         Ok(Self {
             inner,
-            spec: spec.build()?,
+            stream_spec,
+            signal_spec,
+            _sample: PhantomData,
+        })
+    }
+
+    pub fn from_signal(inner: T) -> Result<Self, SyphonError>
+    where
+        T: Signal,
+        T::Sample: 'static
+    {
+        let signal_spec = *inner.spec();
+        let stream_spec = fill_pcm_stream_spec((&inner).into())?;
+
+        Ok(Self {
+            inner,
+            stream_spec,
+            signal_spec,
             _sample: PhantomData,
         })
     }
@@ -50,7 +77,7 @@ impl<T, S: Sample> Signal for PcmCodec<T, S> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
-        &self.spec.decoded_spec
+        &self.signal_spec
     }
 }
 
@@ -96,7 +123,7 @@ where
 
 impl<T, S: Sample> Stream for PcmCodec<T, S> {
     fn spec(&self) -> &StreamSpec {
-        &self.spec
+        &self.stream_spec
     }
 }
 

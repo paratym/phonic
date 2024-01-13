@@ -1,4 +1,7 @@
-use crate::{Sample, SignalReader, SignalWriter, SyphonError};
+use crate::{
+    signal::{Sample, SignalReader, SignalWriter},
+    SyphonError,
+};
 
 pub fn copy<S: Sample>(
     reader: &mut impl SignalReader<Sample = S>,

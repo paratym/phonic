@@ -65,11 +65,9 @@ impl<T> WaveFormat<T> {
         &self.header
     }
 
-    pub fn into_format(self) -> SingleStreamFormat<Self> {
+    pub fn into_format(self) -> Result<SingleStreamFormat<Self>, SyphonError> {
         let data = self.header.into();
         SingleStreamFormat::new(self, data)
-            .with_format(SyphonFormat::Wave)
-            .with_codec(SyphonCodec::Pcm)
     }
 }
 

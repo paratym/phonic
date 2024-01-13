@@ -1,17 +1,24 @@
+use crate::{
+    signal::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter},
+    SyphonError,
+};
 use std::marker::PhantomData;
-use crate::{IntoSample, Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
 
 pub struct SampleTypeAdapter<T: Signal, S: Sample> {
     signal: T,
     buffer: Box<[T::Sample]>,
-    _sample: PhantomData<S>
+    _sample: PhantomData<S>,
 }
 
 impl<T: Signal, S: Sample> SampleTypeAdapter<T, S> {
     pub fn new(signal: T) -> Self {
         let buf_len = signal.spec().channels.count() as usize;
         let buffer = vec![T::Sample::ORIGIN; buf_len].into_boxed_slice();
-        Self { signal, buffer, _sample: PhantomData }
+        Self {
+            signal,
+            buffer,
+            _sample: PhantomData,
+        }
     }
 }
 

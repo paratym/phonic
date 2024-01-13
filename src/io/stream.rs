@@ -1,68 +1,35 @@
 use crate::{
-    io::{SyphonCodec, TaggedSignalReader, TaggedSignalWriter},
-    KnownSampleType, Sample, SignalSpec, SignalSpecBuilder, SyphonError,
+    io::{KnownSampleType, SyphonCodec, TaggedSignalReader, TaggedSignalWriter},
+    signal::{Sample, Signal, SignalSpecBuilder},
+    SyphonError,
 };
 use std::{
     any::TypeId,
     io::{Read, Write},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct StreamSpec {
-    pub codec: SyphonCodec,
-    pub byte_len: Option<u64>,
-    pub sample_type: TypeId,
-    pub decoded_spec: SignalSpec,
-}
-
-#[derive(Debug, Clone)]
-pub struct StreamSpecBuilder {
     pub codec: Option<SyphonCodec>,
-    pub byte_len: Option<u64>,
+    pub compression_ratio: Option<f64>,
     pub sample_type: Option<TypeId>,
     pub decoded_spec: SignalSpecBuilder,
 }
 
 impl StreamSpec {
-    pub fn builder() -> StreamSpecBuilder {
-        StreamSpecBuilder::new()
-    }
-
-    pub fn known_sample_type(&self) -> Option<KnownSampleType> {
-        self.sample_type.try_into().ok()
-    }
-
-    pub fn compression_ratio(&self) -> Option<f64> {
-        self.byte_len
-            .zip(self.decoded_spec.n_samples())
-            .zip(self.known_sample_type().map(KnownSampleType::byte_size))
-            .map(|((byte_len, n_samples), bytes_per_sample)| {
-                (byte_len as f64 / n_samples as f64) / bytes_per_sample as f64
-            })
-    }
-}
-
-impl TryFrom<StreamSpecBuilder> for StreamSpec {
-    type Error = SyphonError;
-
-    fn try_from(builder: StreamSpecBuilder) -> Result<Self, Self::Error> {
-        Ok(Self {
-            codec: builder.codec.ok_or(SyphonError::MissingData)?,
-            byte_len: builder.byte_len,
-            sample_type: builder.sample_type.ok_or(SyphonError::MissingData)?,
-            decoded_spec: builder.decoded_spec.build()?,
-        })
-    }
-}
-
-impl StreamSpecBuilder {
     pub fn new() -> Self {
         Self {
             codec: None,
-            byte_len: None,
+            compression_ratio: None,
             sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
         }
+    }
+
+    pub fn byte_len(&self) -> Option<u64> {
+        let sample_type = KnownSampleType::try_from(self.sample_type?).ok()?;
+        let decoded_byte_len = self.decoded_spec.n_frames? * sample_type.byte_size() as u64;
+        Some((decoded_byte_len as f64 * self.compression_ratio?) as u64)
     }
 
     pub fn with_codec(mut self, codec: SyphonCodec) -> Self {
@@ -70,8 +37,13 @@ impl StreamSpecBuilder {
         self
     }
 
-    pub fn with_byte_len(mut self, byte_len: Option<u64>) -> Self {
-        self.byte_len = byte_len;
+    pub fn with_compression_ratio(mut self, ratio: f64) -> Self {
+        self.compression_ratio = Some(ratio);
+        self
+    }
+
+    pub fn with_sample_type_id(mut self, sample_type: TypeId) -> Self {
+        self.sample_type = Some(sample_type);
         self
     }
 
@@ -85,67 +57,21 @@ impl StreamSpecBuilder {
         self
     }
 
-    pub fn with_compression_ratio(mut self, ratio: f64) -> Result<Self, SyphonError> {
-        let bytes_per_encoded_sample = self
-            .sample_type
-            .and_then(|s| KnownSampleType::try_from(s).ok())
-            .map(|s| s.byte_size() as f64 * ratio);
-
-        let calculated_byte_len = self
-            .decoded_spec
-            .n_samples()
-            .zip(bytes_per_encoded_sample)
-            .map(|(n_samples, bytes_per_sample)| (n_samples as f64 * bytes_per_sample) as u64);
-
-        if calculated_byte_len.is_some_and(|n| self.byte_len.get_or_insert(n) != &n) {
-            return Err(SyphonError::InvalidData);
-        }
-
-        let calculated_n_frames = self
-            .byte_len
-            .zip(bytes_per_encoded_sample)
-            .zip(self.decoded_spec.channels)
-            .map(|((byte_len, bytes_per_sample), channels)| {
-                ((byte_len as f64 / bytes_per_sample) / channels.count() as f64) as u64
-            });
-
-        if calculated_n_frames.is_some_and(|n| self.decoded_spec.n_frames.get_or_insert(n) != &n) {
-            return Err(SyphonError::InvalidData);
-        }
-
-        let calculated_channels = self
-            .byte_len
-            .zip(bytes_per_encoded_sample)
-            .zip(self.decoded_spec.n_frames)
-            .map(|((byte_len, bytes_per_sample), n_frames)| {
-                ((byte_len as f64 / bytes_per_sample) / n_frames as f64) as u32
-            });
-
-        if calculated_channels
-            .is_some_and(|c| self.decoded_spec.channels.get_or_insert(c.into()).count() != c)
-        {
-            return Err(SyphonError::InvalidData);
-        }
-
-        Ok(self)
-    }
-
-    pub fn filled(mut self) -> Result<Self, SyphonError> {
+    pub fn filled(self) -> Result<Self, SyphonError> {
         SyphonCodec::fill_spec(self)
-    }
-
-    pub fn build(self) -> Result<StreamSpec, SyphonError> {
-        self.try_into()
     }
 }
 
-impl From<StreamSpec> for StreamSpecBuilder {
-    fn from(spec: StreamSpec) -> Self {
+impl<T: Signal> From<&T> for StreamSpec
+where
+    T::Sample: 'static,
+{
+    fn from(inner: &T) -> Self {
         Self {
-            codec: Some(spec.codec),
-            byte_len: spec.byte_len,
-            sample_type: Some(spec.sample_type),
-            decoded_spec: spec.decoded_spec.into(),
+            codec: None,
+            compression_ratio: None,
+            sample_type: Some(TypeId::of::<T::Sample>()),
+            decoded_spec: inner.spec().clone().into(),
         }
     }
 }
@@ -159,8 +85,7 @@ pub trait StreamReader: Stream + Read {
     where
         Self: Sized + 'static,
     {
-        let spec = self.spec().clone().into();
-        SyphonCodec::construct_decoder_reader(self, spec)
+        SyphonCodec::construct_decoder_reader(self)
     }
 }
 
@@ -171,8 +96,7 @@ pub trait StreamWriter: Stream + Write {
     where
         Self: Sized + 'static,
     {
-        let spec = self.spec().clone().into();
-        SyphonCodec::construct_encoder_writer(self, spec)
+        SyphonCodec::construct_encoder_writer(self)
     }
 }
 

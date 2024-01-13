@@ -1,4 +1,7 @@
-use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter, SyphonError};
+use crate::{
+    signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter},
+    SyphonError,
+};
 use std::time::Duration;
 
 pub struct DurationAdapter<T: Signal> {
