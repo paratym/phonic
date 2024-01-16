@@ -1,6 +1,6 @@
 use crate::{
     io::{
-        formats::{wave::WaveHeader, FormatIdentifiers},
+        formats::{wave::WaveHeader, FormatIdentifiers, KnownFormat},
         utils::SingleStreamFormat,
         FormatData, SyphonCodec, SyphonFormat,
     },
@@ -14,18 +14,22 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub fn fill_wave_format_data(mut data: FormatData) -> Result<FormatData, SyphonError> {
-    if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
-        return Err(SyphonError::InvalidData);
-    }
+pub fn fill_wave_format_data<F: KnownFormat>(
+    data: &mut FormatData<F>,
+) -> Result<FormatData<F>, SyphonError> {
+    // if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
+    //     return Err(SyphonError::InvalidData);
+    // }
 
-    for track in data.tracks.iter_mut() {
-        if track.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
-            return Err(SyphonError::Unsupported);
-        }
-    }
+    // for track in data.tracks.iter_mut() {
+    //     if track.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
+    //         return Err(SyphonError::Unsupported);
+    //     }
+    // }
 
-    Ok(data)
+    // Ok(data)
+
+    todo!()
 }
 
 pub struct WaveFormat<T> {
@@ -65,9 +69,14 @@ impl<T> WaveFormat<T> {
         &self.header
     }
 
-    pub fn into_format(self) -> Result<SingleStreamFormat<Self>, SyphonError> {
+    pub fn into_format<F>(self) -> Result<SingleStreamFormat<Self, F>, SyphonError>
+    where
+        F: KnownFormat,
+        WaveHeader: Into<FormatData<F>>,
+        SyphonFormat: TryInto<F>,
+    {
         let data = self.header.into();
-        SingleStreamFormat::new(self, data)
+        SingleStreamFormat::new(self, SyphonFormat::Wave.try_into().ok(), data)
     }
 }
 

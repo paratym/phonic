@@ -32,6 +32,10 @@ impl SignalSpec {
         SignalSpecBuilder::new()
     }
 
+    pub fn sample_rate(&self) -> u64 {
+        self.frame_rate as u64 * self.channels.count() as u64
+    }
+
     pub fn n_samples(&self) -> Option<u64> {
         self.n_frames.map(|n| n * self.channels.count() as u64)
     }
@@ -61,6 +65,12 @@ impl SignalSpecBuilder {
             channels: None,
             n_frames: None,
         }
+    }
+
+    pub fn sample_rate(&self) -> Option<u64> {
+        self.frame_rate
+            .zip(self.channels)
+            .map(|(frame_rate, channels)| frame_rate as u64 * channels.count() as u64)
     }
 
     pub fn n_samples(&self) -> Option<u64> {

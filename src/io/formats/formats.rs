@@ -1,16 +1,16 @@
 use crate::{
     io::{
-        formats::wave::{WaveFormat, WAVE_IDENTIFIERS},
-        FormatData, FormatReader, FormatWriter, StreamSpec, SyphonCodec,
+        codecs::KnownCodec,
+        formats::wave::{fill_wave_format_data, WaveFormat, WAVE_IDENTIFIERS},
+        FormatData, FormatReader, FormatWriter, SyphonCodec,
     },
     SyphonError,
 };
 use std::{
     hash::Hash,
     io::{Read, Seek, Write},
+    path::Path,
 };
-
-use super::wave::fill_wave_format_data;
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub enum SyphonFormat {
@@ -29,6 +29,43 @@ pub enum FormatIdentifier<'a> {
     MimeType(&'a str),
 }
 
+pub trait KnownFormat: Sized + Hash + Eq + Copy + Clone {
+    type Codec: KnownCodec;
+
+    fn init() -> Result<(), SyphonError>;
+
+    fn fill_data(&self, data: &mut FormatData<Self>) -> Result<(), SyphonError>;
+
+    fn construct_reader(
+        &self,
+        inner: impl Read + 'static,
+    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError>;
+
+    fn construct_writer(
+        &self,
+        inner: impl Write + 'static,
+        data: FormatData<Self>,
+    ) -> Result<Box<dyn FormatWriter<Format = Self>>, SyphonError>;
+
+    fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError>;
+
+    fn resolve_reader<T, I>(
+        mut source: T,
+        identifier: Option<I>,
+    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError>
+    where
+        T: Read + Seek + 'static,
+        I: TryInto<Self>,
+        I::Error: Into<SyphonError>,
+    {
+        identifier
+            .ok_or(SyphonError::MissingData)
+            .and_then(|id| id.try_into().map_err(Into::into))
+            .or_else(|_| Self::resolve(&mut source))?
+            .construct_reader(source)
+    }
+}
+
 impl SyphonFormat {
     pub fn all() -> &'static [Self] {
         const SYPHON_FORMATS: &[SyphonFormat] = &[SyphonFormat::Wave];
@@ -40,39 +77,48 @@ impl SyphonFormat {
             SyphonFormat::Wave => &WAVE_IDENTIFIERS,
         }
     }
+}
 
-    pub fn fill_data(mut data: FormatData) -> Result<FormatData, SyphonError> {
-        data = match data.format.ok_or(SyphonError::MissingData)? {
+impl KnownFormat for SyphonFormat {
+    type Codec = SyphonCodec;
+
+    fn init() -> Result<(), SyphonError> {
+        Ok(())
+    }
+
+    fn fill_data(&self, data: &mut FormatData<Self>) -> Result<(), SyphonError> {
+        match self {
             SyphonFormat::Wave => fill_wave_format_data(data)?,
         };
 
-        data.tracks = data
-            .tracks
-            .into_iter()
-            .map(StreamSpec::filled)
-            .collect::<Result<_, _>>()?;
+        for (codec, spec) in data.tracks.iter_mut() {
+            if let Some(codec) = codec {
+                codec.fill_spec(spec)?;
+            }
+        }
 
-        Ok(data)
+        Ok(())
     }
 
-    pub fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError> {
+    fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError> {
         todo!()
     }
 
-    pub fn construct_reader(
+    fn construct_reader(
         &self,
         inner: impl Read + 'static,
-    ) -> Result<Box<dyn FormatReader>, SyphonError> {
+    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError> {
         Ok(match self {
             SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()?),
         })
     }
 
-    pub fn construct_writer(
-        data: FormatData,
+    fn construct_writer(
+        &self,
         inner: impl Write + 'static,
-    ) -> Result<Box<dyn FormatWriter>, SyphonError> {
-        Ok(match data.format.ok_or(SyphonError::MissingData)? {
+        data: FormatData<Self>,
+    ) -> Result<Box<dyn FormatWriter<Format = Self>>, SyphonError> {
+        Ok(match self {
             SyphonFormat::Wave => {
                 Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format()?)
             }
@@ -98,5 +144,16 @@ impl FormatIdentifiers {
             FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
             FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
         }
+    }
+}
+
+impl<'a> TryFrom<&'a Path> for FormatIdentifier<'a> {
+    type Error = SyphonError;
+
+    fn try_from(path: &'a Path) -> Result<Self, Self::Error> {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| FormatIdentifier::FileExtension(ext))
+            .ok_or(SyphonError::MissingData)
     }
 }

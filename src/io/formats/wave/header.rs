@@ -1,5 +1,7 @@
 use crate::{
-    io::{FormatData, KnownSampleType, StreamSpec, SyphonCodec, SyphonFormat},
+    io::{
+        formats::KnownFormat, FormatData, KnownSampleType, StreamSpec, SyphonCodec, SyphonFormat,
+    },
     signal::{ChannelLayout, Channels, SignalSpecBuilder},
     SyphonError,
 };
@@ -133,7 +135,11 @@ impl WaveHeader {
     }
 }
 
-impl From<WaveHeader> for FormatData {
+impl<F> From<WaveHeader> for FormatData<F>
+where
+    F: KnownFormat,
+    SyphonCodec: TryInto<F::Codec>,
+{
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
@@ -161,31 +167,39 @@ impl From<WaveHeader> for FormatData {
             .map(|(fact, s)| fact.n_frames as u64 * channels.count() as u64 * s.byte_size() as u64);
 
         Self {
-            format: Some(SyphonFormat::Wave),
-            tracks: vec![StreamSpec {
-                codec,
-                compression_ratio: decoded_byte_len
-                    .map(|decoded| header.data.byte_len as f64 / decoded as f64),
-                sample_type: sample_type.map(Into::into),
-                decoded_spec: SignalSpecBuilder::new()
-                    .with_channels(channels)
-                    .with_frame_rate(header.fmt.sample_rate)
-                    .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
-            }],
+            tracks: vec![(
+                codec.and_then(|c| c.try_into().ok()),
+                StreamSpec {
+                    avg_bitrate: todo!(),
+                    // compression_ratio: decoded_byte_len
+                    //     .map(|decoded| header.data.byte_len as f64 / decoded as f64),
+                    sample_type: sample_type.map(Into::into),
+                    decoded_spec: SignalSpecBuilder::new()
+                        .with_channels(channels)
+                        .with_frame_rate(header.fmt.sample_rate)
+                        .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
+                },
+            )],
         }
     }
 }
 
-impl TryFrom<FormatData> for WaveHeader {
+impl<F> TryFrom<FormatData<F>> for WaveHeader
+where
+    F: KnownFormat,
+    F::Codec: Copy + PartialEq,
+    SyphonCodec: TryInto<F::Codec>
+{
     type Error = SyphonError;
 
-    fn try_from(mut data: FormatData) -> Result<Self, Self::Error> {
+    fn try_from(mut data: FormatData<F>) -> Result<Self, Self::Error> {
         if data.tracks.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
 
-        let spec = &mut data.tracks[0];
-        if spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
+        let (codec, spec) = &mut data.tracks[0];
+        let expected_codec = SyphonCodec::Pcm.try_into().ok();
+        if expected_codec.is_some_and(|c| codec.get_or_insert(c) != &c) {
             return Err(SyphonError::Unsupported);
         }
 
@@ -193,7 +207,7 @@ impl TryFrom<FormatData> for WaveHeader {
             .sample_type
             .ok_or(SyphonError::MissingData)?
             .try_into()?;
-        
+
         let format_tag = match sample_type {
             KnownSampleType::U8 | KnownSampleType::I16 | KnownSampleType::I32 => 1,
             KnownSampleType::F32 | KnownSampleType::F64 => 3,
@@ -226,7 +240,7 @@ impl TryFrom<FormatData> for WaveHeader {
                 .n_frames
                 .map(|n| FactChunk { n_frames: n as u32 }),
             data: DataChunk {
-                byte_len: spec.byte_len().ok_or(SyphonError::Unsupported)? as u32,
+                byte_len: spec.n_bytes().ok_or(SyphonError::Unsupported)? as u32,
             },
         })
     }

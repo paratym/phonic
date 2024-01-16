@@ -1,5 +1,5 @@
 use crate::{
-    io::{KnownSampleType, SyphonCodec, TaggedSignalReader, TaggedSignalWriter},
+    io::{codecs::KnownCodec, KnownSampleType, TaggedSignalReader, TaggedSignalWriter},
     signal::{Sample, Signal, SignalSpecBuilder},
     SyphonError,
 };
@@ -10,8 +10,7 @@ use std::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct StreamSpec {
-    pub codec: Option<SyphonCodec>,
-    pub compression_ratio: Option<f64>,
+    pub avg_bitrate: Option<f64>,
     pub sample_type: Option<TypeId>,
     pub decoded_spec: SignalSpecBuilder,
 }
@@ -19,26 +18,14 @@ pub struct StreamSpec {
 impl StreamSpec {
     pub fn new() -> Self {
         Self {
-            codec: None,
-            compression_ratio: None,
+            avg_bitrate: None,
             sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
         }
     }
 
-    pub fn byte_len(&self) -> Option<u64> {
-        let sample_type = KnownSampleType::try_from(self.sample_type?).ok()?;
-        let decoded_byte_len = self.decoded_spec.n_frames? * sample_type.byte_size() as u64;
-        Some((decoded_byte_len as f64 * self.compression_ratio?) as u64)
-    }
-
-    pub fn with_codec(mut self, codec: SyphonCodec) -> Self {
-        self.codec = Some(codec);
-        self
-    }
-
-    pub fn with_compression_ratio(mut self, ratio: f64) -> Self {
-        self.compression_ratio = Some(ratio);
+    pub fn with_avg_bitrate(mut self, bitrate: f64) -> Self {
+        self.avg_bitrate = Some(bitrate);
         self
     }
 
@@ -57,19 +44,21 @@ impl StreamSpec {
         self
     }
 
-    pub fn filled(self) -> Result<Self, SyphonError> {
-        SyphonCodec::fill_spec(self)
+    pub fn n_bytes(&self) -> Option<u64> {
+        self.avg_bitrate
+            .zip(self.decoded_spec.duration())
+            .map(|(r, d)| (r / 8.0 * d.as_secs_f64()) as u64)
     }
 }
 
-impl<T: Signal> From<&T> for StreamSpec
+impl<T> From<&T> for StreamSpec
 where
+    T: Signal,
     T::Sample: 'static,
 {
     fn from(inner: &T) -> Self {
         Self {
-            codec: None,
-            compression_ratio: None,
+            avg_bitrate: None,
             sample_type: Some(TypeId::of::<T::Sample>()),
             decoded_spec: inner.spec().clone().into(),
         }
@@ -77,6 +66,9 @@ where
 }
 
 pub trait Stream {
+    type Codec: KnownCodec;
+
+    fn codec(&self) -> Option<&Self::Codec>;
     fn spec(&self) -> &StreamSpec;
 }
 
@@ -85,7 +77,7 @@ pub trait StreamReader: Stream + Read {
     where
         Self: Sized + 'static,
     {
-        SyphonCodec::construct_decoder_reader(self)
+        Self::Codec::decoder_reader(self)
     }
 }
 
@@ -96,7 +88,7 @@ pub trait StreamWriter: Stream + Write {
     where
         Self: Sized + 'static,
     {
-        SyphonCodec::construct_encoder_writer(self)
+        Self::Codec::encoder_writer(self)
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    io::{Stream, StreamSpec, SyphonCodec},
+    io::{KnownSampleType, Stream, StreamSpec, SyphonCodec},
     signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter},
     SyphonError,
 };
@@ -13,16 +13,20 @@ use std::{
     mem::{align_of, size_of},
 };
 
-pub fn fill_pcm_stream_spec(mut spec: StreamSpec) -> Result<StreamSpec, SyphonError> {
-    if spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
-        return Err(SyphonError::SignalMismatch);
+pub fn fill_pcm_stream_spec(spec: &mut StreamSpec) -> Result<(), SyphonError> {
+    let calculated_bitrate = spec
+        .sample_type
+        .and_then(|s| KnownSampleType::try_from(s).ok())
+        .zip(spec.decoded_spec.sample_rate())
+        .map(|(s, r)| s.byte_size() as f64 * 8.0 * r as f64);
+
+    if let Some(bitrate) = calculated_bitrate {
+        if spec.avg_bitrate.get_or_insert(bitrate) != &bitrate {
+            return Err(SyphonError::Unsupported);
+        }
     }
 
-    if spec.compression_ratio.get_or_insert(1.0) != &1.0 {
-        return Err(SyphonError::Unsupported);
-    }
-
-    Ok(spec)
+    Ok(())
 }
 
 pub struct PcmCodec<T, S: Sample> {
@@ -37,7 +41,9 @@ impl<T, S: Sample> PcmCodec<T, S> {
     where
         T: Stream,
     {
-        let stream_spec = fill_pcm_stream_spec(*inner.spec())?;
+        let mut stream_spec = *inner.spec();
+        fill_pcm_stream_spec(&mut stream_spec)?;
+
         let signal_spec = stream_spec.decoded_spec.build()?;
 
         Ok(Self {
@@ -51,10 +57,11 @@ impl<T, S: Sample> PcmCodec<T, S> {
     pub fn from_signal(inner: T) -> Result<Self, SyphonError>
     where
         T: Signal,
-        T::Sample: 'static
+        T::Sample: 'static,
     {
         let signal_spec = *inner.spec();
-        let stream_spec = fill_pcm_stream_spec((&inner).into())?;
+        let mut stream_spec = (&inner).into();
+        fill_pcm_stream_spec(&mut stream_spec)?;
 
         Ok(Self {
             inner,
@@ -122,6 +129,12 @@ where
 }
 
 impl<T, S: Sample> Stream for PcmCodec<T, S> {
+    type Codec = SyphonCodec;
+
+    fn codec(&self) -> Option<&Self::Codec> {
+        Some(&SyphonCodec::Pcm)
+    }
+
     fn spec(&self) -> &StreamSpec {
         &self.stream_spec
     }

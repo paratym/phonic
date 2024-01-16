@@ -1,38 +1,39 @@
+use crate::{
+    io::{
+        formats::KnownFormat, Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec,
+        TrackChunk,
+    },
+    SyphonError,
+};
 use std::{
     io::{self, Read, Write},
     ops::DerefMut,
 };
 
-use crate::{
-    io::{Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec, TrackChunk},
-    SyphonError,
-};
-
 pub struct Track<F: Format> {
     inner: F,
     track_i: usize,
-    spec: StreamSpec,
 }
 
 impl<F: Format> Track<F> {
     pub fn new(inner: F, track_i: usize) -> Result<Self, SyphonError> {
-        let spec = *inner
-            .data()
-            .tracks
-            .get(track_i)
-            .ok_or(SyphonError::NotFound)?;
+        if inner.data().tracks.len() <= track_i {
+            return Err(SyphonError::NotFound);
+        }
 
-        Ok(Self {
-            inner,
-            track_i,
-            spec,
-        })
+        Ok(Self { inner, track_i })
     }
 }
 
 impl<F: Format> Stream for Track<F> {
+    type Codec = <F::Format as KnownFormat>::Codec;
+
+    fn codec(&self) -> Option<&Self::Codec> {
+        self.inner.data().tracks[self.track_i].0.as_ref()
+    }
+
     fn spec(&self) -> &StreamSpec {
-        &self.spec
+        &self.inner.data().tracks[self.track_i].1
     }
 }
 

@@ -12,11 +12,17 @@
           overlays = [ (import rust-overlay) ];
         };
       in {
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
+        devShells.default = pkgs.mkShell (with pkgs; {
+          packages = [
             rust-bin.stable.latest.default
+            pkg-config
+            ffmpeg_4-full
+            clang
+            libclang
           ];
-          buildInputs = with pkgs; [];
-        };
+          shellHook = ''
+            export LIBCLANG_PATH="${libclang.lib}/lib"
+          '';
+        });
       });
 }
