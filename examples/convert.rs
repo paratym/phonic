@@ -4,11 +4,11 @@ use std::{
 };
 use syphon::{
     io::{
-        formats::{FormatIdentifier, KnownFormat},
-        utils::copy,
-        Format, FormatData, StreamReader, StreamWriter, SyphonFormat,
+        formats::SyphonFormat,
+        formats::{FormatIdentifier, FormatTag},
+        Format, FormatData, StreamReader, StreamWriter,
     },
-    signal::Sample,
+    signal::{utils::copy, Sample},
     SyphonError,
 };
 
@@ -18,7 +18,7 @@ fn main() -> Result<(), SyphonError> {
     let src_fmt_id = FormatIdentifier::try_from(src_path).ok();
 
     let mut decoder = SyphonFormat::resolve_reader(src_file, src_fmt_id.as_ref())?
-        .into_default_track()?
+        .into_default_stream()?
         .into_decoder()?
         .adapt_sample_type();
 
@@ -26,15 +26,12 @@ fn main() -> Result<(), SyphonError> {
     create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
     let dst_file = File::create(dst_path)?;
 
-    let dst_data = FormatData::new()
-        // .with_format((&dst_fmt_id).try_into()?)
-        .with_track(None, (&decoder).into());
-        // .filled()?;
-
+    let dst_data = FormatData::new().with_stream_data(None, (&decoder).into());
     let dst_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(dst_path)?)?;
+
     let mut encoder = dst_fmt
         .construct_writer(dst_file, dst_data)?
-        .into_default_track()?
+        .into_default_stream()?
         .into_encoder()?
         .unwrap_i16_signal()?;
 

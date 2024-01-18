@@ -1,5 +1,5 @@
 use crate::{
-    io::{codecs::KnownCodec, KnownSampleType, TaggedSignalReader, TaggedSignalWriter},
+    io::{codecs::CodecTag, TaggedSignalReader, TaggedSignalWriter},
     signal::{Sample, Signal, SignalSpecBuilder},
     SyphonError,
 };
@@ -66,9 +66,9 @@ where
 }
 
 pub trait Stream {
-    type Codec: KnownCodec;
+    type Tag: CodecTag;
 
-    fn codec(&self) -> Option<&Self::Codec>;
+    fn codec(&self) -> Option<&Self::Tag>;
     fn spec(&self) -> &StreamSpec;
 }
 
@@ -77,7 +77,7 @@ pub trait StreamReader: Stream + Read {
     where
         Self: Sized + 'static,
     {
-        Self::Codec::decoder_reader(self)
+        Self::Tag::decoder_reader(self)
     }
 }
 
@@ -88,7 +88,7 @@ pub trait StreamWriter: Stream + Write {
     where
         Self: Sized + 'static,
     {
-        Self::Codec::encoder_writer(self)
+        Self::Tag::encoder_writer(self)
     }
 }
 

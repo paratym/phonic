@@ -8,30 +8,28 @@ use crate::{
     SyphonError,
 };
 use byte_slice_cast::FromByteSlice;
-use std::io::{Read, Write};
+use std::{
+    hash::Hash,
+    io::{Read, Write},
+};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SyphonCodec {
-    Pcm,
-}
-
-pub trait KnownCodec {
+pub trait CodecTag: Sized + Hash + Eq + Copy {
     fn init() -> Result<(), SyphonError>;
 
     fn fill_spec(&self, spec: &mut StreamSpec) -> Result<(), SyphonError>;
 
     fn decoder_reader(
-        reader: impl Stream<Codec = Self> + Read + 'static,
+        reader: impl Stream<Tag = Self> + Read + 'static,
     ) -> Result<TaggedSignalReader, SyphonError>;
 
     fn encoder_writer(
-        writer: impl Stream<Codec = Self> + Write + 'static,
+        writer: impl Stream<Tag = Self> + Write + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError>;
 
     fn encoder_reader<T>(
         &self,
         reader: T,
-    ) -> Result<Box<dyn StreamReader<Codec = Self>>, SyphonError>
+    ) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>
     where
         T: SignalReader + 'static,
         T::Sample: FromByteSlice;
@@ -39,13 +37,18 @@ pub trait KnownCodec {
     fn decoder_writer<T>(
         &self,
         writer: T,
-    ) -> Result<Box<dyn StreamWriter<Codec = Self>>, SyphonError>
+    ) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>
     where
         T: SignalWriter + 'static,
         T::Sample: FromByteSlice;
 }
 
-impl KnownCodec for SyphonCodec {
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SyphonCodec {
+    Pcm,
+}
+
+impl CodecTag for SyphonCodec {
     fn init() -> Result<(), SyphonError> {
         Ok(())
     }
@@ -57,7 +60,7 @@ impl KnownCodec for SyphonCodec {
     }
 
     fn decoder_reader(
-        reader: impl Stream<Codec = Self> + Read + 'static,
+        reader: impl Stream<Tag = Self> + Read + 'static,
     ) -> Result<TaggedSignalReader, SyphonError> {
         let sample_type = reader
             .spec()
@@ -102,9 +105,10 @@ impl KnownCodec for SyphonCodec {
     }
 
     fn encoder_writer(
-        writer: impl Stream<Codec = Self> + Write + 'static,
+        writer: impl Stream<Tag = Self> + Write + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError> {
-        let sample_type = writer.spec()
+        let sample_type = writer
+            .spec()
             .sample_type
             .ok_or(SyphonError::MissingData)?
             .try_into()?;
@@ -145,10 +149,7 @@ impl KnownCodec for SyphonCodec {
         })
     }
 
-    fn encoder_reader<T>(
-        &self,
-        reader: T,
-    ) -> Result<Box<dyn StreamReader<Codec = Self>>, SyphonError>
+    fn encoder_reader<T>(&self, reader: T) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>
     where
         T: SignalReader + 'static,
         T::Sample: FromByteSlice,
@@ -158,10 +159,7 @@ impl KnownCodec for SyphonCodec {
         })
     }
 
-    fn decoder_writer<T>(
-        &self,
-        writer: T,
-    ) -> Result<Box<dyn StreamWriter<Codec = Self>>, SyphonError>
+    fn decoder_writer<T>(&self, writer: T) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>
     where
         T: SignalWriter + 'static,
         T::Sample: FromByteSlice,

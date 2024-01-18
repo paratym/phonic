@@ -6,7 +6,7 @@ use std::{
 };
 use syphon::{
     dsp::generators::SineGenerator,
-    io::{codecs::PcmCodec, formats::WaveFormat, FormatData, Stream, SyphonFormat},
+    io::{codecs::PcmCodec, formats::WaveFormat, FormatData},
     signal::SignalSpec,
     SyphonError,
 };
@@ -18,15 +18,15 @@ fn main() -> Result<(), SyphonError> {
         .with_duration(Duration::from_secs(2))
         .build()?;
 
-    let sine = SineGenerator::new(spec, 440.0);
-    let mut encoder = PcmCodec::from_signal(sine)?;
+    let mut sine = SineGenerator::new(spec, 440.0);
+    let mut encoder = PcmCodec::from_signal(&mut sine)?;
 
     let path = Path::new("./examples/generated/sine.wav");
     create_dir_all(path.parent().ok_or(SyphonError::IoError)?)?;
-    let file = File::create(path)?;
+    let mut file = File::create(path)?;
 
-    let data = FormatData::<SyphonFormat>::new().with_track(None, *encoder.spec());
-    let mut formatter = WaveFormat::write(file, data.try_into()?)?;
+    let data = <FormatData>::new().with_stream(&encoder);
+    let mut formatter = WaveFormat::write(&mut file, data.try_into()?)?;
 
     copy(&mut encoder, &mut formatter)?;
     Ok(())

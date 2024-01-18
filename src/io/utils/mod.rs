@@ -1,9 +1,7 @@
-mod copy;
 mod single_stream_format;
-mod track;
+mod stream_selector;
 mod unseekable;
 
-pub use copy::*;
 pub use single_stream_format::*;
-pub use track::*;
+pub use stream_selector::*;
 pub use unseekable::*;

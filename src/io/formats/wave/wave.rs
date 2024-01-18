@@ -1,8 +1,9 @@
 use crate::{
     io::{
-        formats::{wave::WaveHeader, FormatIdentifiers, KnownFormat},
+        formats::SyphonFormat,
+        formats::{wave::WaveHeader, FormatIdentifiers, FormatTag},
         utils::SingleStreamFormat,
-        FormatData, SyphonCodec, SyphonFormat,
+        FormatData,
     },
     SyphonError,
 };
@@ -14,7 +15,7 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-pub fn fill_wave_format_data<F: KnownFormat>(
+pub fn fill_wave_format_data<F: FormatTag>(
     data: &mut FormatData<F>,
 ) -> Result<FormatData<F>, SyphonError> {
     // if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
@@ -71,12 +72,12 @@ impl<T> WaveFormat<T> {
 
     pub fn into_format<F>(self) -> Result<SingleStreamFormat<Self, F>, SyphonError>
     where
-        F: KnownFormat,
+        F: FormatTag,
         WaveHeader: Into<FormatData<F>>,
         SyphonFormat: TryInto<F>,
     {
         let data = self.header.into();
-        SingleStreamFormat::new(self, SyphonFormat::Wave.try_into().ok(), data)
+        SingleStreamFormat::new(self, data)
     }
 }
 

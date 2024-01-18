@@ -1,5 +1,5 @@
 use crate::{
-    io::{KnownSampleType, Stream, StreamSpec, SyphonCodec},
+    io::{codecs::SyphonCodec, KnownSampleType, Stream, StreamSpec},
     signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter},
     SyphonError,
 };
@@ -129,9 +129,9 @@ where
 }
 
 impl<T, S: Sample> Stream for PcmCodec<T, S> {
-    type Codec = SyphonCodec;
+    type Tag = SyphonCodec;
 
-    fn codec(&self) -> Option<&Self::Codec> {
+    fn codec(&self) -> Option<&Self::Tag> {
         Some(&SyphonCodec::Pcm)
     }
 

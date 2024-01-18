@@ -1,46 +1,46 @@
 use crate::{
     io::{
-        Format, FormatChunk, FormatData, FormatReader, FormatWriter, Stream, StreamSpec, TrackChunk, formats::KnownFormat,
+        formats::FormatTag, Format, FormatChunk, FormatData, FormatReader, FormatWriter, Stream,
+        StreamSpec,
     },
     SyphonError,
 };
 use std::io::{Read, Write};
 
-pub struct SingleStreamFormat<T, F: KnownFormat> {
+pub struct SingleStreamFormat<T, F: FormatTag> {
     inner: T,
-    format: Option<F>,
     data: FormatData<F>,
 }
 
-impl<T, F: KnownFormat> SingleStreamFormat<T, F> {
-    pub fn new(inner: T, format: Option<F>, data: FormatData<F>) -> Result<Self, SyphonError> {
-        if data.tracks.len() != 1 {
+impl<T, F: FormatTag> SingleStreamFormat<T, F> {
+    pub fn new(inner: T, data: FormatData<F>) -> Result<Self, SyphonError> {
+        if data.streams.len() != 1 {
             return Err(SyphonError::InvalidData);
         }
 
-        Ok(Self { inner, format, data })
+        Ok(Self { inner, data })
     }
 }
 
-impl<T, F: KnownFormat> Stream for SingleStreamFormat<T, F> {
-    type Codec = F::Codec;
+impl<T, F: FormatTag> Stream for SingleStreamFormat<T, F> {
+    type Tag = F::Codec;
 
-    fn codec(&self) -> Option<&Self::Codec> {
-        self.data.tracks[0].0.as_ref()
+    fn codec(&self) -> Option<&Self::Tag> {
+        self.data.streams[0].0.as_ref()
     }
 
     fn spec(&self) -> &StreamSpec {
-        &self.data.tracks[0].1
+        &self.data.streams[0].1
     }
 }
 
-impl<T: Read, F: KnownFormat> Read for SingleStreamFormat<T, F> {
+impl<T: Read, F: FormatTag> Read for SingleStreamFormat<T, F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-impl<T: Write, F: KnownFormat> Write for SingleStreamFormat<T, F> {
+impl<T: Write, F: FormatTag> Write for SingleStreamFormat<T, F> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
     }
@@ -50,44 +50,39 @@ impl<T: Write, F: KnownFormat> Write for SingleStreamFormat<T, F> {
     }
 }
 
-impl<T, F: KnownFormat> Format for SingleStreamFormat<T, F> {
-    type Format = F;
+impl<T, F: FormatTag> Format for SingleStreamFormat<T, F> {
+    type Tag = F;
 
-    fn format(&self) -> Option<Self::Format> {
-        None
-    }
-
-    fn data(&self) -> &FormatData<Self::Format> {
+    fn data(&self) -> &FormatData<Self::Tag> {
         &self.data
     }
 }
 
-impl<T, F: KnownFormat> FormatReader for SingleStreamFormat<T, F>
+impl<T, F: FormatTag> FormatReader for SingleStreamFormat<T, F>
 where
     Self: Read,
 {
     fn read<'a>(&mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError> {
         Read::read(self, buf)
-            .map(|n| {
-                FormatChunk::Track(TrackChunk {
-                    i: 0,
-                    buf: &buf[..n],
-                })
+            .map(|n| FormatChunk::Stream {
+                stream_i: 0,
+                buf: &buf[..n],
             })
             .map_err(Into::into)
     }
 }
 
-impl<T, F: KnownFormat> FormatWriter for SingleStreamFormat<T, F>
+impl<T, F: FormatTag> FormatWriter for SingleStreamFormat<T, F>
 where
     Self: Write,
 {
-    fn write_track_chunk(&mut self, chunk: TrackChunk) -> Result<usize, SyphonError> {
-        if chunk.i != 0 {
-            return Err(SyphonError::Unsupported);
+    fn write(&mut self, chunk: FormatChunk) -> Result<(), SyphonError> {
+        match chunk {
+            FormatChunk::Stream { stream_i, buf } if stream_i == 0 => {
+                Write::write_all(self, buf).map_err(Into::into)
+            }
+            _ => Err(SyphonError::Unsupported),
         }
-
-        Write::write(self, &chunk.buf).map_err(Into::into)
     }
 
     fn flush(&mut self) -> Result<(), SyphonError> {

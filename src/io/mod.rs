@@ -9,6 +9,3 @@ pub use stream::*;
 pub mod codecs;
 pub mod formats;
 pub mod utils;
-
-pub use codecs::SyphonCodec;
-pub use formats::SyphonFormat;

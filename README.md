@@ -8,8 +8,8 @@ This project is very early in development. It's untested, and the api changes wi
 - [hound](https://github.com/ruuda/hound)
 
 ## Roadmap
-[ ] Extensible "known" formats/codecs \
-[ ] Implement io via ffmpeg bindings
+[x] Extensible "known" formats/codecs \
+[ ] Implement io via ffmpeg bindings \
 [ ] Write format resolver for byte string identifiers \
 [ ] Finish the sample conversions \
 [ ] Complete the core signal adapters \

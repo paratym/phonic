@@ -1,7 +1,5 @@
 use crate::{
-    io::{
-        formats::KnownFormat, FormatData, KnownSampleType, StreamSpec, SyphonCodec, SyphonFormat,
-    },
+    io::{codecs::SyphonCodec, formats::FormatTag, FormatData, KnownSampleType, StreamSpec},
     signal::{ChannelLayout, Channels, SignalSpecBuilder},
     SyphonError,
 };
@@ -137,7 +135,7 @@ impl WaveHeader {
 
 impl<F> From<WaveHeader> for FormatData<F>
 where
-    F: KnownFormat,
+    F: FormatTag,
     SyphonCodec: TryInto<F::Codec>,
 {
     fn from(header: WaveHeader) -> Self {
@@ -161,18 +159,11 @@ where
             .and_then(|ext| Some(ChannelLayout::from_bits(ext.channel_mask).into()))
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels as u32));
 
-        let decoded_byte_len = header
-            .fact
-            .zip(sample_type)
-            .map(|(fact, s)| fact.n_frames as u64 * channels.count() as u64 * s.byte_size() as u64);
-
         Self {
-            tracks: vec![(
+            streams: vec![(
                 codec.and_then(|c| c.try_into().ok()),
                 StreamSpec {
-                    avg_bitrate: todo!(),
-                    // compression_ratio: decoded_byte_len
-                    //     .map(|decoded| header.data.byte_len as f64 / decoded as f64),
+                    avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
                     sample_type: sample_type.map(Into::into),
                     decoded_spec: SignalSpecBuilder::new()
                         .with_channels(channels)
@@ -186,18 +177,18 @@ where
 
 impl<F> TryFrom<FormatData<F>> for WaveHeader
 where
-    F: KnownFormat,
+    F: FormatTag,
     F::Codec: Copy + PartialEq,
-    SyphonCodec: TryInto<F::Codec>
+    SyphonCodec: TryInto<F::Codec>,
 {
     type Error = SyphonError;
 
     fn try_from(mut data: FormatData<F>) -> Result<Self, Self::Error> {
-        if data.tracks.len() != 1 {
+        if data.streams.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
 
-        let (codec, spec) = &mut data.tracks[0];
+        let (codec, spec) = &mut data.streams[0];
         let expected_codec = SyphonCodec::Pcm.try_into().ok();
         if expected_codec.is_some_and(|c| codec.get_or_insert(c) != &c) {
             return Err(SyphonError::Unsupported);

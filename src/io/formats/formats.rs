@@ -1,8 +1,9 @@
 use crate::{
     io::{
-        codecs::KnownCodec,
+        codecs::CodecTag,
+        codecs::SyphonCodec,
         formats::wave::{fill_wave_format_data, WaveFormat, WAVE_IDENTIFIERS},
-        FormatData, FormatReader, FormatWriter, SyphonCodec,
+        FormatData, FormatReader, FormatWriter,
     },
     SyphonError,
 };
@@ -12,25 +13,8 @@ use std::{
     path::Path,
 };
 
-#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
-pub enum SyphonFormat {
-    Wave,
-}
-
-pub struct FormatIdentifiers {
-    pub file_extensions: &'static [&'static str],
-    pub mime_types: &'static [&'static str],
-    pub markers: &'static [&'static [u8]],
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum FormatIdentifier<'a> {
-    FileExtension(&'a str),
-    MimeType(&'a str),
-}
-
-pub trait KnownFormat: Sized + Hash + Eq + Copy + Clone {
-    type Codec: KnownCodec;
+pub trait FormatTag: Sized + Hash + Eq + Copy {
+    type Codec: CodecTag;
 
     fn init() -> Result<(), SyphonError>;
 
@@ -39,20 +23,20 @@ pub trait KnownFormat: Sized + Hash + Eq + Copy + Clone {
     fn construct_reader(
         &self,
         inner: impl Read + 'static,
-    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError>;
+    ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError>;
 
     fn construct_writer(
         &self,
         inner: impl Write + 'static,
         data: FormatData<Self>,
-    ) -> Result<Box<dyn FormatWriter<Format = Self>>, SyphonError>;
+    ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError>;
 
     fn resolve(source: &mut (impl Read + Seek)) -> Result<Self, SyphonError>;
 
     fn resolve_reader<T, I>(
         mut source: T,
         identifier: Option<I>,
-    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError>
+    ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError>
     where
         T: Read + Seek + 'static,
         I: TryInto<Self>,
@@ -64,6 +48,11 @@ pub trait KnownFormat: Sized + Hash + Eq + Copy + Clone {
             .or_else(|_| Self::resolve(&mut source))?
             .construct_reader(source)
     }
+}
+
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub enum SyphonFormat {
+    Wave,
 }
 
 impl SyphonFormat {
@@ -79,7 +68,7 @@ impl SyphonFormat {
     }
 }
 
-impl KnownFormat for SyphonFormat {
+impl FormatTag for SyphonFormat {
     type Codec = SyphonCodec;
 
     fn init() -> Result<(), SyphonError> {
@@ -91,7 +80,7 @@ impl KnownFormat for SyphonFormat {
             SyphonFormat::Wave => fill_wave_format_data(data)?,
         };
 
-        for (codec, spec) in data.tracks.iter_mut() {
+        for (codec, spec) in data.streams.iter_mut() {
             if let Some(codec) = codec {
                 codec.fill_spec(spec)?;
             }
@@ -107,7 +96,7 @@ impl KnownFormat for SyphonFormat {
     fn construct_reader(
         &self,
         inner: impl Read + 'static,
-    ) -> Result<Box<dyn FormatReader<Format = Self>>, SyphonError> {
+    ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError> {
         Ok(match self {
             SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()?),
         })
@@ -117,13 +106,25 @@ impl KnownFormat for SyphonFormat {
         &self,
         inner: impl Write + 'static,
         data: FormatData<Self>,
-    ) -> Result<Box<dyn FormatWriter<Format = Self>>, SyphonError> {
+    ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError> {
         Ok(match self {
             SyphonFormat::Wave => {
                 Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format()?)
             }
         })
     }
+}
+
+pub struct FormatIdentifiers {
+    pub file_extensions: &'static [&'static str],
+    pub mime_types: &'static [&'static str],
+    pub markers: &'static [&'static [u8]],
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FormatIdentifier<'a> {
+    FileExtension(&'a str),
+    MimeType(&'a str),
 }
 
 impl<'a> TryFrom<&FormatIdentifier<'a>> for SyphonFormat {
