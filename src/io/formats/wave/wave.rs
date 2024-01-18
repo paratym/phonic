@@ -1,5 +1,6 @@
 use crate::{
     io::{
+        codecs::{CodecTag, SyphonCodec},
         formats::SyphonFormat,
         formats::{wave::WaveHeader, FormatIdentifiers, FormatTag},
         utils::SingleStreamFormat,
@@ -14,24 +15,6 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
     markers: &[b"RIFF", b"WAVE"],
 };
-
-pub fn fill_wave_format_data<F: FormatTag>(
-    data: &mut FormatData<F>,
-) -> Result<FormatData<F>, SyphonError> {
-    // if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave {
-    //     return Err(SyphonError::InvalidData);
-    // }
-
-    // for track in data.tracks.iter_mut() {
-    //     if track.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
-    //         return Err(SyphonError::Unsupported);
-    //     }
-    // }
-
-    // Ok(data)
-
-    todo!()
-}
 
 pub struct WaveFormat<T> {
     header: WaveHeader,

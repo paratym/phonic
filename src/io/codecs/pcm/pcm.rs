@@ -1,11 +1,13 @@
 use crate::{
-    io::{codecs::SyphonCodec, KnownSampleType, Stream, StreamSpec},
+    io::{
+        codecs::{CodecTag, SyphonCodec},
+        KnownSampleType, Stream, StreamSpec,
+    },
     signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter},
     SyphonError,
 };
 use byte_slice_cast::{
-    AsByteSlice, AsMutByteSlice, AsMutSliceOf, AsSliceOf, FromByteSlice, ToByteSlice,
-    ToMutByteSlice,
+    AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
 };
 use std::{
     io::{self, Read, Write},
@@ -13,33 +15,38 @@ use std::{
     mem::{align_of, size_of},
 };
 
-pub fn fill_pcm_stream_spec(spec: &mut StreamSpec) -> Result<(), SyphonError> {
+pub fn fill_pcm_stream_spec<C: CodecTag>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError> {
+    let expected_codec = SyphonCodec::Pcm.try_into().ok();
+    if spec.codec.is_some() && spec.codec != expected_codec {
+        return Err(SyphonError::Unsupported);
+    } else {
+        spec.codec = expected_codec;
+    }
+
     let calculated_bitrate = spec
         .sample_type
         .and_then(|s| KnownSampleType::try_from(s).ok())
         .zip(spec.decoded_spec.sample_rate())
         .map(|(s, r)| s.byte_size() as f64 * 8.0 * r as f64);
 
-    if let Some(bitrate) = calculated_bitrate {
-        if spec.avg_bitrate.get_or_insert(bitrate) != &bitrate {
-            return Err(SyphonError::Unsupported);
-        }
+    if calculated_bitrate.is_some_and(|rate| spec.avg_bitrate.get_or_insert(rate) != &rate) {
+        return Err(SyphonError::Unsupported);
     }
 
     Ok(())
 }
 
-pub struct PcmCodec<T, S: Sample> {
+pub struct PcmCodec<T, C: CodecTag, S: Sample> {
     inner: T,
-    stream_spec: StreamSpec,
+    stream_spec: StreamSpec<C>,
     signal_spec: SignalSpec,
     _sample: PhantomData<S>,
 }
 
-impl<T, S: Sample> PcmCodec<T, S> {
+impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
     pub fn from_stream(inner: T) -> Result<Self, SyphonError>
     where
-        T: Stream,
+        T: Stream<Tag = C>,
     {
         let mut stream_spec = *inner.spec();
         fill_pcm_stream_spec(&mut stream_spec)?;
@@ -80,7 +87,7 @@ impl<T, S: Sample> PcmCodec<T, S> {
     }
 }
 
-impl<T, S: Sample> Signal for PcmCodec<T, S> {
+impl<T, C: CodecTag, S: Sample> Signal for PcmCodec<T, C, S> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
@@ -88,9 +95,10 @@ impl<T, S: Sample> Signal for PcmCodec<T, S> {
     }
 }
 
-impl<T, S> SignalReader for PcmCodec<T, S>
+impl<T, C, S> SignalReader for PcmCodec<T, C, S>
 where
     T: Read,
+    C: CodecTag,
     S: Sample + ToMutByteSlice,
 {
     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, SyphonError> {
@@ -106,9 +114,10 @@ where
     }
 }
 
-impl<T, S> SignalWriter for PcmCodec<T, S>
+impl<T, C, S> SignalWriter for PcmCodec<T, C, S>
 where
     T: Write,
+    C: CodecTag,
     S: Sample + ToByteSlice,
 {
     fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, SyphonError> {
@@ -128,21 +137,18 @@ where
     }
 }
 
-impl<T, S: Sample> Stream for PcmCodec<T, S> {
-    type Tag = SyphonCodec;
+impl<T, C: CodecTag, S: Sample> Stream for PcmCodec<T, C, S> {
+    type Tag = C;
 
-    fn codec(&self) -> Option<&Self::Tag> {
-        Some(&SyphonCodec::Pcm)
-    }
-
-    fn spec(&self) -> &StreamSpec {
+    fn spec(&self) -> &StreamSpec<Self::Tag> {
         &self.stream_spec
     }
 }
 
-impl<T, S> Read for PcmCodec<T, S>
+impl<T, C, S> Read for PcmCodec<T, C, S>
 where
     T: SignalReader<Sample = S>,
+    C: CodecTag,
     S: Sample + FromByteSlice,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -161,26 +167,26 @@ where
     }
 }
 
-impl<T, S> Write for PcmCodec<T, S>
-where
-    T: SignalWriter<Sample = S>,
-    S: Sample + FromByteSlice,
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let start_i = size_of::<S>() - (buf.as_ptr() as usize % align_of::<S>());
-        let aligned_len = buf.len() - start_i;
-        let usable_len = aligned_len - (aligned_len % size_of::<S>());
+// impl<T, S> Write for PcmCodec<T, S>
+// where
+//     T: SignalWriter<Sample = S>,
+//     S: Sample + FromByteSlice,
+// {
+//     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+//         let start_i = size_of::<S>() - (buf.as_ptr() as usize % align_of::<S>());
+//         let aligned_len = buf.len() - start_i;
+//         let usable_len = aligned_len - (aligned_len % size_of::<S>());
 
-        let sample_buf = match buf[start_i..start_i + usable_len].as_slice_of::<S>() {
-            Ok(buf) => buf,
-            _ => return Err(io::ErrorKind::InvalidData.into()),
-        };
+//         let sample_buf = match buf[start_i..start_i + usable_len].as_slice_of::<S>() {
+//             Ok(buf) => buf,
+//             _ => return Err(io::ErrorKind::InvalidData.into()),
+//         };
 
-        let n = self.inner.write(sample_buf)?;
-        Ok(n * size_of::<S>())
-    }
+//         let n = self.inner.write(sample_buf)?;
+//         Ok(n * size_of::<S>())
+//     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush().map_err(Into::into)
-    }
-}
+//     fn flush(&mut self) -> io::Result<()> {
+//         self.inner.flush().map_err(Into::into)
+//     }
+// }

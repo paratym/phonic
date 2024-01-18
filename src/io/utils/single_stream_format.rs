@@ -25,12 +25,8 @@ impl<T, F: FormatTag> SingleStreamFormat<T, F> {
 impl<T, F: FormatTag> Stream for SingleStreamFormat<T, F> {
     type Tag = F::Codec;
 
-    fn codec(&self) -> Option<&Self::Tag> {
-        self.data.streams[0].0.as_ref()
-    }
-
-    fn spec(&self) -> &StreamSpec {
-        &self.data.streams[0].1
+    fn spec(&self) -> &StreamSpec<Self::Tag> {
+        &self.data.streams[0]
     }
 }
 

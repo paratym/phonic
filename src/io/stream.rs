@@ -1,5 +1,8 @@
 use crate::{
-    io::{codecs::CodecTag, TaggedSignalReader, TaggedSignalWriter},
+    io::{
+        codecs::{CodecTag, SyphonCodec},
+        TaggedSignalReader, TaggedSignalWriter,
+    },
     signal::{Sample, Signal, SignalSpecBuilder},
     SyphonError,
 };
@@ -9,19 +12,26 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct StreamSpec {
+pub struct StreamSpec<C: CodecTag = SyphonCodec> {
+    pub codec: Option<C>,
     pub avg_bitrate: Option<f64>,
     pub sample_type: Option<TypeId>,
     pub decoded_spec: SignalSpecBuilder,
 }
 
-impl StreamSpec {
+impl<C: CodecTag> StreamSpec<C> {
     pub fn new() -> Self {
         Self {
+            codec: None,
             avg_bitrate: None,
             sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
         }
+    }
+
+    pub fn with_codec(mut self, codec: C) -> Self {
+        self.codec = Some(codec);
+        self
     }
 
     pub fn with_avg_bitrate(mut self, bitrate: f64) -> Self {
@@ -51,13 +61,15 @@ impl StreamSpec {
     }
 }
 
-impl<T> From<&T> for StreamSpec
+impl<T, C> From<&T> for StreamSpec<C>
 where
     T: Signal,
     T::Sample: 'static,
+    C: CodecTag,
 {
     fn from(inner: &T) -> Self {
         Self {
+            codec: None,
             avg_bitrate: None,
             sample_type: Some(TypeId::of::<T::Sample>()),
             decoded_spec: inner.spec().clone().into(),
@@ -68,8 +80,7 @@ where
 pub trait Stream {
     type Tag: CodecTag;
 
-    fn codec(&self) -> Option<&Self::Tag>;
-    fn spec(&self) -> &StreamSpec;
+    fn spec(&self) -> &StreamSpec<Self::Tag>;
 }
 
 pub trait StreamReader: Stream + Read {

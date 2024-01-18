@@ -1,7 +1,5 @@
 use crate::{
-    io::{
-        formats::FormatTag, Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec,
-    },
+    io::{formats::FormatTag, Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec},
     SyphonError,
 };
 use std::{
@@ -27,12 +25,8 @@ impl<F: Format> StreamSelector<F> {
 impl<F: Format> Stream for StreamSelector<F> {
     type Tag = <F::Tag as FormatTag>::Codec;
 
-    fn codec(&self) -> Option<&Self::Tag> {
-        self.inner.data().streams[self.stream_i].0.as_ref()
-    }
-
-    fn spec(&self) -> &StreamSpec {
-        &self.inner.data().streams[self.stream_i].1
+    fn spec(&self) -> &StreamSpec<Self::Tag> {
+        &self.inner.data().streams[self.stream_i]
     }
 }
 
@@ -47,7 +41,7 @@ where
                 FormatChunk::Stream { stream_i, buf } if stream_i == self.stream_i => {
                     return Ok(buf.len());
                 }
-                _ => {},
+                _ => {}
             }
         }
     }

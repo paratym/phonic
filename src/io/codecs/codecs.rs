@@ -13,10 +13,8 @@ use std::{
     io::{Read, Write},
 };
 
-pub trait CodecTag: Sized + Hash + Eq + Copy {
-    fn init() -> Result<(), SyphonError>;
-
-    fn fill_spec(&self, spec: &mut StreamSpec) -> Result<(), SyphonError>;
+pub trait CodecTag: Sized + Hash + Eq + Copy + TryFrom<SyphonCodec> {
+    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
 
     fn decoder_reader(
         reader: impl Stream<Tag = Self> + Read + 'static,
@@ -49,13 +47,10 @@ pub enum SyphonCodec {
 }
 
 impl CodecTag for SyphonCodec {
-    fn init() -> Result<(), SyphonError> {
-        Ok(())
-    }
-
-    fn fill_spec(&self, spec: &mut StreamSpec) -> Result<(), SyphonError> {
-        match self {
-            Self::Pcm => fill_pcm_stream_spec(spec),
+    fn fill_spec(spec: &mut StreamSpec) -> Result<(), SyphonError> {
+        match spec.codec {
+            Some(Self::Pcm) => fill_pcm_stream_spec(spec),
+            None => Ok(()),
         }
     }
 
@@ -68,7 +63,7 @@ impl CodecTag for SyphonCodec {
             .ok_or(SyphonError::MissingData)?
             .try_into()?;
 
-        Ok(match reader.codec().ok_or(SyphonError::MissingData)? {
+        Ok(match reader.spec().codec.ok_or(SyphonError::MissingData)? {
             Self::Pcm => match sample_type {
                 KnownSampleType::I8 => {
                     TaggedSignalReader::I8(Box::new(PcmCodec::from_stream(reader)?))
@@ -113,7 +108,7 @@ impl CodecTag for SyphonCodec {
             .ok_or(SyphonError::MissingData)?
             .try_into()?;
 
-        Ok(match writer.codec().ok_or(SyphonError::MissingData)? {
+        Ok(match writer.spec().codec.ok_or(SyphonError::MissingData)? {
             Self::Pcm => match sample_type {
                 KnownSampleType::I8 => {
                     TaggedSignalWriter::I8(Box::new(PcmCodec::from_stream(writer)?))
@@ -165,7 +160,8 @@ impl CodecTag for SyphonCodec {
         T::Sample: FromByteSlice,
     {
         Ok(match self {
-            Self::Pcm => Box::new(PcmCodec::from_signal(writer)?),
+            // Self::Pcm => Box::new(PcmCodec::from_signal(writer)?),
+            _ => todo!(),
         })
     }
 }

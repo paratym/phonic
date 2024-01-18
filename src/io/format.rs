@@ -2,7 +2,7 @@ use crate::{
     io::{
         formats::{FormatTag, SyphonFormat},
         utils::StreamSelector,
-        Stream, StreamSpec,
+        StreamSpec,
     },
     SyphonError,
 };
@@ -10,28 +10,19 @@ use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone)]
 pub struct FormatData<F: FormatTag = SyphonFormat> {
-    pub streams: Vec<(Option<F::Codec>, StreamSpec)>,
+    pub streams: Vec<StreamSpec<F::Codec>>,
 }
 
 impl<F: FormatTag> FormatData<F> {
     pub fn new() -> Self {
-        Self { streams: Vec::new() }
+        Self {
+            streams: Vec::new(),
+        }
     }
 
-    pub fn with_stream_data(mut self, codec: Option<F::Codec>, spec: StreamSpec) -> Self {
-        self.streams.push((codec, spec));
+    pub fn with_stream(mut self, spec: StreamSpec<F::Codec>) -> Self {
+        self.streams.push(spec);
         self
-    }
-
-    pub fn with_stream<S>(self, stream: &S) -> Self
-    where
-        S: Stream,
-        S::Tag: TryInto<F::Codec>,
-    {
-        self.with_stream_data(
-            stream.codec().copied().and_then(|c| c.try_into().ok()),
-            *stream.spec(),
-        )
     }
 }
 
@@ -41,7 +32,10 @@ pub trait Format {
     fn data(&self) -> &FormatData<Self::Tag>;
 
     fn default_stream(&self) -> Option<usize> {
-        self.data().streams.iter().position(|(c, _)| c.is_some())
+        self.data()
+            .streams
+            .iter()
+            .position(|spec| spec.codec.is_some())
     }
 
     fn as_stream(&mut self, i: usize) -> Result<StreamSelector<&mut Self>, SyphonError>
@@ -77,10 +71,7 @@ pub trait Format {
     }
 }
 pub enum FormatChunk<'a> {
-    Stream {
-        stream_i: usize,
-        buf: &'a [u8],
-    },
+    Stream { stream_i: usize, buf: &'a [u8] },
 }
 
 pub trait FormatReader: Format {

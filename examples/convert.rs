@@ -6,7 +6,7 @@ use syphon::{
     io::{
         formats::SyphonFormat,
         formats::{FormatIdentifier, FormatTag},
-        Format, FormatData, StreamReader, StreamWriter,
+        Format, FormatData, StreamReader, StreamSpec, StreamWriter,
     },
     signal::{utils::copy, Sample},
     SyphonError,
@@ -15,9 +15,10 @@ use syphon::{
 fn main() -> Result<(), SyphonError> {
     let src_path = Path::new("./examples/generated/sine.wav");
     let src_file = File::open(src_path)?;
-    let src_fmt_id = FormatIdentifier::try_from(src_path).ok();
+    let src_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(src_path)?)?;
 
-    let mut decoder = SyphonFormat::resolve_reader(src_file, src_fmt_id.as_ref())?
+    let mut decoder = src_fmt
+        .construct_reader(src_file)?
         .into_default_stream()?
         .into_decoder()?
         .adapt_sample_type();
@@ -26,7 +27,7 @@ fn main() -> Result<(), SyphonError> {
     create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
     let dst_file = File::create(dst_path)?;
 
-    let dst_data = FormatData::new().with_stream_data(None, (&decoder).into());
+    let dst_data = FormatData::new().with_stream((&decoder).into());
     let dst_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(dst_path)?)?;
 
     let mut encoder = dst_fmt

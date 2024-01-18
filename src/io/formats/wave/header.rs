@@ -1,5 +1,9 @@
 use crate::{
-    io::{codecs::SyphonCodec, formats::FormatTag, FormatData, KnownSampleType, StreamSpec},
+    io::{
+        codecs::{CodecTag, SyphonCodec},
+        formats::FormatTag,
+        FormatData, KnownSampleType, StreamSpec,
+    },
     signal::{ChannelLayout, Channels, SignalSpecBuilder},
     SyphonError,
 };
@@ -133,11 +137,7 @@ impl WaveHeader {
     }
 }
 
-impl<F> From<WaveHeader> for FormatData<F>
-where
-    F: FormatTag,
-    SyphonCodec: TryInto<F::Codec>,
-{
+impl<F: FormatTag> From<WaveHeader> for FormatData<F> {
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
@@ -160,39 +160,36 @@ where
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels as u32));
 
         Self {
-            streams: vec![(
-                codec.and_then(|c| c.try_into().ok()),
-                StreamSpec {
-                    avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
-                    sample_type: sample_type.map(Into::into),
-                    decoded_spec: SignalSpecBuilder::new()
-                        .with_channels(channels)
-                        .with_frame_rate(header.fmt.sample_rate)
-                        .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
-                },
-            )],
+            streams: vec![StreamSpec {
+                codec: codec.and_then(|c| c.try_into().ok()),
+                avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
+                sample_type: sample_type.map(Into::into),
+                decoded_spec: SignalSpecBuilder::new()
+                    .with_channels(channels)
+                    .with_frame_rate(header.fmt.sample_rate)
+                    .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
+            }],
         }
     }
 }
 
-impl<F> TryFrom<FormatData<F>> for WaveHeader
-where
-    F: FormatTag,
-    F::Codec: Copy + PartialEq,
-    SyphonCodec: TryInto<F::Codec>,
-{
+impl<F: FormatTag> TryFrom<FormatData<F>> for WaveHeader {
     type Error = SyphonError;
 
-    fn try_from(mut data: FormatData<F>) -> Result<Self, Self::Error> {
+    fn try_from(data: FormatData<F>) -> Result<Self, Self::Error> {
         if data.streams.len() != 1 {
             return Err(SyphonError::Unsupported);
         }
 
-        let (codec, spec) = &mut data.streams[0];
+        let mut spec = data.streams[0];
+
         let expected_codec = SyphonCodec::Pcm.try_into().ok();
-        if expected_codec.is_some_and(|c| codec.get_or_insert(c) != &c) {
+        if spec.codec.is_some() && spec.codec != expected_codec {
             return Err(SyphonError::Unsupported);
         }
+
+        spec.codec = expected_codec;
+        F::Codec::fill_spec(&mut spec)?;
 
         let sample_type = spec
             .sample_type
