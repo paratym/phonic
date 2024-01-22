@@ -110,6 +110,44 @@ impl SignalSpecBuilder {
         self
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.frame_rate.is_none() && self.channels.is_none() && self.n_frames.is_none()
+    }
+
+    pub fn merge(&mut self, other: Self) -> Result<(), SyphonError> {
+        if let Some(frame_rate) = other.frame_rate {
+            if self.frame_rate.get_or_insert(frame_rate) != &frame_rate {
+                return Err(SyphonError::SignalMismatch);
+            }
+        }
+
+        if let Some((self_ch, other_ch)) = self.channels.zip(other.channels) {
+            if self_ch.count() != other_ch.count() {
+                return Err(SyphonError::SignalMismatch);
+            }
+
+            match (self_ch, other_ch) {
+                (Channels::Layout(s), Channels::Layout(o)) if s != o => {
+                    return Err(SyphonError::SignalMismatch);
+                }
+                (Channels::Count(_), Channels::Layout(_)) => {
+                    self.channels = Some(other_ch);
+                }
+                _ => {}
+            }
+        } else {
+            self.channels = self.channels.or(other.channels);
+        }
+
+        if let Some(n_frames) = other.n_frames {
+            if self.n_frames.get_or_insert(n_frames) != &n_frames {
+                return Err(SyphonError::SignalMismatch);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn build(self) -> Result<SignalSpec, SyphonError> {
         self.try_into()
     }

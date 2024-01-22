@@ -15,6 +15,7 @@ use std::{
 pub struct StreamSpec<C: CodecTag = SyphonCodec> {
     pub codec: Option<C>,
     pub avg_bitrate: Option<f64>,
+    pub block_align: Option<u16>,
     pub sample_type: Option<TypeId>,
     pub decoded_spec: SignalSpecBuilder,
 }
@@ -24,6 +25,7 @@ impl<C: CodecTag> StreamSpec<C> {
         Self {
             codec: None,
             avg_bitrate: None,
+            block_align: None,
             sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
         }
@@ -36,6 +38,11 @@ impl<C: CodecTag> StreamSpec<C> {
 
     pub fn with_avg_bitrate(mut self, bitrate: f64) -> Self {
         self.avg_bitrate = Some(bitrate);
+        self
+    }
+
+    pub fn with_block_align(mut self, block_align: u16) -> Self {
+        self.block_align = Some(block_align);
         self
     }
 
@@ -59,6 +66,46 @@ impl<C: CodecTag> StreamSpec<C> {
             .zip(self.decoded_spec.duration())
             .map(|(r, d)| (r / 8.0 * d.as_secs_f64()) as u64)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.avg_bitrate.is_none()
+            && self.block_align.is_none()
+            && self.sample_type.is_none()
+            && self.decoded_spec.is_empty()
+    }
+
+    pub fn merge(&mut self, other: Self) -> Result<(), SyphonError> {
+        if let Some(codec) = other.codec {
+            if self.codec.get_or_insert(codec) != &codec {
+                return Err(SyphonError::SignalMismatch);
+            }
+        }
+
+        if let Some(avg_bitrate) = other.avg_bitrate {
+            if self.avg_bitrate.get_or_insert(avg_bitrate) != &avg_bitrate {
+                return Err(SyphonError::SignalMismatch);
+            }
+        }
+
+        if let Some(block_align) = other.block_align {
+            if self.block_align.is_some_and(|align| align % block_align != 0) {
+                return Err(SyphonError::SignalMismatch);
+            }
+
+            self.block_align = Some(block_align);
+        }
+        
+        self.decoded_spec.merge(other.decoded_spec)
+    }
+
+    pub fn fill(&mut self) -> Result<(), SyphonError> {
+        C::fill_spec(self)
+    }
+
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
+        self.fill()?;
+        Ok(self)
+    }
 }
 
 impl<T, C> From<&T> for StreamSpec<C>
@@ -71,6 +118,7 @@ where
         Self {
             codec: None,
             avg_bitrate: None,
+            block_align: None,
             sample_type: Some(TypeId::of::<T::Sample>()),
             decoded_spec: inner.spec().clone().into(),
         }

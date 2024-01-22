@@ -1,4 +1,6 @@
-use std::ops::{BitAnd, BitOr, BitXor};
+use std::{alloc::Layout, ops::{BitAnd, BitOr, BitXor}};
+
+use crate::SyphonError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {

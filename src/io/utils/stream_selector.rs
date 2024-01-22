@@ -35,9 +35,9 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, io::Error> {
         loop {
-            match self.inner.read(buf)? {
+            match self.inner.read(buffer)? {
                 FormatChunk::Stream { stream_i, buf } if stream_i == self.stream_i => {
                     return Ok(buf.len());
                 }

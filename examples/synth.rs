@@ -6,7 +6,10 @@ use std::{
 };
 use syphon::{
     dsp::generators::SineGenerator,
-    io::{codecs::PcmCodec, formats::WaveFormat, FormatData, Stream},
+    io::{
+        codecs::PcmCodec, formats::WaveFormat, Format, FormatChunk, FormatData, FormatWriter,
+        Stream,
+    },
     signal::SignalSpec,
     SyphonError,
 };
@@ -25,9 +28,10 @@ fn main() -> Result<(), SyphonError> {
     create_dir_all(path.parent().ok_or(SyphonError::IoError)?)?;
     let mut file = File::create(path)?;
 
+    let mut muxer = WaveFormat::new(&mut file)?;
     let data = <FormatData>::new().with_stream(*encoder.spec());
-    let mut formatter = WaveFormat::write(&mut file, data.try_into()?)?;
+    muxer.write(FormatChunk::Data(&data))?;
 
-    copy(&mut encoder, &mut formatter)?;
+    copy(&mut encoder, &mut muxer.as_default_stream()?)?;
     Ok(())
 }

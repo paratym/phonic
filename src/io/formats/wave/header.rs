@@ -1,13 +1,13 @@
 use crate::{
     io::{
         codecs::{CodecTag, SyphonCodec},
-        formats::FormatTag,
+        formats::{FormatTag, SyphonFormat},
         FormatData, KnownSampleType, StreamSpec,
     },
     signal::{ChannelLayout, Channels, SignalSpecBuilder},
     SyphonError,
 };
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
 const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";
@@ -54,7 +54,7 @@ pub struct DataChunk {
 }
 
 impl WaveHeader {
-    fn byte_len(&self) -> u32 {
+    pub fn byte_len(&self) -> u32 {
         8 + WAVE_CHUNK_ID.len() as u32
             + 8
             + self.fmt.byte_len()
@@ -137,7 +137,13 @@ impl WaveHeader {
     }
 }
 
-impl<F: FormatTag> From<WaveHeader> for FormatData<F> {
+
+impl<F> From<WaveHeader> for FormatData<F>
+where
+    F: FormatTag,
+    SyphonFormat: TryInto<F>,
+    SyphonCodec: TryInto<F::Codec>,
+{
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
             1 | 3 => Some(SyphonCodec::Pcm),
@@ -160,9 +166,11 @@ impl<F: FormatTag> From<WaveHeader> for FormatData<F> {
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels as u32));
 
         Self {
+            format: SyphonFormat::Wave.try_into().ok(),
             streams: vec![StreamSpec {
                 codec: codec.and_then(|c| c.try_into().ok()),
                 avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
+                block_align: Some(header.fmt.block_align as u16),
                 sample_type: sample_type.map(Into::into),
                 decoded_spec: SignalSpecBuilder::new()
                     .with_channels(channels)
@@ -173,10 +181,14 @@ impl<F: FormatTag> From<WaveHeader> for FormatData<F> {
     }
 }
 
-impl<F: FormatTag> TryFrom<FormatData<F>> for WaveHeader {
+impl<F> TryFrom<&FormatData<F>> for WaveHeader
+where
+    F: FormatTag,
+    SyphonCodec: TryInto<F::Codec>,
+{
     type Error = SyphonError;
 
-    fn try_from(data: FormatData<F>) -> Result<Self, Self::Error> {
+    fn try_from(data: &FormatData<F>) -> Result<Self, Self::Error> {
         if data.streams.len() != 1 {
             return Err(SyphonError::Unsupported);
         }

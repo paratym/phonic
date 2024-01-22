@@ -7,13 +7,12 @@ use crate::{
     signal::{SignalReader, SignalWriter},
     SyphonError,
 };
-use byte_slice_cast::FromByteSlice;
 use std::{
     hash::Hash,
     io::{Read, Write},
 };
 
-pub trait CodecTag: Sized + Hash + Eq + Copy + TryFrom<SyphonCodec> {
+pub trait CodecTag: Sized + Eq + Copy {
     fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
 
     fn decoder_reader(
@@ -24,21 +23,15 @@ pub trait CodecTag: Sized + Hash + Eq + Copy + TryFrom<SyphonCodec> {
         writer: impl Stream<Tag = Self> + Write + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError>;
 
-    fn encoder_reader<T>(
+    fn encoder_reader(
         &self,
-        reader: T,
-    ) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>
-    where
-        T: SignalReader + 'static,
-        T::Sample: FromByteSlice;
+        reader: impl SignalReader + 'static,
+    ) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>;
 
-    fn decoder_writer<T>(
+    fn decoder_writer(
         &self,
-        writer: T,
-    ) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>
-    where
-        T: SignalWriter + 'static,
-        T::Sample: FromByteSlice;
+        writer: impl SignalWriter + 'static,
+    ) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>;
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -144,24 +137,17 @@ impl CodecTag for SyphonCodec {
         })
     }
 
-    fn encoder_reader<T>(&self, reader: T) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>
-    where
-        T: SignalReader + 'static,
-        T::Sample: FromByteSlice,
-    {
-        Ok(match self {
-            Self::Pcm => Box::new(PcmCodec::from_signal(reader)?),
-        })
+    fn encoder_reader(
+        &self,
+        reader: impl SignalReader + 'static,
+    ) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError> {
+        todo!()
     }
 
-    fn decoder_writer<T>(&self, writer: T) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>
-    where
-        T: SignalWriter + 'static,
-        T::Sample: FromByteSlice,
-    {
-        Ok(match self {
-            // Self::Pcm => Box::new(PcmCodec::from_signal(writer)?),
-            _ => todo!(),
-        })
+    fn decoder_writer(
+        &self,
+        writer: impl SignalWriter + 'static,
+    ) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError> {
+        todo!()
     }
 }

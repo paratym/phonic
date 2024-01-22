@@ -5,7 +5,7 @@ use crate::{
     },
     SyphonError,
 };
-use std::{any::TypeId, mem::size_of};
+use std::{any::TypeId, borrow::BorrowMut, mem::size_of};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KnownSampleType {

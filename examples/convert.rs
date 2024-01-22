@@ -4,9 +4,8 @@ use std::{
 };
 use syphon::{
     io::{
-        formats::SyphonFormat,
-        formats::{FormatIdentifier, FormatTag},
-        Format, FormatData, StreamReader, StreamSpec, StreamWriter,
+        formats::{FormatIdentifier, FormatTag, SyphonFormat},
+        Format, FormatChunk, FormatData, FormatReader, StreamReader, StreamSpec, StreamWriter,
     },
     signal::{utils::copy, Sample},
     SyphonError,
@@ -17,8 +16,10 @@ fn main() -> Result<(), SyphonError> {
     let src_file = File::open(src_path)?;
     let src_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(src_path)?)?;
 
-    let mut decoder = src_fmt
-        .construct_reader(src_file)?
+    let mut demuxer = src_fmt.demux_reader(src_file)?;
+    demuxer.fill_data()?;
+
+    let mut decoder = demuxer
         .into_default_stream()?
         .into_decoder()?
         .adapt_sample_type();
@@ -27,15 +28,23 @@ fn main() -> Result<(), SyphonError> {
     create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
     let dst_file = File::create(dst_path)?;
 
-    let dst_data = FormatData::new().with_stream((&decoder).into());
     let dst_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(dst_path)?)?;
+    let mut muxer = dst_fmt.mux_writer(dst_file)?;
 
-    let mut encoder = dst_fmt
-        .construct_writer(dst_file, dst_data)?
+    let dst_stream_spec = StreamSpec::from(&decoder);
+    let dst_data = FormatData::new()
+        .with_format(dst_fmt)
+        .with_stream(dst_stream_spec)
+        .filled()?;
+
+    muxer.write(FormatChunk::Data(&dst_data))?;
+
+    let mut encoder = muxer
         .into_default_stream()?
         .into_encoder()?
         .unwrap_i16_signal()?;
 
     let mut buf = [i16::ORIGIN; 2048];
-    copy(&mut decoder, &mut encoder, &mut buf)
+    copy(&mut decoder, &mut encoder, &mut buf)?;
+    Ok(())
 }

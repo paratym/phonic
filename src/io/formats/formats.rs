@@ -13,19 +13,30 @@ use std::{
     path::Path,
 };
 
-pub trait FormatTag: Sized + Hash + Eq + Copy + TryFrom<SyphonFormat> {
+use super::wave::fill_wave_format_data;
+
+pub trait FormatTag: Sized + Eq + Copy {
     type Codec: CodecTag;
 
-    fn construct_reader(
+    fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError>;
+
+    fn demux_reader(
         &self,
         inner: impl Read + 'static,
     ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError>;
 
-    fn construct_writer(
+    fn mux_writer(
         &self,
         inner: impl Write + 'static,
-        data: FormatData<Self>,
     ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError>;
+
+    fn mux_reader(
+        reader: impl FormatReader<Tag = Self> + 'static,
+    ) -> Result<Box<dyn Read>, SyphonError>;
+
+    fn demux_writer(
+        writer: impl FormatWriter<Tag = Self> + 'static,
+    ) -> Result<Box<dyn Write>, SyphonError>;
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -49,25 +60,41 @@ impl SyphonFormat {
 impl FormatTag for SyphonFormat {
     type Codec = SyphonCodec;
 
-    fn construct_reader(
+    fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError> {
+        match data.format {
+            Some(Self::Wave) => fill_wave_format_data(data),
+            None => Ok(()), 
+        }
+    }
+
+    fn demux_reader(
         &self,
         inner: impl Read + 'static,
     ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError> {
         Ok(match self {
-            SyphonFormat::Wave => Box::new(WaveFormat::read(inner)?.into_format()?),
+            SyphonFormat::Wave => Box::new(WaveFormat::new(inner)?),
         })
     }
 
-    fn construct_writer(
+    fn mux_writer(
         &self,
         inner: impl Write + 'static,
-        data: FormatData<Self>,
     ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError> {
         Ok(match self {
-            SyphonFormat::Wave => {
-                Box::new(WaveFormat::write(inner, data.try_into()?)?.into_format()?)
-            }
+            SyphonFormat::Wave => Box::new(WaveFormat::new(inner)?),
         })
+    }
+
+    fn mux_reader(
+        inner: impl FormatReader<Tag = Self> + 'static,
+    ) -> Result<Box<dyn Read>, SyphonError> {
+        todo!()
+    }
+
+    fn demux_writer(
+        inner: impl FormatWriter<Tag = Self> + 'static,
+    ) -> Result<Box<dyn Write>, SyphonError> {
+        todo!()
     }
 }
 

@@ -15,22 +15,43 @@ use std::{
     mem::{align_of, size_of},
 };
 
-pub fn fill_pcm_stream_spec<C: CodecTag>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError> {
+pub fn fill_pcm_stream_spec<C>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError>
+where
+    C: CodecTag,
+    SyphonCodec: TryInto<C>,
+{
     let expected_codec = SyphonCodec::Pcm.try_into().ok();
-    if spec.codec.is_some() && spec.codec != expected_codec {
-        return Err(SyphonError::Unsupported);
-    } else {
-        spec.codec = expected_codec;
+    if expected_codec.is_some_and(|codec| spec.codec.get_or_insert(codec) != &codec) {
+        return Err(SyphonError::InvalidData);
     }
 
-    let calculated_bitrate = spec
+    let sample_type = spec
         .sample_type
-        .and_then(|s| KnownSampleType::try_from(s).ok())
-        .zip(spec.decoded_spec.sample_rate())
-        .map(|(s, r)| s.byte_size() as f64 * 8.0 * r as f64);
+        .and_then(|s| KnownSampleType::try_from(s).ok());
+
+    if sample_type.is_none() {
+        return Ok(());
+    }
+
+    let sample_byte_size = sample_type.unwrap().byte_size();
+    let calculated_bitrate = spec
+        .decoded_spec
+        .sample_rate()
+        .map(|r| sample_byte_size as f64 * 8.0 * r as f64);
 
     if calculated_bitrate.is_some_and(|rate| spec.avg_bitrate.get_or_insert(rate) != &rate) {
-        return Err(SyphonError::Unsupported);
+        return Err(SyphonError::InvalidData);
+    }
+
+    let calculated_block_align = spec
+        .decoded_spec
+        .channels
+        .map(|c| c.count() as u16 * sample_byte_size as u16);
+
+    if calculated_block_align
+        .is_some_and(|align| *spec.block_align.get_or_insert(align) % align != 0)
+    {
+        return Err(SyphonError::InvalidData);
     }
 
     Ok(())
@@ -47,10 +68,10 @@ impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
     pub fn from_stream(inner: T) -> Result<Self, SyphonError>
     where
         T: Stream<Tag = C>,
+        SyphonCodec: TryInto<C>,
     {
         let mut stream_spec = *inner.spec();
         fill_pcm_stream_spec(&mut stream_spec)?;
-
         let signal_spec = stream_spec.decoded_spec.build()?;
 
         Ok(Self {
@@ -65,9 +86,10 @@ impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
     where
         T: Signal,
         T::Sample: 'static,
+        SyphonCodec: TryInto<C>,
     {
         let signal_spec = *inner.spec();
-        let mut stream_spec = (&inner).into();
+        let mut stream_spec = StreamSpec::<C>::from(&inner);
         fill_pcm_stream_spec(&mut stream_spec)?;
 
         Ok(Self {
