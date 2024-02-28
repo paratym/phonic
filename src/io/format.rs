@@ -6,7 +6,10 @@ use crate::{
     },
     SyphonError,
 };
-use std::{fmt::Debug, ops::{Deref, DerefMut}};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Debug, Clone)]
 pub struct FormatData<F: FormatTag = SyphonFormat> {
@@ -42,7 +45,7 @@ impl<F: FormatTag> FormatData<F> {
                 return Err(SyphonError::SignalMismatch);
             }
         }
-    
+
         let mut other_streams = other.streams.iter();
         for (spec, other) in self.streams.iter_mut().zip(&mut other_streams) {
             spec.merge(*other)?;
@@ -53,13 +56,13 @@ impl<F: FormatTag> FormatData<F> {
     }
 
     pub fn fill(&mut self) -> Result<(), SyphonError> {
-        F::fill_data(self)        
+        F::fill_data(self)
     }
 
     pub fn filled(mut self) -> Result<Self, SyphonError> {
         self.fill()?;
         Ok(self)
-    } 
+    }
 }
 
 pub trait Format {
@@ -107,26 +110,18 @@ pub trait Format {
     }
 }
 
-pub enum FormatChunk<'a, F: FormatTag> {
-    Data(&'a FormatData<F>),
+pub enum FormatChunk<'a> {
     Stream { stream_i: usize, buf: &'a [u8] },
 }
 
 pub trait FormatReader: Format {
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a, Self::Tag>, SyphonError>;
-    fn fill_data(&mut self) -> Result<(), SyphonError>;
-
-    fn with_filled_data(mut self) -> Result<Self, SyphonError>
-    where
-        Self: Sized,
-    {
-        self.fill_data()?;
-        Ok(self)
-    }
+    fn read_data(&mut self) -> Result<(), SyphonError>;
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError>;
 }
 
 pub trait FormatWriter: Format {
-    fn write(&mut self, chunk: FormatChunk<'_, Self::Tag>) -> Result<(), SyphonError>;
+    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError>;
+    fn write(&mut self, chunk: FormatChunk) -> Result<(), SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 }
 
@@ -148,12 +143,12 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a, Self::Tag>, SyphonError> {
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError> {
         self.deref_mut().read(buf)
     }
 
-    fn fill_data(&mut self) -> Result<(), SyphonError> {
-        self.deref_mut().fill_data()
+    fn read_data(&mut self) -> Result<(), SyphonError> {
+        self.deref_mut().read_data()
     }
 }
 
@@ -162,7 +157,11 @@ where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write(&mut self, chunk: FormatChunk<'_, Self::Tag>) -> Result<(), SyphonError> {
+    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError> {
+        self.deref_mut().write_data(data)
+    }
+
+    fn write(&mut self, chunk: FormatChunk) -> Result<(), SyphonError> {
         self.deref_mut().write(chunk)
     }
 

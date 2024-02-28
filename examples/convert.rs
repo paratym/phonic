@@ -5,7 +5,7 @@ use std::{
 use syphon::{
     io::{
         formats::{FormatIdentifier, FormatTag, SyphonFormat},
-        Format, FormatChunk, FormatData, FormatReader, StreamReader, StreamSpec, StreamWriter,
+        Format, FormatData, FormatReader, StreamReader, StreamSpec, StreamWriter,
     },
     signal::{utils::copy, Sample},
     SyphonError,
@@ -14,10 +14,10 @@ use syphon::{
 fn main() -> Result<(), SyphonError> {
     let src_path = Path::new("./examples/generated/sine.wav");
     let src_file = File::open(src_path)?;
-    let src_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(src_path)?)?;
 
+    let src_fmt = SyphonFormat::try_from(&FormatIdentifier::try_from(src_path)?)?;
     let mut demuxer = src_fmt.demux_reader(src_file)?;
-    demuxer.fill_data()?;
+    demuxer.read_data()?;
 
     let mut decoder = demuxer
         .into_default_stream()?
@@ -37,7 +37,7 @@ fn main() -> Result<(), SyphonError> {
         .with_stream(dst_stream_spec)
         .filled()?;
 
-    muxer.write(FormatChunk::Data(&dst_data))?;
+    muxer.write_data(&dst_data)?;
 
     let mut encoder = muxer
         .into_default_stream()?

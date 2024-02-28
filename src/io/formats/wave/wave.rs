@@ -72,7 +72,7 @@ impl<T> Format for WaveFormat<T> {
 }
 
 impl<T: Read> FormatReader for WaveFormat<T> {
-    fn fill_data(&mut self) -> Result<(), SyphonError> {
+    fn read_data(&mut self) -> Result<(), SyphonError> {
         if self.i > 0 {
             return Ok(());
         }
@@ -82,12 +82,9 @@ impl<T: Read> FormatReader for WaveFormat<T> {
         return Ok(());
     }
 
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> Result<FormatChunk<'a, Self::Tag>, SyphonError> {
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, SyphonError> {
         if self.i == 0 {
-            self.fill_data()?;
+            self.read_data()?;
         }
 
         let len = self.trim_buf_len(buf.len());
@@ -112,14 +109,17 @@ impl<T: Read> FormatReader for WaveFormat<T> {
 }
 
 impl<T: Write> FormatWriter for WaveFormat<T> {
-    fn write(&mut self, chunk: FormatChunk<'_, Self::Tag>) -> Result<(), SyphonError> {
+    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError> {
+        self.data.merge(data)?;
+        let header = WaveHeader::try_from(&self.data)?;
+        header.write(&mut self.inner)?;
+        self.i += header.byte_len() as usize;
+
+        Ok(())
+    }
+
+    fn write(&mut self, chunk: FormatChunk) -> Result<(), SyphonError> {
         match chunk {
-            FormatChunk::Data(data) if self.i == 0 => {
-                self.data.merge(data)?;
-                let header = WaveHeader::try_from(&self.data)?;
-                header.write(&mut self.inner)?;
-                self.i += header.byte_len() as usize;
-            }
             FormatChunk::Stream { stream_i, buf } if self.i > 0 && stream_i == 0 => {
                 if buf.len() != self.trim_buf_len(buf.len()) {
                     return Err(SyphonError::SignalMismatch);

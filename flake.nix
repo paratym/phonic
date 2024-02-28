@@ -14,7 +14,10 @@
       in {
         devShells.default = pkgs.mkShell (with pkgs; {
           packages = [
-            rust-bin.stable.latest.default
+            (rust-bin.stable.latest.default.override {
+              extensions = [ "rust-src" "rustfmt" ];
+            })
+            rust-analyzer
             pkg-config
             ffmpeg_4-full
             clang
