@@ -1,7 +1,11 @@
-[package]
-name = "syphon"
-version = "0.0.1"
-edition = "2021"
-
-[dependencies]
-byte-slice-cast = "1.2.2"
+[workspace]
+resolver = "2"
+members = [
+	"crates/syphon",
+	"crates/syphon_core",
+	"crates/syphon_dsp",
+	"crates/syphon_io",
+	"crates/syphon_signal",
+	"examples/player",
+	"examples/synth",
+]

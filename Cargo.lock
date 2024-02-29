@@ -9,8 +9,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3ac9f8b63eca6fd385229b3675f6cc0dc5c8a5c8a54a59d4f52ffd670d87b0c"
 
 [[package]]
+name = "player"
+version = "0.1.0"
+
+[[package]]
+name = "synth"
+version = "0.1.0"
+dependencies = [
+ "syphon",
+]
+
+[[package]]
 name = "syphon"
 version = "0.0.1"
 dependencies = [
+ "syphon_core",
+ "syphon_dsp",
+ "syphon_io",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_core"
+version = "0.1.0"
+
+[[package]]
+name = "syphon_dsp"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io"
+version = "0.1.0"
+dependencies = [
  "byte-slice-cast",
+ "syphon_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_signal"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
 ]

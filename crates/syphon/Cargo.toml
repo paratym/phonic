@@ -1,0 +1,16 @@
+[package]
+name = "syphon"
+version = "0.0.1"
+edition = "2021"
+
+[features]
+default = ["signal"]
+signal = ["dep:syphon_signal"]
+io = ["dep:syphon_io"]
+dsp = ["dep:syphon_dsp"]
+
+[dependencies]
+syphon_core = { version = "0.1.0", path = "../syphon_core" }
+syphon_dsp = { version = "0.1.0", path = "../syphon_dsp", optional = true }
+syphon_io = { version = "0.1.0", path = "../syphon_io", optional = true }
+syphon_signal = { version = "0.1.0", path = "../syphon_signal", optional = true }
