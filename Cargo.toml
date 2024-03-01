@@ -5,6 +5,7 @@ members = [
 	"crates/syphon_core",
 	"crates/syphon_dsp",
 	"crates/syphon_io",
+	"crates/syphon_io_cpal",
 	"crates/syphon_signal",
 	"examples/player",
 	"examples/synth",

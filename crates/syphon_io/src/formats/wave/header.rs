@@ -160,7 +160,7 @@ where
             .fmt
             .ext
             .and_then(|ext| Some(ChannelLayout::from_bits(ext.channel_mask).into()))
-            .unwrap_or_else(|| Channels::Count(header.fmt.n_channels as u32));
+            .unwrap_or_else(|| Channels::Count(header.fmt.n_channels));
 
         Self {
             format: SyphonFormat::Wave.try_into().ok(),

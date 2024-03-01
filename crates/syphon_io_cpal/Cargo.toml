@@ -1,0 +1,12 @@
+[package]
+name = "syphon_io_cpal"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpal = "0.15.2"
+syphon_core = { version = "0.1.0", path = "../syphon_core" }
+syphon_io = { version = "0.1.0", path = "../syphon_io" }
+syphon_signal = { version = "0.1.0", path = "../syphon_signal" }

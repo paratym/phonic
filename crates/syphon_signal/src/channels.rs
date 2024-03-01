@@ -2,7 +2,7 @@ use std::ops::{BitAnd, BitOr, BitXor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
-    Count(u32),
+    Count(u16),
     Layout(ChannelLayout),
 }
 
@@ -12,7 +12,7 @@ pub struct ChannelLayout {
 }
 
 impl Channels {
-    pub fn count(&self) -> u32 {
+    pub fn count(&self) -> u16 {
         match self {
             Self::Count(n) => *n,
             Self::Layout(layout) => layout.count(),
@@ -27,8 +27,8 @@ impl Channels {
     }
 }
 
-impl From<u32> for Channels {
-    fn from(n: u32) -> Self {
+impl From<u16> for Channels {
+    fn from(n: u16) -> Self {
         Self::Count(n)
     }
 }
@@ -85,8 +85,8 @@ impl ChannelLayout {
         Self::from_bits(Self::SURROUND_5_1.mask | Self::SIDE_LEFT.mask | Self::SIDE_RIGHT.mask);
 
     #[inline]
-    pub fn count(&self) -> u32 {
-        self.mask.count_ones()
+    pub fn count(&self) -> u16 {
+        self.mask.count_ones() as u16
     }
 }
 

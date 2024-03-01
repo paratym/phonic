@@ -25,21 +25,8 @@ pub enum KnownSampleType {
     F64,
 }
 
-impl KnownSampleType {
-    pub fn byte_size(self) -> usize {
-        match self {
-            Self::I8 => size_of::<i8>(),
-            Self::I16 => size_of::<i16>(),
-            Self::I32 => size_of::<i32>(),
-            Self::I64 => size_of::<i64>(),
-            Self::U8 => size_of::<u8>(),
-            Self::U16 => size_of::<u16>(),
-            Self::U32 => size_of::<u32>(),
-            Self::U64 => size_of::<u64>(),
-            Self::F32 => size_of::<f32>(),
-            Self::F64 => size_of::<f64>(),
-        }
-    }
+pub trait KnownSample: Sample {
+    const TYPE: KnownSampleType;
 }
 
 pub trait FromKnownSample:
@@ -70,6 +57,42 @@ pub trait IntoKnownSample:
     + IntoSample<f32>
     + IntoSample<f64>
 {
+}
+
+macro_rules! impl_known_sample {
+    ($self:ty, $type:ident) => {
+        impl KnownSample for $self {
+            const TYPE: KnownSampleType = KnownSampleType::$type;
+        }
+    };
+}
+
+impl_known_sample!(i8, I8);
+impl_known_sample!(i16, I16);
+impl_known_sample!(i32, I32);
+impl_known_sample!(i64, I64);
+impl_known_sample!(u8, U8);
+impl_known_sample!(u16, U16);
+impl_known_sample!(u32, U32);
+impl_known_sample!(u64, U64);
+impl_known_sample!(f32, F32);
+impl_known_sample!(f64, F64);
+
+impl KnownSampleType {
+    pub fn byte_size(self) -> usize {
+        match self {
+            Self::I8 => size_of::<i8>(),
+            Self::I16 => size_of::<i16>(),
+            Self::I32 => size_of::<i32>(),
+            Self::I64 => size_of::<i64>(),
+            Self::U8 => size_of::<u8>(),
+            Self::U16 => size_of::<u16>(),
+            Self::U32 => size_of::<u32>(),
+            Self::U64 => size_of::<u64>(),
+            Self::F32 => size_of::<f32>(),
+            Self::F64 => size_of::<f64>(),
+        }
+    }
 }
 
 impl TryFrom<TypeId> for KnownSampleType {

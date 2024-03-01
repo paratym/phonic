@@ -22,6 +22,7 @@
             ffmpeg_4-full
             clang
             libclang
+            alsa-lib
           ];
           shellHook = ''
             export LIBCLANG_PATH="${libclang.lib}/lib"
