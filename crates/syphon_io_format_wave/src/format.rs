@@ -1,49 +1,25 @@
-use crate::{
-    codecs::SyphonCodec,
-    formats::{wave::WaveHeader, FormatIdentifiers, SyphonFormat},
-    Format, FormatChunk, FormatData, FormatReader, FormatWriter, StreamSpec,
-};
+use crate::{SupportedWaveCodec, WaveFormatTag, WaveHeader};
 use std::io::{Read, Write};
 use syphon_core::SyphonError;
-
-pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
-    file_extensions: &["wav", "wave"],
-    mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
-    markers: &[b"RIFF", b"WAVE"],
+use syphon_io_core::{
+    Format, FormatChunk, FormatData, FormatReader, FormatTag, FormatWriter, StreamSpec,
 };
 
-pub fn fill_wave_format_data(data: &mut FormatData<SyphonFormat>) -> Result<(), SyphonError> {
-    if data.format.get_or_insert(SyphonFormat::Wave) != &SyphonFormat::Wave
-        || data.streams.len() > 1
-    {
-        return Err(SyphonError::InvalidData);
-    }
-
-    if data.streams.is_empty() {
-        data.streams.push(StreamSpec::new());
-    }
-
-    let stream_spec = data.streams.first_mut().ok_or(SyphonError::InvalidData)?;
-    if stream_spec.codec.get_or_insert(SyphonCodec::Pcm) != &SyphonCodec::Pcm {
-        return Err(SyphonError::InvalidData);
-    }
-
-    stream_spec.fill()?;
-    Ok(())
-}
-
-pub struct WaveFormat<T> {
+pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
     inner: T,
     i: usize,
-    data: FormatData<SyphonFormat>,
+    data: FormatData<F>,
 }
 
-impl<T> WaveFormat<T> {
-    pub fn new(inner: T) -> Result<Self, SyphonError> {
+impl<T, F: FormatTag> WaveFormat<T, F> {
+    pub fn new(inner: T) -> Result<Self, SyphonError>
+    where
+        WaveFormatTag: Into<F>,
+    {
         Ok(Self {
             inner,
             i: 0,
-            data: FormatData::new().with_format(SyphonFormat::Wave),
+            data: FormatData::new().with_format(WaveFormatTag().into()),
         })
     }
 
@@ -61,15 +37,19 @@ impl<T> WaveFormat<T> {
     }
 }
 
-impl<T> Format for WaveFormat<T> {
-    type Tag = SyphonFormat;
+impl<T, F: FormatTag> Format for WaveFormat<T, F> {
+    type Tag = F;
 
     fn data(&self) -> &FormatData<Self::Tag> {
         &self.data
     }
 }
 
-impl<T: Read> FormatReader for WaveFormat<T> {
+impl<T: Read, F: FormatTag> FormatReader for WaveFormat<T, F>
+where
+    WaveFormatTag: Into<F>,
+    SupportedWaveCodec: Into<F::Codec>,
+{
     fn read_data(&mut self) -> Result<(), SyphonError> {
         if self.i > 0 {
             return Ok(());
@@ -106,8 +86,8 @@ impl<T: Read> FormatReader for WaveFormat<T> {
     }
 }
 
-impl<T: Write> FormatWriter for WaveFormat<T> {
-    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError> {
+impl<T: Write, F: FormatTag> FormatWriter for WaveFormat<T, F> {
+    fn write_data(&mut self, data: &FormatData<F>) -> Result<(), SyphonError> {
         self.data.merge(data)?;
         let header = WaveHeader::try_from(&self.data)?;
         header.write(&mut self.inner)?;

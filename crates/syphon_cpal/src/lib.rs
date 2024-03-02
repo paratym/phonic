@@ -1,10 +1,9 @@
 use cpal::{
     traits::DeviceTrait, BuildStreamError, DefaultStreamConfigError, OutputCallbackInfo,
-    SampleFormat, SampleRate, SizedSample, StreamConfig, StreamError, SupportedStreamConfig,
+    SampleFormat, SizedSample, StreamConfig, StreamError, SupportedStreamConfig,
 };
 use std::time::Duration;
-use syphon_io::{KnownSample, KnownSampleType};
-use syphon_signal::{Signal, SignalReader, SignalSpec};
+use syphon_signal::{KnownSample, KnownSampleType, Signal, SignalReader, SignalSpec};
 
 pub trait SignalSpecExtension {
     fn from_cpal_config(config: &StreamConfig) -> SignalSpec;
@@ -44,7 +43,7 @@ where
 
     config.sample_format() == cpal_sample_from_syphon_sample(S::Sample::TYPE)
         && config.channels() == spec.channels.count()
-        && config.sample_rate() == SampleRate(spec.frame_rate)
+        && config.sample_rate().0 == spec.frame_rate
 }
 
 pub trait DeviceExtension: DeviceTrait {

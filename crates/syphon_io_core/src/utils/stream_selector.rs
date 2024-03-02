@@ -1,6 +1,4 @@
-use crate::{
-    formats::FormatTag, Format, FormatChunk, FormatReader, FormatWriter, Stream, StreamSpec,
-};
+use crate::{Format, FormatChunk, FormatReader, FormatTag, FormatWriter, Stream, StreamSpec};
 use std::{
     io::{self, Read, Write},
     ops::DerefMut,

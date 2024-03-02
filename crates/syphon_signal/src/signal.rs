@@ -186,6 +186,43 @@ pub trait SignalReader: Signal {
 
         Ok(())
     }
+
+    fn pipe_buffered<W>(
+        &mut self,
+        writer: &mut W,
+        buffer: &mut [Self::Sample],
+    ) -> Result<u64, SyphonError>
+    where
+        Self: Sized,
+        W: SignalWriter<Sample = Self::Sample>,
+    {
+        let spec = self.spec();
+        if spec != writer.spec() {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        let mut n_read = 0;
+        loop {
+            let n = match self.read(buffer) {
+                Ok(0) | Err(SyphonError::EndOfStream) => return Ok(n_read),
+                Ok(n) => n,
+                Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
+                Err(e) => return Err(e),
+            };
+
+            writer.write_exact(&buffer[..n])?;
+            n_read += n as u64;
+        }
+    }
+
+    fn pipe<W>(&mut self, writer: &mut W) -> Result<u64, SyphonError>
+    where
+        Self: Sized,
+        W: SignalWriter<Sample = Self::Sample>,
+    {
+        let mut buffer = [Self::Sample::ORIGIN; 2048];
+        self.pipe_buffered(writer, &mut buffer)
+    }
 }
 
 pub trait SignalWriter: Signal {

@@ -644,10 +644,10 @@ name = "syphon"
 version = "0.0.1"
 dependencies = [
  "syphon_core",
- "syphon_dsp",
+ "syphon_cpal",
  "syphon_io",
- "syphon_io_cpal",
  "syphon_signal",
+ "syphon_synth",
 ]
 
 [[package]]
@@ -655,24 +655,7 @@ name = "syphon_core"
 version = "0.1.0"
 
 [[package]]
-name = "syphon_dsp"
-version = "0.1.0"
-dependencies = [
- "syphon_core",
- "syphon_signal",
-]
-
-[[package]]
-name = "syphon_io"
-version = "0.1.0"
-dependencies = [
- "byte-slice-cast",
- "syphon_core",
- "syphon_signal",
-]
-
-[[package]]
-name = "syphon_io_cpal"
+name = "syphon_cpal"
 version = "0.1.0"
 dependencies = [
  "cpal",
@@ -682,10 +665,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "syphon_io"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
+ "syphon_io_codec_pcm",
+ "syphon_io_core",
+ "syphon_io_format_wave",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io_codec_pcm"
+version = "0.1.0"
+dependencies = [
+ "byte-slice-cast",
+ "syphon_core",
+ "syphon_io_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io_core"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io_format_wave"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
+ "syphon_io_codec_pcm",
+ "syphon_io_core",
+ "syphon_signal",
+]
+
+[[package]]
 name = "syphon_signal"
 version = "0.1.0"
 dependencies = [
  "syphon_core",
+]
+
+[[package]]
+name = "syphon_synth"
+version = "0.1.0"
+dependencies = [
+ "syphon_core",
+ "syphon_signal",
 ]
 
 [[package]]

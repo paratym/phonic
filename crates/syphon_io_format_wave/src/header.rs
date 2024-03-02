@@ -1,11 +1,8 @@
-use crate::{
-    codecs::{CodecTag, SyphonCodec},
-    formats::{FormatTag, SyphonFormat},
-    FormatData, KnownSampleType, StreamSpec,
-};
+use crate::{SupportedWaveCodec, WaveFormatTag};
 use std::io::{Read, Write};
 use syphon_core::SyphonError;
-use syphon_signal::{ChannelLayout, Channels, SignalSpecBuilder};
+use syphon_io_core::{FormatData, FormatTag, StreamSpec};
+use syphon_signal::{ChannelLayout, Channels, KnownSampleType, SignalSpecBuilder};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
 const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";
@@ -138,12 +135,12 @@ impl WaveHeader {
 impl<F> From<WaveHeader> for FormatData<F>
 where
     F: FormatTag,
-    SyphonFormat: TryInto<F>,
-    SyphonCodec: TryInto<F::Codec>,
+    WaveFormatTag: Into<F>,
+    SupportedWaveCodec: Into<F::Codec>,
 {
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
-            1 | 3 => Some(SyphonCodec::Pcm),
+            1 | 3 => Some(SupportedWaveCodec::Pcm.into()),
             _ => None,
         };
 
@@ -163,9 +160,9 @@ where
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels));
 
         Self {
-            format: SyphonFormat::Wave.try_into().ok(),
+            format: Some(WaveFormatTag().into()),
             streams: vec![StreamSpec {
-                codec: codec.and_then(|c| c.try_into().ok()),
+                codec: codec.map(Into::into),
                 avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
                 block_align: Some(header.fmt.block_align as u16),
                 sample_type: sample_type.map(Into::into),
@@ -181,7 +178,7 @@ where
 impl<F> TryFrom<&FormatData<F>> for WaveHeader
 where
     F: FormatTag,
-    SyphonCodec: TryInto<F::Codec>,
+    // SyphonCodec: TryInto<F::Codec>,
 {
     type Error = SyphonError;
 
@@ -192,13 +189,13 @@ where
 
         let mut spec = data.streams[0];
 
-        let expected_codec = SyphonCodec::Pcm.try_into().ok();
-        if spec.codec.is_some() && spec.codec != expected_codec {
-            return Err(SyphonError::Unsupported);
-        }
+        // let expected_codec = SyphonCodec::Pcm.try_into().ok();
+        // if spec.codec.is_some() && spec.codec != expected_codec {
+        //     return Err(SyphonError::Unsupported);
+        // }
 
-        spec.codec = expected_codec;
-        F::Codec::fill_spec(&mut spec)?;
+        // spec.codec = expected_codec;
+        // F::Codec::fill_spec(&mut spec)?;
 
         let sample_type = spec
             .sample_type

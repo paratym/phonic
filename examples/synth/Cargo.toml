@@ -3,5 +3,7 @@ name = "synth"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-syphon = { version = "0.0.1", path = "../../crates/syphon", features = ["dsp", "io"] }
+[dependencies.syphon]
+path = "../../crates/syphon"
+features = ["synth", "io", "pcm", "wave"]
+version = "0.0.1"

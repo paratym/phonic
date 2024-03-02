@@ -1,16 +1,13 @@
-use crate::{
-    formats::{FormatTag, SyphonFormat},
-    utils::StreamSelector,
-    StreamSpec,
-};
+use crate::{utils::StreamSelector, CodecTag, FormatRegistry, FormatTag, StreamSpec};
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
+    path::Path,
 };
 use syphon_core::SyphonError;
 
 #[derive(Debug, Clone)]
-pub struct FormatData<F: FormatTag = SyphonFormat> {
+pub struct FormatData<F: FormatTag> {
     pub format: Option<F>,
     pub streams: Vec<StreamSpec<F::Codec>>,
 }
@@ -23,13 +20,29 @@ impl<F: FormatTag> FormatData<F> {
         }
     }
 
+    pub fn with_tag_type<T>(self) -> FormatData<T>
+    where
+        T: FormatTag,
+        F: TryInto<T>,
+        F::Codec: TryInto<T::Codec>,
+    {
+        FormatData {
+            format: self.format.and_then(|f| f.try_into().ok()),
+            streams: self
+                .streams
+                .into_iter()
+                .map(StreamSpec::with_tag_type)
+                .collect(),
+        }
+    }
+
     pub fn with_format(mut self, format: F) -> Self {
         self.format = Some(format);
         self
     }
 
-    pub fn with_stream(mut self, spec: StreamSpec<F::Codec>) -> Self {
-        self.streams.push(spec);
+    pub fn with_stream<C: CodecTag + TryInto<F::Codec>>(mut self, spec: StreamSpec<C>) -> Self {
+        self.streams.push(spec.with_tag_type());
         self
     }
 
@@ -53,11 +66,17 @@ impl<F: FormatTag> FormatData<F> {
         Ok(())
     }
 
-    pub fn fill(&mut self) -> Result<(), SyphonError> {
+    pub fn fill(&mut self) -> Result<(), SyphonError>
+    where
+        F: FormatRegistry,
+    {
         F::fill_data(self)
     }
 
-    pub fn filled(mut self) -> Result<Self, SyphonError> {
+    pub fn filled(mut self) -> Result<Self, SyphonError>
+    where
+        F: FormatRegistry,
+    {
         self.fill()?;
         Ok(self)
     }
@@ -118,7 +137,7 @@ pub trait FormatReader: Format {
 }
 
 pub trait FormatWriter: Format {
-    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError>;
+    fn write_data(&mut self, data: &FormatData<Self::Tag>) -> Result<(), SyphonError>;
     fn write(&mut self, chunk: FormatChunk) -> Result<(), SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 }
@@ -155,7 +174,7 @@ where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write_data(&mut self, data: &FormatData) -> Result<(), SyphonError> {
+    fn write_data(&mut self, data: &FormatData<Self::Tag>) -> Result<(), SyphonError> {
         self.deref_mut().write_data(data)
     }
 
@@ -165,5 +184,37 @@ where
 
     fn flush(&mut self) -> Result<(), SyphonError> {
         self.deref_mut().flush()
+    }
+}
+
+pub struct FormatIdentifiers {
+    pub file_extensions: &'static [&'static str],
+    pub mime_types: &'static [&'static str],
+    pub markers: &'static [&'static [u8]],
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FormatIdentifier<'a> {
+    FileExtension(&'a str),
+    MimeType(&'a str),
+}
+
+impl FormatIdentifiers {
+    pub fn contains(&self, identifier: &FormatIdentifier) -> bool {
+        match identifier {
+            FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
+            FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a Path> for FormatIdentifier<'a> {
+    type Error = SyphonError;
+
+    fn try_from(path: &'a Path) -> Result<Self, Self::Error> {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| FormatIdentifier::FileExtension(ext))
+            .ok_or(SyphonError::MissingData)
     }
 }

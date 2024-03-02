@@ -1,25 +1,26 @@
-use crate::{
-    codecs::{CodecTag, SyphonCodec},
-    KnownSampleType, Stream, StreamSpec,
-};
 use byte_slice_cast::{
     AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
 };
 use std::{
-    io::{self, Read, Write},
+    io::{Read, Write},
     marker::PhantomData,
     mem::{align_of, size_of},
 };
 use syphon_core::SyphonError;
-use syphon_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use syphon_io_core::{CodecTag, Stream, StreamSpec};
+use syphon_signal::{KnownSampleType, Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct PcmCodecTag();
+impl CodecTag for PcmCodecTag {}
 
 pub fn fill_pcm_stream_spec<C>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError>
 where
     C: CodecTag,
-    SyphonCodec: TryInto<C>,
+    PcmCodecTag: Into<C>,
 {
-    let expected_codec = SyphonCodec::Pcm.try_into().ok();
-    if expected_codec.is_some_and(|codec| spec.codec.get_or_insert(codec) != &codec) {
+    let expected_codec = PcmCodecTag().into();
+    if spec.codec.get_or_insert(expected_codec) != &expected_codec {
         return Err(SyphonError::InvalidData);
     }
 
@@ -55,18 +56,18 @@ where
     Ok(())
 }
 
-pub struct PcmCodec<T, C: CodecTag, S: Sample> {
+pub struct PcmCodec<T, S: Sample, C: CodecTag = PcmCodecTag> {
     inner: T,
     stream_spec: StreamSpec<C>,
     signal_spec: SignalSpec,
     _sample: PhantomData<S>,
 }
 
-impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
+impl<T, S: Sample, C: CodecTag> PcmCodec<T, S, C> {
     pub fn from_stream(inner: T) -> Result<Self, SyphonError>
     where
         T: Stream<Tag = C>,
-        SyphonCodec: TryInto<C>,
+        PcmCodecTag: Into<C>,
     {
         let mut stream_spec = *inner.spec();
         fill_pcm_stream_spec(&mut stream_spec)?;
@@ -84,7 +85,7 @@ impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
     where
         T: Signal,
         T::Sample: 'static,
-        SyphonCodec: TryInto<C>,
+        PcmCodecTag: Into<C>,
     {
         let signal_spec = *inner.spec();
         let mut stream_spec = StreamSpec::<C>::from(&inner);
@@ -107,7 +108,7 @@ impl<T, C: CodecTag, S: Sample> PcmCodec<T, C, S> {
     }
 }
 
-impl<T, C: CodecTag, S: Sample> Signal for PcmCodec<T, C, S> {
+impl<T, S: Sample, C: CodecTag> Signal for PcmCodec<T, S, C> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
@@ -115,11 +116,11 @@ impl<T, C: CodecTag, S: Sample> Signal for PcmCodec<T, C, S> {
     }
 }
 
-impl<T, C, S> SignalReader for PcmCodec<T, C, S>
+impl<T, S, C> SignalReader for PcmCodec<T, S, C>
 where
     T: Read,
-    C: CodecTag,
     S: Sample + ToMutByteSlice,
+    C: CodecTag,
 {
     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, SyphonError> {
         let byte_buf = buf.as_mut_byte_slice();
@@ -134,11 +135,11 @@ where
     }
 }
 
-impl<T, C, S> SignalWriter for PcmCodec<T, C, S>
+impl<T, S, C> SignalWriter for PcmCodec<T, S, C>
 where
     T: Write,
-    C: CodecTag,
     S: Sample + ToByteSlice,
+    C: CodecTag,
 {
     fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, SyphonError> {
         let byte_buf = buf.as_byte_slice();
@@ -157,7 +158,7 @@ where
     }
 }
 
-impl<T, C: CodecTag, S: Sample> Stream for PcmCodec<T, C, S> {
+impl<T, S: Sample, C: CodecTag> Stream for PcmCodec<T, S, C> {
     type Tag = C;
 
     fn spec(&self) -> &StreamSpec<Self::Tag> {
@@ -165,20 +166,20 @@ impl<T, C: CodecTag, S: Sample> Stream for PcmCodec<T, C, S> {
     }
 }
 
-impl<T, C, S> Read for PcmCodec<T, C, S>
+impl<T, S, C> Read for PcmCodec<T, S, C>
 where
     T: SignalReader<Sample = S>,
-    C: CodecTag,
     S: Sample + FromByteSlice,
+    C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let start_i = size_of::<S>() - (buf.as_ptr() as usize % align_of::<S>());
         let aligned_len = buf.len() - start_i;
         let usable_len = aligned_len - (aligned_len % size_of::<S>());
 
         let sample_buf = match buf[start_i..start_i + usable_len].as_mut_slice_of::<S>() {
             Ok(buf) => buf,
-            _ => return Err(io::ErrorKind::InvalidData.into()),
+            _ => return Err(std::io::ErrorKind::InvalidData.into()),
         };
 
         let n = self.inner.read(sample_buf)?;

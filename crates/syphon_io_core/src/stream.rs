@@ -1,16 +1,13 @@
-use crate::{
-    codecs::{CodecTag, SyphonCodec},
-    TaggedSignalReader, TaggedSignalWriter,
-};
+use crate::{CodecRegistry, CodecTag};
 use std::{
     any::TypeId,
     io::{Read, Write},
 };
 use syphon_core::SyphonError;
-use syphon_signal::{Sample, Signal, SignalSpecBuilder};
+use syphon_signal::{Sample, Signal, SignalSpecBuilder, TaggedSignalReader, TaggedSignalWriter};
 
 #[derive(Debug, Clone, Copy)]
-pub struct StreamSpec<C: CodecTag = SyphonCodec> {
+pub struct StreamSpec<C: CodecTag> {
     pub codec: Option<C>,
     pub avg_bitrate: Option<f64>,
     pub block_align: Option<u16>,
@@ -26,6 +23,20 @@ impl<C: CodecTag> StreamSpec<C> {
             block_align: None,
             sample_type: None,
             decoded_spec: SignalSpecBuilder::new(),
+        }
+    }
+
+    pub fn with_tag_type<T>(mut self) -> StreamSpec<T>
+    where
+        T: CodecTag,
+        C: TryInto<T>,
+    {
+        StreamSpec {
+            codec: self.codec.and_then(|c| c.try_into().ok()),
+            avg_bitrate: self.avg_bitrate,
+            block_align: self.block_align,
+            sample_type: self.sample_type,
+            decoded_spec: self.decoded_spec,
         }
     }
 
@@ -99,11 +110,17 @@ impl<C: CodecTag> StreamSpec<C> {
         self.decoded_spec.merge(other.decoded_spec)
     }
 
-    pub fn fill(&mut self) -> Result<(), SyphonError> {
+    pub fn fill(&mut self) -> Result<(), SyphonError>
+    where
+        C: CodecRegistry,
+    {
         C::fill_spec(self)
     }
 
-    pub fn filled(mut self) -> Result<Self, SyphonError> {
+    pub fn filled(mut self) -> Result<Self, SyphonError>
+    where
+        C: CodecRegistry,
+    {
         self.fill()?;
         Ok(self)
     }
@@ -136,6 +153,7 @@ pub trait StreamReader: Stream + Read {
     fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
     where
         Self: Sized + 'static,
+        Self::Tag: CodecRegistry,
     {
         Self::Tag::decoder_reader(self)
     }
@@ -147,6 +165,7 @@ pub trait StreamWriter: Stream + Write {
     fn into_encoder(self) -> Result<TaggedSignalWriter, SyphonError>
     where
         Self: Sized + 'static,
+        Self::Tag: CodecRegistry,
     {
         Self::Tag::encoder_writer(self)
     }

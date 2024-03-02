@@ -1,11 +1,16 @@
-mod format;
-mod known_sample;
-mod stream;
+mod known_codecs;
+mod known_formats;
 
-pub use format::*;
-pub use known_sample::*;
-pub use stream::*;
+pub use known_codecs::*;
+pub use known_formats::*;
+pub use syphon_io_core::*;
 
-pub mod codecs;
-pub mod formats;
-pub mod utils;
+pub mod formats {
+    #[cfg(feature = "wave")]
+    pub use syphon_io_format_wave as wave;
+}
+
+pub mod codecs {
+    #[cfg(feature = "pcm")]
+    pub use syphon_io_codec_pcm as pcm;
+}

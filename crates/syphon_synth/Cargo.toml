@@ -1,5 +1,5 @@
 [package]
-name = "syphon_dsp"
+name = "syphon_synth"
 version = "0.1.0"
 edition = "2021"
 
