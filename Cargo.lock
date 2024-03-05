@@ -141,6 +141,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "converter"
+version = "0.1.0"
+dependencies = [
+ "syphon",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -651,32 +658,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "syphon_core"
-version = "0.1.0"
-
-[[package]]
-name = "syphon_cpal"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "syphon_core",
- "syphon_io",
- "syphon_signal",
-]
-
-[[package]]
-name = "syphon_io"
-version = "0.1.0"
-dependencies = [
- "syphon_core",
- "syphon_io_codec_pcm",
- "syphon_io_core",
- "syphon_io_format_wave",
- "syphon_signal",
-]
-
-[[package]]
-name = "syphon_io_codec_pcm"
+name = "syphon_codec_pcm"
 version = "0.1.0"
 dependencies = [
  "byte-slice-cast",
@@ -686,20 +668,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "syphon_io_core"
+name = "syphon_core"
+version = "0.1.0"
+
+[[package]]
+name = "syphon_cpal"
 version = "0.1.0"
 dependencies = [
+ "cpal",
  "syphon_core",
  "syphon_signal",
 ]
 
 [[package]]
-name = "syphon_io_format_wave"
+name = "syphon_format_wave"
+version = "0.1.0"
+dependencies = [
+ "syphon_codec_pcm",
+ "syphon_core",
+ "syphon_io_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io"
+version = "0.1.0"
+dependencies = [
+ "syphon_codec_pcm",
+ "syphon_core",
+ "syphon_format_wave",
+ "syphon_io_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_io_core"
 version = "0.1.0"
 dependencies = [
  "syphon_core",
- "syphon_io_codec_pcm",
- "syphon_io_core",
  "syphon_signal",
 ]
 

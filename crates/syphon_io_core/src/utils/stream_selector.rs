@@ -1,7 +1,7 @@
-use crate::{Format, FormatChunk, FormatReader, FormatTag, FormatWriter, Stream, StreamSpec};
-use std::{
-    io::{self, Read, Write},
-    ops::DerefMut,
+use crate::{
+    Format, FormatChunk, FormatObserver, FormatOffset, FormatPosition, FormatReader, FormatSeeker,
+    FormatTag, FormatWriter, Stream, StreamObserver, StreamReader, StreamSeeker, StreamSpec,
+    StreamWriter,
 };
 use syphon_core::SyphonError;
 
@@ -28,12 +28,20 @@ impl<F: Format> Stream for StreamSelector<F> {
     }
 }
 
-impl<T> Read for StreamSelector<T>
-where
-    T: DerefMut,
-    T::Target: FormatReader,
-{
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, io::Error> {
+impl<T: FormatObserver> StreamObserver for StreamSelector<T> {
+    fn position(&self) -> Result<u64, SyphonError> {
+        match self.inner.position()? {
+            FormatPosition { stream_i, .. } if stream_i < self.stream_i => Ok(0),
+            FormatPosition { stream_i, .. } if stream_i > self.stream_i => {
+                self.spec().n_bytes().ok_or(SyphonError::EndOfStream)
+            }
+            FormatPosition { byte_i, .. } => Ok(byte_i),
+        }
+    }
+}
+
+impl<T: FormatReader> StreamReader for StreamSelector<T> {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, SyphonError> {
         loop {
             match self.inner.read(buffer)? {
                 FormatChunk::Stream { stream_i, buf } if stream_i == self.stream_i => {
@@ -45,12 +53,8 @@ where
     }
 }
 
-impl<T> Write for StreamSelector<T>
-where
-    T: DerefMut,
-    T::Target: FormatWriter,
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+impl<T: FormatWriter> StreamWriter for StreamSelector<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError> {
         let chunk = FormatChunk::Stream {
             stream_i: self.stream_i,
             buf,
@@ -60,7 +64,17 @@ where
         Ok(buf.len())
     }
 
-    fn flush(&mut self) -> Result<(), io::Error> {
+    fn flush(&mut self) -> Result<(), SyphonError> {
         Ok(self.inner.flush()?)
+    }
+}
+
+impl<T: FormatSeeker + FormatObserver> StreamSeeker for StreamSelector<T> {
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError> {
+        let pos = self.inner.position()?;
+        self.inner.seek(FormatOffset {
+            stream_offset: pos.stream_i as isize - self.stream_i as isize,
+            byte_offset: offset,
+        })
     }
 }

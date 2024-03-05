@@ -1,7 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::{thread::sleep, time::Duration};
 use syphon::{
-    cpal::{DeviceExtension, SignalSpecExtension},
+    cpal::{DeviceExt, SignalSpecExt},
     signal::SignalSpec,
 };
 

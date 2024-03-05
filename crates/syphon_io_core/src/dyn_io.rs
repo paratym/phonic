@@ -1,6 +1,4 @@
-use crate::{
-    FormatData, FormatReader, FormatWriter, Stream, StreamReader, StreamSpec, StreamWriter,
-};
+use crate::{FormatData, FormatReader, FormatWriter, StreamReader, StreamSpec, StreamWriter};
 use std::io::{Read, Write};
 use syphon_core::SyphonError;
 use syphon_signal::{SignalReader, SignalWriter, TaggedSignalReader, TaggedSignalWriter};
@@ -37,11 +35,11 @@ pub trait CodecRegistry: CodecTag {
     fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
 
     fn decoder_reader(
-        reader: impl Stream<Tag = Self> + Read + 'static,
+        reader: impl StreamReader<Tag = Self> + 'static,
     ) -> Result<TaggedSignalReader, SyphonError>;
 
     fn encoder_writer(
-        writer: impl Stream<Tag = Self> + Write + 'static,
+        writer: impl StreamWriter<Tag = Self> + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError>;
 
     fn encoder_reader(

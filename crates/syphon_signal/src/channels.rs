@@ -84,7 +84,6 @@ impl ChannelLayout {
     pub const SURROUND_7_1: Self =
         Self::from_bits(Self::SURROUND_5_1.mask | Self::SIDE_LEFT.mask | Self::SIDE_RIGHT.mask);
 
-    #[inline]
     pub fn count(&self) -> u16 {
         self.mask.count_ones() as u16
     }
@@ -93,7 +92,6 @@ impl ChannelLayout {
 impl BitAnd for ChannelLayout {
     type Output = Self;
 
-    #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
         Self::from_bits(self.mask & rhs.mask)
     }
@@ -102,7 +100,6 @@ impl BitAnd for ChannelLayout {
 impl BitOr for ChannelLayout {
     type Output = Self;
 
-    #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
         Self::from_bits(self.mask | rhs.mask)
     }
@@ -111,7 +108,6 @@ impl BitOr for ChannelLayout {
 impl BitXor for ChannelLayout {
     type Output = Self;
 
-    #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
         Self::from_bits(self.mask ^ rhs.mask)
     }

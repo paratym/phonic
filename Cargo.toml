@@ -2,25 +2,15 @@
 resolver = "2"
 members = [
 	"crates/syphon",
-
 	"crates/syphon_core",
 	"crates/syphon_signal",
 	"crates/syphon_synth",
-
-	# io
 	"crates/syphon_io",
 	"crates/syphon_io_core",
-
-	# formats
-	"crates/syphon_io_format_wave",
-
-	# codecs
-	"crates/syphon_io_codec_pcm",
-
-	# integrations
+	"crates/syphon_format_wave",
+	"crates/syphon_codec_pcm",
 	"crates/syphon_cpal",
-
-	# examples
 	"examples/player",
 	"examples/synth",
+	"examples/converter",
 ]

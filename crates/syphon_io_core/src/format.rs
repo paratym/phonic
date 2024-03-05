@@ -1,8 +1,7 @@
-use crate::{utils::StreamSelector, CodecTag, FormatRegistry, FormatTag, StreamSpec};
+use crate::{utils::StreamSelector, FormatRegistry, FormatTag, StreamSpec};
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
-    path::Path,
 };
 use syphon_core::SyphonError;
 
@@ -12,74 +11,21 @@ pub struct FormatData<F: FormatTag> {
     pub streams: Vec<StreamSpec<F::Codec>>,
 }
 
-impl<F: FormatTag> FormatData<F> {
-    pub fn new() -> Self {
-        Self {
-            format: None,
-            streams: Vec::new(),
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub struct FormatPosition {
+    pub stream_i: usize,
+    pub byte_i: u64,
+}
 
-    pub fn with_tag_type<T>(self) -> FormatData<T>
-    where
-        T: FormatTag,
-        F: TryInto<T>,
-        F::Codec: TryInto<T::Codec>,
-    {
-        FormatData {
-            format: self.format.and_then(|f| f.try_into().ok()),
-            streams: self
-                .streams
-                .into_iter()
-                .map(StreamSpec::with_tag_type)
-                .collect(),
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub struct FormatOffset {
+    pub stream_offset: isize,
+    pub byte_offset: i64,
+}
 
-    pub fn with_format(mut self, format: F) -> Self {
-        self.format = Some(format);
-        self
-    }
-
-    pub fn with_stream<C: CodecTag + TryInto<F::Codec>>(mut self, spec: StreamSpec<C>) -> Self {
-        self.streams.push(spec.with_tag_type());
-        self
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.streams.is_empty()
-    }
-
-    pub fn merge(&mut self, other: &Self) -> Result<(), SyphonError> {
-        if let Some(format) = other.format {
-            if self.format.get_or_insert(format) != &format {
-                return Err(SyphonError::SignalMismatch);
-            }
-        }
-
-        let mut other_streams = other.streams.iter();
-        for (spec, other) in self.streams.iter_mut().zip(&mut other_streams) {
-            spec.merge(*other)?;
-        }
-
-        self.streams.extend(other_streams);
-        Ok(())
-    }
-
-    pub fn fill(&mut self) -> Result<(), SyphonError>
-    where
-        F: FormatRegistry,
-    {
-        F::fill_data(self)
-    }
-
-    pub fn filled(mut self) -> Result<Self, SyphonError>
-    where
-        F: FormatRegistry,
-    {
-        self.fill()?;
-        Ok(self)
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum FormatChunk<'a> {
+    Stream { stream_i: usize, buf: &'a [u8] },
 }
 
 pub trait Format {
@@ -127,8 +73,8 @@ pub trait Format {
     }
 }
 
-pub enum FormatChunk<'a> {
-    Stream { stream_i: usize, buf: &'a [u8] },
+pub trait FormatObserver: Format {
+    fn position(&self) -> Result<FormatPosition, SyphonError>;
 }
 
 pub trait FormatReader: Format {
@@ -142,6 +88,91 @@ pub trait FormatWriter: Format {
     fn flush(&mut self) -> Result<(), SyphonError>;
 }
 
+pub trait FormatSeeker: Format {
+    fn seek(&mut self, offset: FormatOffset) -> Result<(), SyphonError>;
+
+    fn set_position(&mut self, position: FormatPosition) -> Result<(), SyphonError>
+    where
+        Self: FormatObserver,
+    {
+        let current_pos = self.position()?;
+        self.seek(FormatOffset {
+            stream_offset: current_pos.stream_i as isize - position.stream_i as isize,
+            byte_offset: current_pos.byte_i as i64 - position.byte_i as i64,
+        })
+    }
+}
+
+impl<F: FormatTag> FormatData<F> {
+    pub fn new() -> Self {
+        Self {
+            format: None,
+            streams: Vec::new(),
+        }
+    }
+
+    pub fn with_tag_type<T>(self) -> FormatData<T>
+    where
+        T: FormatTag,
+        F: TryInto<T>,
+        F::Codec: TryInto<T::Codec>,
+    {
+        FormatData {
+            format: self.format.and_then(|f| f.try_into().ok()),
+            streams: self
+                .streams
+                .into_iter()
+                .map(StreamSpec::with_tag_type)
+                .collect(),
+        }
+    }
+
+    pub fn with_format(mut self, format: F) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    pub fn with_stream(mut self, spec: StreamSpec<F::Codec>) -> Self {
+        self.streams.push(spec);
+        self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.streams.is_empty()
+    }
+
+    pub fn merge(&mut self, other: &Self) -> Result<(), SyphonError> {
+        if let Some(format) = other.format {
+            if self.format.get_or_insert(format) != &format {
+                return Err(SyphonError::SignalMismatch);
+            }
+        }
+
+        let mut other_streams = other.streams.iter();
+        for (spec, other) in self.streams.iter_mut().zip(&mut other_streams) {
+            spec.merge(*other)?;
+        }
+
+        self.streams.extend(other_streams);
+        Ok(())
+    }
+
+    pub fn fill(&mut self) -> Result<(), SyphonError>
+    where
+        F: FormatRegistry,
+    {
+        F::fill_data(self)
+    }
+
+    pub fn filled(mut self) -> Result<Self, SyphonError>
+    where
+        F: FormatRegistry,
+    {
+        self.fill()?;
+        Ok(self)
+    }
+}
+
 impl<T, F> Format for T
 where
     T: Deref,
@@ -152,6 +183,16 @@ where
 
     fn data(&self) -> &FormatData<Self::Tag> {
         self.deref().data()
+    }
+}
+
+impl<T> FormatObserver for T
+where
+    T: Deref,
+    T::Target: FormatObserver,
+{
+    fn position(&self) -> Result<FormatPosition, SyphonError> {
+        self.deref().position()
     }
 }
 
@@ -187,34 +228,12 @@ where
     }
 }
 
-pub struct FormatIdentifiers {
-    pub file_extensions: &'static [&'static str],
-    pub mime_types: &'static [&'static str],
-    pub markers: &'static [&'static [u8]],
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum FormatIdentifier<'a> {
-    FileExtension(&'a str),
-    MimeType(&'a str),
-}
-
-impl FormatIdentifiers {
-    pub fn contains(&self, identifier: &FormatIdentifier) -> bool {
-        match identifier {
-            FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
-            FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Path> for FormatIdentifier<'a> {
-    type Error = SyphonError;
-
-    fn try_from(path: &'a Path) -> Result<Self, Self::Error> {
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| FormatIdentifier::FileExtension(ext))
-            .ok_or(SyphonError::MissingData)
+impl<T> FormatSeeker for T
+where
+    T: DerefMut,
+    T::Target: FormatSeeker,
+{
+    fn seek(&mut self, offset: FormatOffset) -> Result<(), SyphonError> {
+        self.deref_mut().seek(offset)
     }
 }

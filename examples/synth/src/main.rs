@@ -1,12 +1,12 @@
 use std::{
     fs::{create_dir_all, File},
-    io::copy,
     path::Path,
     time::Duration,
 };
 use syphon::{
     io::{
         codecs::pcm::PcmCodec, formats::wave::WaveFormat, Format, FormatData, FormatWriter, Stream,
+        StreamWriter,
     },
     signal::SignalSpec,
     synth::generators::SineGenerator,
@@ -14,6 +14,10 @@ use syphon::{
 };
 
 fn main() -> Result<(), SyphonError> {
+    let path = Path::new("./examples/generated/sine.wav");
+    create_dir_all(path.parent().ok_or(SyphonError::IoError)?)?;
+    let mut file = File::create(path)?;
+
     let spec = SignalSpec::builder()
         .with_channels(1)
         .with_frame_rate(44100)
@@ -21,16 +25,13 @@ fn main() -> Result<(), SyphonError> {
         .build()?;
 
     let mut sine = SineGenerator::new(spec, 440.0);
-    let mut encoder = <PcmCodec<_, _>>::from_signal(&mut sine)?;
+    let mut encoder = PcmCodec::from_signal(&mut sine)?;
 
-    let path = Path::new("./examples/generated/sine.wav");
-    create_dir_all(path.parent().ok_or(SyphonError::IoError)?)?;
-    let mut file = File::create(path)?;
-
-    let mut muxer = <WaveFormat<_>>::new(&mut file)?;
     let data = FormatData::new().with_stream(*encoder.spec());
-    muxer.write_data(&data)?;
+    let mut muxer = <WaveFormat<_>>::new(&mut file)?;
 
-    copy(&mut encoder, &mut muxer.as_default_stream()?)?;
+    muxer.write_data(&data)?;
+    muxer.as_default_stream()?.write_all(&mut encoder)?;
+
     Ok(())
 }

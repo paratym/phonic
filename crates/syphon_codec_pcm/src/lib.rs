@@ -2,13 +2,17 @@ use byte_slice_cast::{
     AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
 };
 use std::{
-    io::{Read, Write},
     marker::PhantomData,
     mem::{align_of, size_of},
 };
 use syphon_core::SyphonError;
-use syphon_io_core::{CodecTag, Stream, StreamSpec};
-use syphon_signal::{KnownSampleType, Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use syphon_io_core::{
+    CodecTag, Stream, StreamObserver, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
+};
+use syphon_signal::{
+    KnownSampleType, Sample, Signal, SignalObserver, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
+};
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub struct PcmCodecTag();
@@ -116,9 +120,15 @@ impl<T, S: Sample, C: CodecTag> Signal for PcmCodec<T, S, C> {
     }
 }
 
+impl<T: SignalObserver, S: Sample, C: CodecTag> SignalObserver for PcmCodec<T, S, C> {
+    fn position(&self) -> Result<u64, SyphonError> {
+        Ok(self.inner.position()? / size_of::<S>() as u64)
+    }
+}
+
 impl<T, S, C> SignalReader for PcmCodec<T, S, C>
 where
-    T: Read,
+    T: StreamReader,
     S: Sample + ToMutByteSlice,
     C: CodecTag,
 {
@@ -137,7 +147,7 @@ where
 
 impl<T, S, C> SignalWriter for PcmCodec<T, S, C>
 where
-    T: Write,
+    T: StreamWriter,
     S: Sample + ToByteSlice,
     C: CodecTag,
 {
@@ -158,6 +168,12 @@ where
     }
 }
 
+impl<T: StreamSeeker, S: Sample, C: CodecTag> SignalSeeker for PcmCodec<T, S, C> {
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError> {
+        self.inner.seek(offset * size_of::<S>() as i64)
+    }
+}
+
 impl<T, S: Sample, C: CodecTag> Stream for PcmCodec<T, S, C> {
     type Tag = C;
 
@@ -166,20 +182,26 @@ impl<T, S: Sample, C: CodecTag> Stream for PcmCodec<T, S, C> {
     }
 }
 
-impl<T, S, C> Read for PcmCodec<T, S, C>
+impl<T: SignalObserver, S: Sample, C: CodecTag> StreamObserver for PcmCodec<T, S, C> {
+    fn position(&self) -> Result<u64, SyphonError> {
+        Ok(self.inner.position()? / size_of::<S>() as u64)
+    }
+}
+
+impl<T, S, C> StreamReader for PcmCodec<T, S, C>
 where
     T: SignalReader<Sample = S>,
     S: Sample + FromByteSlice,
     C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError> {
         let start_i = size_of::<S>() - (buf.as_ptr() as usize % align_of::<S>());
         let aligned_len = buf.len() - start_i;
         let usable_len = aligned_len - (aligned_len % size_of::<S>());
 
         let sample_buf = match buf[start_i..start_i + usable_len].as_mut_slice_of::<S>() {
             Ok(buf) => buf,
-            _ => return Err(std::io::ErrorKind::InvalidData.into()),
+            _ => return Err(SyphonError::InvalidData),
         };
 
         let n = self.inner.read(sample_buf)?;
@@ -211,3 +233,9 @@ where
 //         self.inner.flush().map_err(Into::into)
 //     }
 // }
+
+impl<T: SignalSeeker, S: Sample, C: CodecTag> StreamSeeker for PcmCodec<T, S, C> {
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError> {
+        self.inner.seek(offset / size_of::<S>() as i64)
+    }
+}

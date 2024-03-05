@@ -7,10 +7,10 @@ pub use syphon_io_core::*;
 
 pub mod formats {
     #[cfg(feature = "wave")]
-    pub use syphon_io_format_wave as wave;
+    pub use syphon_format_wave as wave;
 }
 
 pub mod codecs {
     #[cfg(feature = "pcm")]
-    pub use syphon_io_codec_pcm as pcm;
+    pub use syphon_codec_pcm as pcm;
 }

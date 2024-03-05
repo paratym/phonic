@@ -10,7 +10,15 @@ synth = ["dep:syphon_synth"]
 
 # io
 io = ["dep:syphon_io"]
-io-full = ["io", "syphon_io/full"]
+io-full = [
+	"io",
+
+	# formats
+	"wave",
+
+	# codecs
+	"pcm",
+]
 
 wave = ["io", "syphon_io/wave"]
 

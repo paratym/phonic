@@ -5,8 +5,8 @@ use std::{
 };
 use syphon_core::SyphonError;
 use syphon_io_core::{
-    FormatData, FormatIdentifier, FormatIdentifiers, FormatReader, FormatRegistry, FormatTag,
-    FormatWriter,
+    utils::{FormatIdentifier, FormatIdentifiers},
+    FormatData, FormatReader, FormatRegistry, FormatTag, FormatWriter,
 };
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]

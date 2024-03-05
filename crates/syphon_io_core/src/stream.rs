@@ -1,8 +1,5 @@
 use crate::{CodecRegistry, CodecTag};
-use std::{
-    any::TypeId,
-    io::{Read, Write},
-};
+use std::any::TypeId;
 use syphon_core::SyphonError;
 use syphon_signal::{Sample, Signal, SignalSpecBuilder, TaggedSignalReader, TaggedSignalWriter};
 
@@ -26,7 +23,7 @@ impl<C: CodecTag> StreamSpec<C> {
         }
     }
 
-    pub fn with_tag_type<T>(mut self) -> StreamSpec<T>
+    pub fn with_tag_type<T>(self) -> StreamSpec<T>
     where
         T: CodecTag,
         C: TryInto<T>,
@@ -149,7 +146,13 @@ pub trait Stream {
     fn spec(&self) -> &StreamSpec<Self::Tag>;
 }
 
-pub trait StreamReader: Stream + Read {
+pub trait StreamObserver: Stream {
+    fn position(&self) -> Result<u64, SyphonError>;
+}
+
+pub trait StreamReader: Stream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError>;
+
     fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
     where
         Self: Sized + 'static,
@@ -157,11 +160,34 @@ pub trait StreamReader: Stream + Read {
     {
         Self::Tag::decoder_reader(self)
     }
+
+    fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<(), SyphonError> {
+        if self
+            .spec()
+            .block_align
+            .is_some_and(|a| buf.len() % a as usize != 0)
+        {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        while !buf.is_empty() {
+            match self.read(&mut buf) {
+                Ok(0) if buf.len() == 0 => break,
+                Ok(0) => return Err(SyphonError::EndOfStream),
+                Ok(n) => buf = &mut buf[n..],
+                Err(SyphonError::Interrupted) => continue,
+                Err(e) => return Err(e),
+            };
+        }
+
+        Ok(())
+    }
 }
 
-impl<T> StreamReader for T where T: Stream + Read {}
+pub trait StreamWriter: Stream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError>;
+    fn flush(&mut self) -> Result<(), SyphonError>;
 
-pub trait StreamWriter: Stream + Write {
     fn into_encoder(self) -> Result<TaggedSignalWriter, SyphonError>
     where
         Self: Sized + 'static,
@@ -169,6 +195,71 @@ pub trait StreamWriter: Stream + Write {
     {
         Self::Tag::encoder_writer(self)
     }
+
+    fn write_exact(&mut self, mut buf: &[u8]) -> Result<(), SyphonError> {
+        if self
+            .spec()
+            .block_align
+            .is_some_and(|a| buf.len() % a as usize != 0)
+        {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        while !buf.is_empty() {
+            match self.write(&buf) {
+                Ok(0) if buf.len() == 0 => break,
+                Ok(0) => return Err(SyphonError::EndOfStream),
+                Ok(n) => buf = &buf[n..],
+                Err(SyphonError::Interrupted) => continue,
+                Err(e) => return Err(e),
+            };
+        }
+
+        Ok(())
+    }
+
+    fn write_all_buffered<R>(&mut self, reader: &mut R, buf: &mut [u8]) -> Result<u64, SyphonError>
+    where
+        Self: Sized,
+        R: StreamReader,
+        Self::Tag: TryInto<R::Tag>,
+    {
+        if let Err(e) = reader.spec().clone().merge(self.spec().with_tag_type()) {
+            return Err(e);
+        }
+
+        let mut n_read = 0;
+        loop {
+            let n = match reader.read(buf) {
+                Ok(0) | Err(SyphonError::EndOfStream) => return Ok(n_read),
+                Ok(n) => n,
+                Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
+                Err(e) => return Err(e),
+            };
+
+            self.write_exact(&mut buf[..n])?;
+            n_read += n as u64;
+        }
+    }
+
+    fn write_all<R>(&mut self, reader: &mut R) -> Result<u64, SyphonError>
+    where
+        Self: Sized,
+        R: StreamReader,
+        Self::Tag: TryInto<R::Tag>,
+    {
+        let mut buffer = [0u8; 4096];
+        self.write_all_buffered(reader, &mut buffer)
+    }
 }
 
-impl<T> StreamWriter for T where T: Stream + Write {}
+pub trait StreamSeeker: Stream {
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError>;
+
+    fn set_position(&mut self, position: u64) -> Result<(), SyphonError>
+    where
+        Self: StreamObserver,
+    {
+        self.seek(self.position()? as i64 - position as i64)
+    }
+}

@@ -1,0 +1,9 @@
+[package]
+name = "converter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.syphon]
+version = "0.0.1"
+path = "../../crates/syphon"
+features = ["io-full"]

@@ -1,4 +1,4 @@
-use crate::{SupportedWaveCodec, WaveFormatTag};
+use crate::{WaveFormatTag, WaveSupportedCodec};
 use std::io::{Read, Write};
 use syphon_core::SyphonError;
 use syphon_io_core::{FormatData, FormatTag, StreamSpec};
@@ -136,11 +136,11 @@ impl<F> From<WaveHeader> for FormatData<F>
 where
     F: FormatTag,
     WaveFormatTag: Into<F>,
-    SupportedWaveCodec: Into<F::Codec>,
+    WaveSupportedCodec: Into<F::Codec>,
 {
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
-            1 | 3 => Some(SupportedWaveCodec::Pcm.into()),
+            1 | 3 => Some(WaveSupportedCodec::Pcm.into()),
             _ => None,
         };
 

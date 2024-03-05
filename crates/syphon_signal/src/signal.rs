@@ -65,29 +65,28 @@ impl SignalSpecBuilder {
         }
     }
 
+    pub fn with_frame_rate(mut self, frame_rate: u32) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+
     pub fn sample_rate(&self) -> Option<u64> {
         self.frame_rate
             .zip(self.channels)
             .map(|(frame_rate, channels)| frame_rate as u64 * channels.count() as u64)
     }
 
-    pub fn n_samples(&self) -> Option<u64> {
-        self.n_frames
-            .zip(self.channels)
-            .map(|(n_frames, channels)| n_frames * channels.count() as u64)
-    }
+    pub fn with_sample_rate(mut self, sample_rate: u32) -> Result<Self, SyphonError> {
+        if let Some(c) = self.channels {
+            let n_channels = c.count() as u32;
+            if sample_rate % n_channels != 0 {
+                return Err(SyphonError::SignalMismatch);
+            }
 
-    pub fn duration(&self) -> Option<Duration> {
-        self.n_frames
-            .zip(self.frame_rate)
-            .map(|(n_frames, frame_rate)| {
-                Duration::from_secs_f64(n_frames as f64 / frame_rate as f64)
-            })
-    }
+            self.frame_rate = Some(sample_rate / n_channels);
+        }
 
-    pub fn with_frame_rate(mut self, frame_rate: u32) -> Self {
-        self.frame_rate = Some(frame_rate);
-        self
+        Ok(self)
     }
 
     pub fn with_channels(mut self, channels: impl Into<Channels>) -> Self {
@@ -100,12 +99,34 @@ impl SignalSpecBuilder {
         self
     }
 
-    pub fn with_duration(mut self, duration: Duration) -> Self {
-        self.n_frames = self
-            .frame_rate
-            .map(|hz| (hz as f64 * duration.as_secs_f64()) as u64);
+    pub fn n_samples(&self) -> Option<u64> {
+        self.n_frames
+            .zip(self.channels)
+            .map(|(n_frames, channels)| n_frames * channels.count() as u64)
+    }
 
-        self
+    pub fn with_n_samples(self, n_samples: impl Into<Option<u64>>) -> Self {
+        self.with_n_frames(
+            n_samples
+                .into()
+                .zip(self.channels)
+                .map(|(n, c)| n * c.count() as u64),
+        )
+    }
+
+    pub fn duration(&self) -> Option<Duration> {
+        self.n_frames
+            .zip(self.frame_rate)
+            .map(|(n_frames, frame_rate)| {
+                Duration::from_secs_f64(n_frames as f64 / frame_rate as f64)
+            })
+    }
+
+    pub fn with_duration(self, duration: Duration) -> Self {
+        self.with_n_frames(
+            self.frame_rate
+                .map(|hz| (hz as f64 * duration.as_secs_f64()) as u64),
+        )
     }
 
     pub fn is_empty(&self) -> bool {
@@ -167,83 +188,100 @@ pub trait Signal {
     fn spec(&self) -> &SignalSpec;
 }
 
-pub trait SignalReader: Signal {
-    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, SyphonError>;
+pub trait SignalObserver: Signal {
+    fn position(&self) -> Result<u64, SyphonError>;
+}
 
-    fn read_exact(&mut self, mut buffer: &mut [Self::Sample]) -> Result<(), SyphonError> {
-        while !buffer.is_empty() {
-            match self.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(n) => buffer = &mut buffer[n..],
+pub trait SignalReader: Signal {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, SyphonError>;
+
+    fn read_exact(&mut self, mut buf: &mut [Self::Sample]) -> Result<(), SyphonError> {
+        if buf.len() % self.spec().channels.count() as usize != 0 {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        while !buf.is_empty() {
+            match self.read(&mut buf) {
+                Ok(0) if buf.len() == 0 => break,
+                Ok(0) => return Err(SyphonError::EndOfStream),
+                Ok(n) => buf = &mut buf[n..],
+                Err(SyphonError::Interrupted) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub trait SignalWriter: Signal {
+    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, SyphonError>;
+    fn flush(&mut self) -> Result<(), SyphonError>;
+
+    fn write_exact(&mut self, mut buf: &[Self::Sample]) -> Result<(), SyphonError> {
+        if buf.len() % self.spec().channels.count() as usize != 0 {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        while !buf.is_empty() {
+            match self.write(&buf) {
+                Ok(0) if buf.len() == 0 => break,
+                Ok(0) => return Err(SyphonError::EndOfStream),
+                Ok(n) => buf = &buf[n..],
                 Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
         }
 
-        if buffer.len() > 0 {
-            return Err(SyphonError::EndOfStream);
-        }
-
         Ok(())
     }
 
-    fn pipe_buffered<W>(
+    fn write_all_buffered<R>(
         &mut self,
-        writer: &mut W,
-        buffer: &mut [Self::Sample],
+        reader: &mut R,
+        buf: &mut [Self::Sample],
     ) -> Result<u64, SyphonError>
     where
         Self: Sized,
-        W: SignalWriter<Sample = Self::Sample>,
+        R: SignalReader<Sample = Self::Sample>,
     {
-        let spec = self.spec();
-        if spec != writer.spec() {
+        let spec = reader.spec();
+        if spec != self.spec() {
             return Err(SyphonError::SignalMismatch);
         }
 
         let mut n_read = 0;
         loop {
-            let n = match self.read(buffer) {
+            let n = match reader.read(buf) {
                 Ok(0) | Err(SyphonError::EndOfStream) => return Ok(n_read),
                 Ok(n) => n,
                 Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
                 Err(e) => return Err(e),
             };
 
-            writer.write_exact(&buffer[..n])?;
+            self.write_exact(&buf[..n])?;
             n_read += n as u64;
         }
     }
 
-    fn pipe<W>(&mut self, writer: &mut W) -> Result<u64, SyphonError>
+    fn write_all<R>(&mut self, reader: &mut R) -> Result<u64, SyphonError>
     where
         Self: Sized,
-        W: SignalWriter<Sample = Self::Sample>,
+        R: SignalReader<Sample = Self::Sample>,
     {
-        let mut buffer = [Self::Sample::ORIGIN; 2048];
-        self.pipe_buffered(writer, &mut buffer)
+        let mut buffer = [Self::Sample::ORIGIN; 4096];
+        self.write_all_buffered(reader, &mut buffer)
     }
 }
 
-pub trait SignalWriter: Signal {
-    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, SyphonError>;
-    fn flush(&mut self) -> Result<(), SyphonError>;
+pub trait SignalSeeker: Signal {
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError>;
 
-    fn write_exact(&mut self, mut buffer: &[Self::Sample]) -> Result<(), SyphonError> {
-        while !buffer.is_empty() {
-            match self.write(&buffer) {
-                Ok(0) => break,
-                Ok(n) => buffer = &buffer[n..],
-                Err(SyphonError::Interrupted) => continue,
-                Err(e) => return Err(e),
-            };
-        }
-
-        if buffer.len() > 0 {
-            return Err(SyphonError::EndOfStream);
-        }
-
-        Ok(())
+    fn set_position(&mut self, position: u64) -> Result<(), SyphonError>
+    where
+        Self: SignalObserver,
+    {
+        self.seek(self.position()? as i64 - position as i64)
     }
 }
 

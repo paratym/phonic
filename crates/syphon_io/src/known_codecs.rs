@@ -25,7 +25,7 @@ impl CodecRegistry for KnownCodec {
     }
 
     fn decoder_reader(
-        reader: impl Stream<Tag = Self> + Read + 'static,
+        reader: impl Stream<Tag = Self> + 'static,
     ) -> Result<TaggedSignalReader, SyphonError> {
         match reader.spec().codec.ok_or(SyphonError::MissingData)? {
             // Self::Pcm => match sample_type {
@@ -65,7 +65,7 @@ impl CodecRegistry for KnownCodec {
     }
 
     fn encoder_writer(
-        writer: impl Stream<Tag = Self> + Write + 'static,
+        writer: impl Stream<Tag = Self> + 'static,
     ) -> Result<TaggedSignalWriter, SyphonError> {
         match writer.spec().codec.ok_or(SyphonError::MissingData)? {
             // Self::Pcm => match sample_type {
@@ -121,10 +121,22 @@ impl CodecRegistry for KnownCodec {
 }
 
 #[cfg(feature = "wave")]
-impl From<crate::formats::wave::SupportedWaveCodec> for KnownCodec {
-    fn from(codec: crate::formats::wave::SupportedWaveCodec) -> Self {
+impl From<crate::formats::wave::WaveSupportedCodec> for KnownCodec {
+    fn from(codec: crate::formats::wave::WaveSupportedCodec) -> Self {
         match codec {
-            crate::formats::wave::SupportedWaveCodec::Pcm => Self::Pcm,
+            crate::formats::wave::WaveSupportedCodec::Pcm => Self::Pcm,
+        }
+    }
+}
+
+#[cfg(feature = "wave")]
+impl TryFrom<KnownCodec> for crate::formats::wave::WaveSupportedCodec {
+    type Error = SyphonError;
+
+    fn try_from(codec: KnownCodec) -> Result<Self, Self::Error> {
+        match codec {
+            KnownCodec::Pcm => Ok(Self::Pcm),
+            _ => Err(SyphonError::Unsupported),
         }
     }
 }
@@ -133,5 +145,17 @@ impl From<crate::formats::wave::SupportedWaveCodec> for KnownCodec {
 impl From<crate::codecs::pcm::PcmCodecTag> for KnownCodec {
     fn from(_: crate::codecs::pcm::PcmCodecTag) -> Self {
         Self::Pcm
+    }
+}
+
+#[cfg(feature = "pcm")]
+impl TryFrom<KnownCodec> for crate::codecs::pcm::PcmCodecTag {
+    type Error = SyphonError;
+
+    fn try_from(codec: KnownCodec) -> Result<Self, Self::Error> {
+        match codec {
+            KnownCodec::Pcm => Ok(Self()),
+            _ => Err(SyphonError::Unsupported),
+        }
     }
 }

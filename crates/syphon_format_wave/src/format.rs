@@ -1,8 +1,9 @@
-use crate::{SupportedWaveCodec, WaveFormatTag, WaveHeader};
-use std::io::{Read, Write};
+use crate::{WaveFormatTag, WaveHeader, WaveSupportedCodec};
+use std::io::{Read, Seek, Write};
 use syphon_core::SyphonError;
 use syphon_io_core::{
-    Format, FormatChunk, FormatData, FormatReader, FormatTag, FormatWriter, StreamSpec,
+    Format, FormatChunk, FormatData, FormatObserver, FormatReader, FormatSeeker, FormatTag,
+    FormatWriter, StreamSpec,
 };
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
@@ -45,10 +46,16 @@ impl<T, F: FormatTag> Format for WaveFormat<T, F> {
     }
 }
 
+impl<T, F: FormatTag> FormatObserver for WaveFormat<T, F> {
+    fn position(&self) -> Result<syphon_io_core::FormatPosition, SyphonError> {
+        todo!()
+    }
+}
+
 impl<T: Read, F: FormatTag> FormatReader for WaveFormat<T, F>
 where
     WaveFormatTag: Into<F>,
-    SupportedWaveCodec: Into<F::Codec>,
+    WaveSupportedCodec: Into<F::Codec>,
 {
     fn read_data(&mut self) -> Result<(), SyphonError> {
         if self.i > 0 {
@@ -114,5 +121,11 @@ impl<T: Write, F: FormatTag> FormatWriter for WaveFormat<T, F> {
 
     fn flush(&mut self) -> Result<(), SyphonError> {
         self.inner.flush().map_err(Into::into)
+    }
+}
+
+impl<T: Seek, F: FormatTag> FormatSeeker for WaveFormat<T, F> {
+    fn seek(&mut self, offset: syphon_io_core::FormatOffset) -> Result<(), SyphonError> {
+        todo!()
     }
 }
