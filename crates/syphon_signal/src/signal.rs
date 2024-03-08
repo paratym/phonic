@@ -1,5 +1,6 @@
 use crate::{Channels, Sample};
 use std::{
+    mem::size_of,
     ops::{Deref, DerefMut},
     time::Duration,
 };
@@ -41,6 +42,20 @@ impl SignalSpec {
     pub fn duration(&self) -> Option<Duration> {
         self.n_frames
             .map(|n| Duration::from_secs_f64(n as f64 / self.frame_rate as f64))
+    }
+
+    pub fn merge(mut self, other: &Self) -> Result<Self, SyphonError> {
+        if self.frame_rate != other.frame_rate || self.channels.count() != other.channels.count() {
+            return Err(SyphonError::SignalMismatch);
+        }
+
+        if let Channels::Layout(layout) = other.channels {
+            self.channels = Channels::Layout(layout);
+        }
+
+        self.n_frames = self.n_frames.zip(other.n_frames).map(|(a, b)| a.min(b));
+
+        Ok(self)
     }
 }
 
@@ -202,7 +217,6 @@ pub trait SignalReader: Signal {
 
         while !buf.is_empty() {
             match self.read(&mut buf) {
-                Ok(0) if buf.len() == 0 => break,
                 Ok(0) => return Err(SyphonError::EndOfStream),
                 Ok(n) => buf = &mut buf[n..],
                 Err(SyphonError::Interrupted) => continue,
@@ -225,7 +239,6 @@ pub trait SignalWriter: Signal {
 
         while !buf.is_empty() {
             match self.write(&buf) {
-                Ok(0) if buf.len() == 0 => break,
                 Ok(0) => return Err(SyphonError::EndOfStream),
                 Ok(n) => buf = &buf[n..],
                 Err(SyphonError::Interrupted) => continue,
@@ -236,41 +249,70 @@ pub trait SignalWriter: Signal {
         Ok(())
     }
 
-    fn write_all_buffered<R>(
+    fn copy_n_buffered<R>(
         &mut self,
         reader: &mut R,
+        n: u64,
         buf: &mut [Self::Sample],
-    ) -> Result<u64, SyphonError>
+    ) -> Result<(), SyphonError>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let spec = reader.spec();
-        if spec != self.spec() {
+        let spec = self.spec().merge(reader.spec())?;
+        if n % spec.channels.count() as u64 != 0 {
             return Err(SyphonError::SignalMismatch);
         }
 
         let mut n_read = 0;
-        loop {
-            let n = match reader.read(buf) {
-                Ok(0) | Err(SyphonError::EndOfStream) => return Ok(n_read),
+        while n_read < n {
+            let buf_len = buf.len().min((n - n_read) as usize);
+            let n = match reader.read(&mut buf[..buf_len]) {
+                Ok(0) => return Err(SyphonError::EndOfStream),
                 Ok(n) => n,
-                Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
+                Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
 
             self.write_exact(&buf[..n])?;
             n_read += n as u64;
         }
+
+        Ok(())
     }
 
-    fn write_all<R>(&mut self, reader: &mut R) -> Result<u64, SyphonError>
+    fn copy_n<R>(&mut self, reader: &mut R, n: u64) -> Result<(), SyphonError>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let mut buffer = [Self::Sample::ORIGIN; 4096];
-        self.write_all_buffered(reader, &mut buffer)
+        let mut buf = [Self::Sample::ORIGIN; 8096];
+        self.copy_n_buffered(reader, n, &mut buf)
+    }
+
+    fn copy_all_buffered<R>(
+        &mut self,
+        reader: &mut R,
+        buf: &mut [Self::Sample],
+    ) -> Result<(), SyphonError>
+    where
+        Self: Sized,
+        R: SignalReader<Sample = Self::Sample>,
+    {
+        let n = u64::MAX - (u64::MAX % self.spec().channels.count() as u64);
+        match self.copy_n_buffered(reader, n, buf) {
+            Ok(_) | Err(SyphonError::EndOfStream) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn copy_all<R>(&mut self, reader: &mut R) -> Result<(), SyphonError>
+    where
+        Self: Sized,
+        R: SignalReader<Sample = Self::Sample>,
+    {
+        let mut buf = [Self::Sample::ORIGIN; 8096];
+        self.copy_all_buffered(reader, &mut buf)
     }
 }
 
@@ -298,6 +340,17 @@ where
     }
 }
 
+impl<T, S> SignalObserver for T
+where
+    S: Sample,
+    T: Deref,
+    T::Target: SignalObserver<Sample = S>,
+{
+    fn position(&self) -> Result<u64, SyphonError> {
+        self.deref().position()
+    }
+}
+
 impl<S, T> SignalReader for T
 where
     S: Sample,
@@ -321,5 +374,16 @@ where
 
     fn flush(&mut self) -> Result<(), SyphonError> {
         self.deref_mut().flush()
+    }
+}
+
+impl<S, T> SignalSeeker for T
+where
+    S: Sample,
+    T: DerefMut,
+    T::Target: SignalSeeker<Sample = S>,
+{
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError> {
+        self.deref_mut().seek(offset)
     }
 }

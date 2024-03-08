@@ -1,9 +1,15 @@
-use crate::{utils::StreamSelector, FormatRegistry, FormatTag, StreamSpec};
+use crate::{utils::StreamSelector, CodecTag, StreamSpec};
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
 use syphon_core::SyphonError;
+
+pub trait FormatTag: Sized + Eq + Copy {
+    type Codec: CodecTag;
+
+    fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct FormatData<F: FormatTag> {
@@ -93,7 +99,7 @@ pub trait FormatSeeker: Format {
 
     fn set_position(&mut self, position: FormatPosition) -> Result<(), SyphonError>
     where
-        Self: FormatObserver,
+        Self: Sized + FormatObserver,
     {
         let current_pos = self.position()?;
         self.seek(FormatOffset {
@@ -102,6 +108,10 @@ pub trait FormatSeeker: Format {
         })
     }
 }
+
+pub trait DynFormat: Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker {}
+impl<T> DynFormat for T where T: Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker
+{}
 
 impl<F: FormatTag> FormatData<F> {
     pub fn new() -> Self {
@@ -157,17 +167,11 @@ impl<F: FormatTag> FormatData<F> {
         Ok(())
     }
 
-    pub fn fill(&mut self) -> Result<(), SyphonError>
-    where
-        F: FormatRegistry,
-    {
+    pub fn fill(&mut self) -> Result<(), SyphonError> {
         F::fill_data(self)
     }
 
-    pub fn filled(mut self) -> Result<Self, SyphonError>
-    where
-        F: FormatRegistry,
-    {
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
         self.fill()?;
         Ok(self)
     }

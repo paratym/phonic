@@ -160,7 +160,7 @@ where
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels));
 
         Self {
-            format: Some(WaveFormatTag().into()),
+            format: Some(WaveFormatTag.into()),
             streams: vec![StreamSpec {
                 codec: codec.map(Into::into),
                 avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),

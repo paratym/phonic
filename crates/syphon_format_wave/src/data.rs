@@ -1,8 +1,6 @@
 use syphon_codec_pcm::PcmCodecTag;
 use syphon_core::SyphonError;
-use syphon_io_core::{
-    utils::FormatIdentifiers, CodecRegistry, CodecTag, FormatData, FormatTag, StreamSpec,
-};
+use syphon_io_core::{utils::FormatIdentifiers, CodecTag, FormatData, FormatTag, StreamSpec};
 
 pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
@@ -11,44 +9,47 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
 };
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub struct WaveFormatTag();
+pub struct WaveFormatTag;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum WaveSupportedCodec {
     Pcm,
 }
 
-pub fn fill_wave_format_data<F>(data: &mut FormatData<F>) -> Result<(), SyphonError>
+pub fn fill_wave_data<F>(data: &mut FormatData<F>) -> Result<(), SyphonError>
 where
     F: FormatTag,
-    WaveFormatTag: Into<F>,
-    F::Codec: CodecRegistry,
-    WaveSupportedCodec: Into<F::Codec>,
+    WaveFormatTag: TryInto<F>,
 {
-    let expected_format = WaveFormatTag().into();
-    if data.format.get_or_insert(expected_format) != &expected_format || data.streams.len() > 1 {
+    let expected_format = WaveFormatTag.try_into().ok();
+    if data.format.is_some() && data.format != expected_format {
         return Err(SyphonError::InvalidData);
+    } else {
+        data.format = expected_format;
     }
 
-    if data.streams.is_empty() {
-        data.streams.push(StreamSpec::new());
+    match data.streams.len() {
+        0 => data.streams.push(StreamSpec::new()),
+        1 => data.streams.first_mut().unwrap().fill()?,
+        _ => return Err(SyphonError::Unsupported),
     }
 
-    let stream_spec = data.streams.first_mut().ok_or(SyphonError::InvalidData)?;
-    let expected_codec = WaveSupportedCodec::Pcm.into();
-    if stream_spec.codec.get_or_insert(expected_codec) != &expected_codec {
-        return Err(SyphonError::InvalidData);
-    }
-
-    stream_spec.fill()?;
     Ok(())
 }
 
 impl FormatTag for WaveFormatTag {
     type Codec = WaveSupportedCodec;
+
+    fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError> {
+        fill_wave_data(data)
+    }
 }
 
-impl CodecTag for WaveSupportedCodec {}
+impl CodecTag for WaveSupportedCodec {
+    fn fill_spec(_: &mut StreamSpec<Self>) -> Result<(), SyphonError> {
+        Err(SyphonError::Unsupported)
+    }
+}
 
 impl From<PcmCodecTag> for WaveSupportedCodec {
     fn from(_: PcmCodecTag) -> Self {
@@ -61,7 +62,7 @@ impl TryFrom<WaveSupportedCodec> for PcmCodecTag {
 
     fn try_from(codec: WaveSupportedCodec) -> Result<Self, Self::Error> {
         match codec {
-            WaveSupportedCodec::Pcm => Ok(PcmCodecTag()),
+            WaveSupportedCodec::Pcm => Ok(PcmCodecTag),
             _ => Err(SyphonError::Unsupported),
         }
     }

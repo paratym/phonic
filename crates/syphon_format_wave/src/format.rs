@@ -20,7 +20,7 @@ impl<T, F: FormatTag> WaveFormat<T, F> {
         Ok(Self {
             inner,
             i: 0,
-            data: FormatData::new().with_format(WaveFormatTag().into()),
+            data: FormatData::new().with_format(WaveFormatTag.into()),
         })
     }
 

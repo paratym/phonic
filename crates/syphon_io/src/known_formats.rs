@@ -1,86 +1,57 @@
 use crate::KnownCodec;
-use std::{
-    hash::Hash,
-    io::{Read, Write},
-};
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use syphon_core::SyphonError;
+use syphon_format_wave::WAVE_IDENTIFIERS;
 use syphon_io_core::{
     utils::{FormatIdentifier, FormatIdentifiers},
-    FormatData, FormatReader, FormatRegistry, FormatTag, FormatWriter,
+    DynFormat, DynFormatConstructor, FormatData, FormatTag, StdIoStream,
 };
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[non_exhaustive]
 pub enum KnownFormat {
+    #[cfg(feature = "wave")]
     Wave,
 }
 
-impl KnownFormat {
-    pub fn all() -> &'static [Self] {
-        &[
-            #[cfg(feature = "wave")]
-            KnownFormat::Wave,
-        ]
-    }
+lazy_static! {
+    static ref KNOWN_FORMAT_IDENTIFIERS: HashMap<KnownFormat, &'static FormatIdentifiers> = {
+        let mut map = HashMap::new();
 
-    pub fn identifiers(&self) -> Option<&'static FormatIdentifiers> {
-        Some(match self {
-            #[cfg(feature = "wave")]
-            &Self::Wave => &crate::formats::wave::WAVE_IDENTIFIERS,
+        #[cfg(feature = "wave")]
+        map.insert(KnownFormat::Wave, &WAVE_IDENTIFIERS);
 
-            _ => return None,
-        })
-    }
+        map
+    };
 }
 
 impl FormatTag for KnownFormat {
     type Codec = KnownCodec;
-}
 
-impl FormatRegistry for KnownFormat {
     fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError> {
         match data.format {
             #[cfg(feature = "wave")]
-            Some(Self::Wave) => crate::formats::wave::fill_wave_format_data(data),
+            Some(Self::Wave) => crate::formats::wave::fill_wave_data(data),
 
-            _ => Ok(()),
+            _ => return Ok(()),
         }
     }
+}
 
-    fn demux_reader(
+impl DynFormatConstructor for KnownFormat {
+    type Tag = Self;
+
+    fn from_std_io<S: StdIoStream + 'static>(
         &self,
-        inner: impl Read + 'static,
-    ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError> {
+        inner: S,
+    ) -> Result<Box<dyn DynFormat<Tag = Self::Tag>>, SyphonError> {
         Ok(match self {
             #[cfg(feature = "wave")]
             KnownFormat::Wave => Box::new(crate::formats::wave::WaveFormat::new(inner)?),
 
             _ => return Err(SyphonError::Unsupported),
         })
-    }
-
-    fn mux_writer(
-        &self,
-        inner: impl Write + 'static,
-    ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError> {
-        Ok(match self {
-            #[cfg(feature = "wave")]
-            KnownFormat::Wave => Box::new(crate::formats::wave::WaveFormat::new(inner)?),
-
-            _ => return Err(SyphonError::Unsupported),
-        })
-    }
-
-    fn mux_reader(
-        inner: impl FormatReader<Tag = Self> + 'static,
-    ) -> Result<Box<dyn Read>, SyphonError> {
-        todo!()
-    }
-
-    fn demux_writer(
-        inner: impl FormatWriter<Tag = Self> + 'static,
-    ) -> Result<Box<dyn Write>, SyphonError> {
-        todo!()
     }
 }
 
@@ -88,11 +59,11 @@ impl<'a> TryFrom<&FormatIdentifier<'a>> for KnownFormat {
     type Error = SyphonError;
 
     fn try_from(id: &FormatIdentifier<'a>) -> Result<Self, Self::Error> {
-        Self::all()
+        KNOWN_FORMAT_IDENTIFIERS
             .iter()
-            .find(|fmt| fmt.identifiers().is_some_and(|ids| ids.contains(id)))
-            .copied()
-            .ok_or(SyphonError::Unsupported)
+            .find(|(_, ids)| ids.contains(id))
+            .map(|(fmt, _)| *fmt)
+            .ok_or(SyphonError::NotFound)
     }
 }
 
@@ -109,7 +80,7 @@ impl TryFrom<KnownFormat> for crate::formats::wave::WaveFormatTag {
 
     fn try_from(format: KnownFormat) -> Result<Self, Self::Error> {
         match format {
-            KnownFormat::Wave => Ok(Self()),
+            KnownFormat::Wave => Ok(Self),
             _ => Err(SyphonError::Unsupported),
         }
     }

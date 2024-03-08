@@ -21,6 +21,6 @@ This project is very early in development. It's untested, and the api changes wi
 [ ] Complete the core signal adapters \
 [x] Feature flagging \
 [x] Cpal integration \
-[ ] Seeking support \
+[x] Seeking support \
 [ ] Logging \
 [ ] Real time signal wrapper \

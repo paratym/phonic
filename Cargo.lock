@@ -694,6 +694,7 @@ dependencies = [
 name = "syphon_io"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "syphon_codec_pcm",
  "syphon_core",
  "syphon_format_wave",

@@ -1,54 +1,30 @@
-use crate::{FormatData, FormatReader, FormatWriter, StreamReader, StreamSpec, StreamWriter};
-use std::io::{Read, Write};
+use crate::DynStream;
+use crate::{CodecTag, DynFormat, FormatTag, TaggedSignal};
+use std::io::{Read, Seek, Write};
 use syphon_core::SyphonError;
-use syphon_signal::{SignalReader, SignalWriter, TaggedSignalReader, TaggedSignalWriter};
 
-pub trait FormatTag: Sized + Eq + Copy {
-    type Codec: CodecTag;
+pub trait StdIoStream: Read + Write + Seek {}
+impl<T> StdIoStream for T where T: Read + Write + Seek {}
+
+pub trait DynFormatConstructor {
+    type Tag: FormatTag;
+
+    fn from_std_io<S: StdIoStream + 'static>(
+        &self,
+        source: S,
+    ) -> Result<Box<dyn DynFormat<Tag = Self::Tag>>, SyphonError>;
 }
 
-pub trait FormatRegistry: FormatTag {
-    fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError>;
+pub trait DynCodecConstructor {
+    type Tag: CodecTag;
 
-    fn demux_reader(
+    fn from_stream<S: DynStream + 'static>(
         &self,
-        inner: impl Read + 'static,
-    ) -> Result<Box<dyn FormatReader<Tag = Self>>, SyphonError>;
+        stream: S,
+    ) -> Result<Box<TaggedSignal>, SyphonError>;
 
-    fn mux_writer(
+    fn from_signal(
         &self,
-        inner: impl Write + 'static,
-    ) -> Result<Box<dyn FormatWriter<Tag = Self>>, SyphonError>;
-
-    fn mux_reader(
-        reader: impl FormatReader<Tag = Self> + 'static,
-    ) -> Result<Box<dyn Read>, SyphonError>;
-
-    fn demux_writer(
-        writer: impl FormatWriter<Tag = Self> + 'static,
-    ) -> Result<Box<dyn Write>, SyphonError>;
-}
-
-pub trait CodecTag: Sized + Eq + Copy {}
-
-pub trait CodecRegistry: CodecTag {
-    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
-
-    fn decoder_reader(
-        reader: impl StreamReader<Tag = Self> + 'static,
-    ) -> Result<TaggedSignalReader, SyphonError>;
-
-    fn encoder_writer(
-        writer: impl StreamWriter<Tag = Self> + 'static,
-    ) -> Result<TaggedSignalWriter, SyphonError>;
-
-    fn encoder_reader(
-        &self,
-        reader: impl SignalReader + 'static,
-    ) -> Result<Box<dyn StreamReader<Tag = Self>>, SyphonError>;
-
-    fn decoder_writer(
-        &self,
-        writer: impl SignalWriter + 'static,
-    ) -> Result<Box<dyn StreamWriter<Tag = Self>>, SyphonError>;
+        signal: TaggedSignal,
+    ) -> Result<Box<dyn DynStream<Tag = Self::Tag>>, SyphonError>;
 }

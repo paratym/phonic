@@ -15,17 +15,18 @@ use syphon_signal::{
 };
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub struct PcmCodecTag();
-impl CodecTag for PcmCodecTag {}
+pub struct PcmCodecTag;
 
-pub fn fill_pcm_stream_spec<C>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError>
+pub fn fill_pcm_spec<C>(spec: &mut StreamSpec<C>) -> Result<(), SyphonError>
 where
     C: CodecTag,
-    PcmCodecTag: Into<C>,
+    PcmCodecTag: TryInto<C>,
 {
-    let expected_codec = PcmCodecTag().into();
-    if spec.codec.get_or_insert(expected_codec) != &expected_codec {
+    let expected_codec = PcmCodecTag.try_into().ok();
+    if spec.codec.is_some() && spec.codec != expected_codec {
         return Err(SyphonError::InvalidData);
+    } else {
+        spec.codec = expected_codec;
     }
 
     let sample_type = spec
@@ -60,6 +61,12 @@ where
     Ok(())
 }
 
+impl CodecTag for PcmCodecTag {
+    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError> {
+        fill_pcm_spec(spec)
+    }
+}
+
 pub struct PcmCodec<T, S: Sample, C: CodecTag = PcmCodecTag> {
     inner: T,
     stream_spec: StreamSpec<C>,
@@ -71,10 +78,10 @@ impl<T, S: Sample, C: CodecTag> PcmCodec<T, S, C> {
     pub fn from_stream(inner: T) -> Result<Self, SyphonError>
     where
         T: Stream<Tag = C>,
-        PcmCodecTag: Into<C>,
+        PcmCodecTag: TryInto<C>,
     {
         let mut stream_spec = *inner.spec();
-        fill_pcm_stream_spec(&mut stream_spec)?;
+        fill_pcm_spec(&mut stream_spec)?;
         let signal_spec = stream_spec.decoded_spec.build()?;
 
         Ok(Self {
@@ -89,11 +96,11 @@ impl<T, S: Sample, C: CodecTag> PcmCodec<T, S, C> {
     where
         T: Signal,
         T::Sample: 'static,
-        PcmCodecTag: Into<C>,
+        PcmCodecTag: TryInto<C>,
     {
         let signal_spec = *inner.spec();
         let mut stream_spec = StreamSpec::<C>::from(&inner);
-        fill_pcm_stream_spec(&mut stream_spec)?;
+        fill_pcm_spec(&mut stream_spec)?;
 
         Ok(Self {
             inner,

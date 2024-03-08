@@ -13,20 +13,7 @@
         };
       in {
         devShells.default = pkgs.mkShell (with pkgs; {
-          packages = [
-            (rust-bin.stable.latest.default.override {
-              extensions = [ "rust-src" "rustfmt" ];
-            })
-            rust-analyzer
-            pkg-config
-            ffmpeg_4-full
-            clang
-            libclang
-            alsa-lib
-          ];
-          shellHook = ''
-            export LIBCLANG_PATH="${libclang.lib}/lib"
-          '';
+          packages = [ rust-bin.stable.latest.default rust-analyzer ];
         });
       });
 }

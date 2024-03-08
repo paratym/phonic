@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-	"crates/syphon",
 	"crates/syphon_core",
 	"crates/syphon_signal",
 	"crates/syphon_synth",
@@ -14,3 +13,29 @@ members = [
 	"examples/synth",
 	"examples/converter",
 ]
+
+[package]
+name = "syphon"
+version = "0.0.1"
+edition = "2021"
+
+[features]
+default = ["signal"]
+signal = ["dep:syphon_signal"]
+synth = ["dep:syphon_synth"]
+io = ["dep:syphon_io"]
+
+# io
+io-full = ["io", "wave", "pcm"]
+wave = ["io", "syphon_io/wave"]
+pcm = ["io", "syphon_io/pcm"]
+
+# integrations
+cpal = ["dep:syphon_cpal"]
+
+[dependencies]
+syphon_core = { version = "0.1.0", path = "crates/syphon_core" }
+syphon_synth = { version = "0.1.0", path = "crates/syphon_synth", optional = true }
+syphon_io = { version = "0.1.0", path = "crates/syphon_io", optional = true }
+syphon_cpal = { version = "0.1.0", path = "crates/syphon_cpal", optional = true }
+syphon_signal = { version = "0.1.0", path = "crates/syphon_signal", optional = true }

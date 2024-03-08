@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15.2"
-syphon = { path = "../../crates/syphon", features = ["io-full", "cpal"] }
+syphon = { path = "../..", features = ["io-full", "cpal"] }

@@ -1,7 +1,15 @@
-use crate::{CodecRegistry, CodecTag};
-use std::any::TypeId;
+use std::{
+    any::TypeId,
+    ops::{Deref, DerefMut},
+};
 use syphon_core::SyphonError;
-use syphon_signal::{Sample, Signal, SignalSpecBuilder, TaggedSignalReader, TaggedSignalWriter};
+use syphon_signal::{Sample, Signal, SignalSpecBuilder};
+
+use crate::{DynCodecConstructor, TaggedSignal};
+
+pub trait CodecTag: Sized + Eq + Copy {
+    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct StreamSpec<C: CodecTag> {
@@ -107,17 +115,11 @@ impl<C: CodecTag> StreamSpec<C> {
         self.decoded_spec.merge(other.decoded_spec)
     }
 
-    pub fn fill(&mut self) -> Result<(), SyphonError>
-    where
-        C: CodecRegistry,
-    {
+    pub fn fill(&mut self) -> Result<(), SyphonError> {
         C::fill_spec(self)
     }
 
-    pub fn filled(mut self) -> Result<Self, SyphonError>
-    where
-        C: CodecRegistry,
-    {
+    pub fn filled(mut self) -> Result<Self, SyphonError> {
         self.fill()?;
         Ok(self)
     }
@@ -153,14 +155,6 @@ pub trait StreamObserver: Stream {
 pub trait StreamReader: Stream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError>;
 
-    fn into_decoder(self) -> Result<TaggedSignalReader, SyphonError>
-    where
-        Self: Sized + 'static,
-        Self::Tag: CodecRegistry,
-    {
-        Self::Tag::decoder_reader(self)
-    }
-
     fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<(), SyphonError> {
         if self
             .spec()
@@ -172,7 +166,6 @@ pub trait StreamReader: Stream {
 
         while !buf.is_empty() {
             match self.read(&mut buf) {
-                Ok(0) if buf.len() == 0 => break,
                 Ok(0) => return Err(SyphonError::EndOfStream),
                 Ok(n) => buf = &mut buf[n..],
                 Err(SyphonError::Interrupted) => continue,
@@ -188,14 +181,6 @@ pub trait StreamWriter: Stream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError>;
     fn flush(&mut self) -> Result<(), SyphonError>;
 
-    fn into_encoder(self) -> Result<TaggedSignalWriter, SyphonError>
-    where
-        Self: Sized + 'static,
-        Self::Tag: CodecRegistry,
-    {
-        Self::Tag::encoder_writer(self)
-    }
-
     fn write_exact(&mut self, mut buf: &[u8]) -> Result<(), SyphonError> {
         if self
             .spec()
@@ -207,7 +192,6 @@ pub trait StreamWriter: Stream {
 
         while !buf.is_empty() {
             match self.write(&buf) {
-                Ok(0) if buf.len() == 0 => break,
                 Ok(0) => return Err(SyphonError::EndOfStream),
                 Ok(n) => buf = &buf[n..],
                 Err(SyphonError::Interrupted) => continue,
@@ -258,8 +242,80 @@ pub trait StreamSeeker: Stream {
 
     fn set_position(&mut self, position: u64) -> Result<(), SyphonError>
     where
-        Self: StreamObserver,
+        Self: Sized + StreamObserver,
     {
         self.seek(self.position()? as i64 - position as i64)
+    }
+}
+
+pub trait DynStream: Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker {
+    fn into_codec(self) -> Result<Box<TaggedSignal>, SyphonError>
+    where
+        Self: Sized + 'static,
+        Self::Tag: DynCodecConstructor,
+    {
+        self.spec()
+            .codec
+            .ok_or(SyphonError::MissingData)?
+            .from_stream(self)
+    }
+}
+
+impl<T> DynStream for T where T: Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker
+{}
+
+impl<T> Stream for T
+where
+    T: Deref,
+    T::Target: Stream,
+{
+    type Tag = <T::Target as Stream>::Tag;
+
+    fn spec(&self) -> &StreamSpec<Self::Tag> {
+        self.deref().spec()
+    }
+}
+
+impl<T> StreamObserver for T
+where
+    T: Deref,
+    T::Target: StreamObserver,
+{
+    fn position(&self) -> Result<u64, SyphonError> {
+        self.deref().position()
+    }
+}
+
+impl<T> StreamReader for T
+where
+    T: DerefMut,
+    T::Target: StreamReader,
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, SyphonError> {
+        self.deref_mut().read(buf)
+    }
+}
+
+impl<T> StreamWriter for T
+where
+    T: DerefMut,
+    T::Target: StreamWriter,
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize, SyphonError> {
+        self.deref_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), SyphonError> {
+        self.deref_mut().flush()
+    }
+}
+
+impl<T> StreamSeeker for T
+where
+    T: DerefMut,
+    T::Target: StreamSeeker,
+{
+    fn seek(&mut self, offset: i64) -> Result<(), SyphonError> {
+        self.deref_mut().seek(offset)
     }
 }
