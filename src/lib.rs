@@ -11,3 +11,6 @@ pub use syphon_io as io;
 
 #[cfg(feature = "cpal")]
 pub use syphon_cpal as cpal;
+
+#[cfg(feature = "rtrb")]
+pub use syphon_rtrb as rtrb;

@@ -5,7 +5,7 @@ use std::{
 };
 use syphon_core::SyphonError;
 
-pub trait FormatTag: Sized + Eq + Copy {
+pub trait FormatTag: Sized + Eq + Copy + Send + Sync {
     type Codec: CodecTag;
 
     fn fill_data(data: &mut FormatData<Self>) -> Result<(), SyphonError>;
@@ -108,10 +108,6 @@ pub trait FormatSeeker: Format {
         })
     }
 }
-
-pub trait DynFormat: Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker {}
-impl<T> DynFormat for T where T: Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker
-{}
 
 impl<F: FormatTag> FormatData<F> {
     pub fn new() -> Self {

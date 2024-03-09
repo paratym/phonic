@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15.2"
-syphon = { path = "../..", features = ["io-full", "cpal"] }
+rtrb = "0.3.0"
+syphon = { path = "../..", features = ["io-full", "cpal", "rtrb", "synth"] }

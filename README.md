@@ -24,3 +24,5 @@ This project is very early in development. It's untested, and the api changes wi
 [x] Seeking support \
 [ ] Logging \
 [ ] Real time signal wrapper \
+[ ] Benchmarks \
+[ ] Sample buffer pool \

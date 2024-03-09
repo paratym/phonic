@@ -199,6 +199,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-utils"
+version = "0.8.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
+
+[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -509,6 +515,7 @@ name = "player"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "rtrb",
  "syphon",
 ]
 
@@ -585,6 +592,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
+name = "rtrb"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "636b228b5adb32add7f0e41e5084d38aa66fb0f942e8a91751c1e90023288fbe"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -653,6 +669,7 @@ dependencies = [
  "syphon_core",
  "syphon_cpal",
  "syphon_io",
+ "syphon_rtrb",
  "syphon_signal",
  "syphon_synth",
 ]
@@ -706,6 +723,16 @@ dependencies = [
 name = "syphon_io_core"
 version = "0.1.0"
 dependencies = [
+ "rtrb",
+ "syphon_core",
+ "syphon_signal",
+]
+
+[[package]]
+name = "syphon_rtrb"
+version = "0.1.0"
+dependencies = [
+ "rtrb",
  "syphon_core",
  "syphon_signal",
 ]

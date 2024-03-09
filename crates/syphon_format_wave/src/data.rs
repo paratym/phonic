@@ -1,6 +1,11 @@
-use syphon_codec_pcm::PcmCodecTag;
+use syphon_codec_pcm::{fill_pcm_spec, PcmCodecTag};
 use syphon_core::SyphonError;
-use syphon_io_core::{utils::FormatIdentifiers, CodecTag, FormatData, FormatTag, StreamSpec};
+use syphon_io_core::{
+    utils::FormatIdentifiers, CodecTag, DynFormat, DynFormatConstructor, FormatData, FormatTag,
+    StdIoSource, StreamSpec,
+};
+
+use crate::WaveFormat;
 
 pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
@@ -46,8 +51,8 @@ impl FormatTag for WaveFormatTag {
 }
 
 impl CodecTag for WaveSupportedCodec {
-    fn fill_spec(_: &mut StreamSpec<Self>) -> Result<(), SyphonError> {
-        Err(SyphonError::Unsupported)
+    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError> {
+        fill_pcm_spec(spec)
     }
 }
 

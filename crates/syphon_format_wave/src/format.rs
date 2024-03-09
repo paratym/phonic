@@ -3,7 +3,7 @@ use std::io::{Read, Seek, Write};
 use syphon_core::SyphonError;
 use syphon_io_core::{
     Format, FormatChunk, FormatData, FormatObserver, FormatReader, FormatSeeker, FormatTag,
-    FormatWriter, StreamSpec,
+    FormatWriter,
 };
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
@@ -15,23 +15,21 @@ pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
 impl<T, F: FormatTag> WaveFormat<T, F> {
     pub fn new(inner: T) -> Result<Self, SyphonError>
     where
-        WaveFormatTag: Into<F>,
+        WaveFormatTag: TryInto<F>,
     {
-        Ok(Self {
-            inner,
-            i: 0,
-            data: FormatData::new().with_format(WaveFormatTag.into()),
-        })
+        let mut data = FormatData::new();
+        data.format = WaveFormatTag.try_into().ok();
+        Ok(Self { inner, i: 0, data })
     }
 
     fn trim_buf_len(&self, mut len: usize) -> usize {
         let stream_spec = self.data.streams.get(0);
-        if let Some(n_bytes) = stream_spec.and_then(StreamSpec::n_bytes) {
-            len = len.min(n_bytes as usize);
-        }
+        // if let Some(n_bytes) = stream_spec.and_then(StreamSpec::n_bytes) {
+        //     len = len.min(n_bytes as usize);
+        // }
 
         if let Some(block_align) = stream_spec.and_then(|spec| spec.block_align) {
-            len = len % block_align as usize;
+            len = len - len % block_align as usize;
         }
 
         len
@@ -54,8 +52,8 @@ impl<T, F: FormatTag> FormatObserver for WaveFormat<T, F> {
 
 impl<T: Read, F: FormatTag> FormatReader for WaveFormat<T, F>
 where
-    WaveFormatTag: Into<F>,
-    WaveSupportedCodec: Into<F::Codec>,
+    WaveFormatTag: TryInto<F>,
+    WaveSupportedCodec: TryInto<F::Codec>,
 {
     fn read_data(&mut self) -> Result<(), SyphonError> {
         if self.i > 0 {

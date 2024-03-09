@@ -1,6 +1,5 @@
 use crate::{Channels, Sample};
 use std::{
-    mem::size_of,
     ops::{Deref, DerefMut},
     time::Duration,
 };
@@ -311,8 +310,8 @@ pub trait SignalWriter: Signal {
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let mut buf = [Self::Sample::ORIGIN; 8096];
-        self.copy_all_buffered(reader, &mut buf)
+        let n = u64::MAX - (u64::MAX % self.spec().channels.count() as u64);
+        self.copy_n(reader, n)
     }
 }
 

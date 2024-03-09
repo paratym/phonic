@@ -30,7 +30,7 @@ fn main() -> Result<(), SyphonError> {
     let result = <WaveFormat<_>>::new(&mut file)
         .and_then(|mut wave| wave.write_data(&data).map(|_| wave))
         .and_then(|mut wave| wave.into_default_stream())
-        .and_then(|mut stream| stream.write_all(&mut encoder));
+        .and_then(|mut stream| stream.copy_all(&mut encoder));
 
     match result {
         Err(e) => {
@@ -41,7 +41,7 @@ fn main() -> Result<(), SyphonError> {
             Err(e)
         }
         Ok(n) => {
-            println!("wrote {n} samples to {}", path.display());
+            println!("wrote {n} bytes to {}", path.display());
             Ok(())
         }
     }

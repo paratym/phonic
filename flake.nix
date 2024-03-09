@@ -13,7 +13,12 @@
         };
       in {
         devShells.default = pkgs.mkShell (with pkgs; {
-          packages = [ rust-bin.stable.latest.default rust-analyzer ];
+          packages = [
+            rust-bin.stable.latest.default
+            rust-analyzer
+            pkg-config
+            alsa-lib
+          ];
         });
       });
 }

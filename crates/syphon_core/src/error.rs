@@ -2,6 +2,7 @@ use std::{error::Error, fmt::Display, io};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SyphonError {
+    Unreachable,
     InvalidData,
     MissingData,
     Unsupported,
@@ -19,6 +20,7 @@ impl Error for SyphonError {}
 impl Display for SyphonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Unreachable => write!(f, "unreachable"),
             Self::InvalidData => write!(f, "invalid data"),
             Self::MissingData => write!(f, "missing data"),
             Self::Unsupported => write!(f, "unsupported"),
@@ -50,6 +52,7 @@ impl From<io::Error> for SyphonError {
 impl From<SyphonError> for io::Error {
     fn from(e: SyphonError) -> Self {
         let kind = match e {
+            SyphonError::Unreachable => io::ErrorKind::Other,
             SyphonError::InvalidData => io::ErrorKind::InvalidData,
             SyphonError::MissingData => io::ErrorKind::InvalidData,
             SyphonError::Unsupported => io::ErrorKind::Unsupported,

@@ -5,7 +5,9 @@ use cpal::{
 };
 use std::time::Duration;
 use syphon_core::SyphonError;
-use syphon_signal::{KnownSample, KnownSampleType, Signal, SignalReader, SignalSpec, SignalWriter};
+use syphon_signal::{
+    KnownSample, KnownSampleType, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+};
 
 pub trait SignalSpecExt {
     fn from_cpal_config(config: StreamConfig) -> Self;
@@ -124,10 +126,9 @@ pub trait DeviceExt: DeviceTrait {
 
         self.build_input_stream(
             &signal.spec().into_cpal_config(),
-            move |buf: &[S::Sample], _: &InputCallbackInfo| {
-                signal
-                    .write_exact(buf)
-                    .expect("error writing input device samples to signal")
+            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact(buf) {
+                Ok(_) | Err(SyphonError::NotReady) | Err(SyphonError::Interrupted) => {}
+                Err(e) => panic!("error writing to signal: {e}"),
             },
             error_callback,
             timeout,
@@ -156,9 +157,15 @@ pub trait DeviceExt: DeviceTrait {
         self.build_output_stream(
             &signal.spec().into_cpal_config(),
             move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
-                signal
-                    .read_exact(buf)
-                    .expect("error reading signal samples into output device")
+                let n = match signal.read(buf) {
+                    Ok(n) => n,
+                    Err(SyphonError::NotReady)
+                    | Err(SyphonError::Interrupted)
+                    | Err(SyphonError::EndOfStream) => 0,
+                    Err(e) => panic!("error reading signal: {e}"),
+                };
+
+                buf[n..].fill(S::Sample::ORIGIN);
             },
             error_callback,
             timeout,

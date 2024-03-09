@@ -1,12 +1,9 @@
+use crate::DynSignal;
 use syphon_core::SyphonError;
 use syphon_signal::{
-    adapters::SampleTypeAdapter, FromKnownSample, KnownSampleType, Signal, SignalObserver,
-    SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    adapters::SampleTypeAdapter, FromKnownSample, KnownSampleType, Signal, SignalReader,
+    SignalSpec, SignalWriter,
 };
-
-pub trait DynSignal: Signal + SignalObserver + SignalReader + SignalWriter + SignalSeeker {}
-impl<T> DynSignal for T where T: Signal + SignalObserver + SignalReader + SignalWriter + SignalSeeker
-{}
 
 pub enum TaggedSignal {
     I8(Box<dyn DynSignal<Sample = i8>>),
@@ -23,8 +20,9 @@ pub enum TaggedSignal {
     F64(Box<dyn DynSignal<Sample = f64>>),
 }
 
+#[macro_export]
 macro_rules! match_tagged_signal {
-    ($signal:ident, $inner:pat, $rhs:expr) => {
+    ($signal:ident, $inner:pat => $rhs:expr) => {
         match $signal {
             TaggedSignal::I8($inner) => $rhs,
             TaggedSignal::I16($inner) => $rhs,
@@ -76,7 +74,7 @@ impl TaggedSignal {
     impl_unwrap!(unwrap_f64_signal, f64, F64);
 
     pub fn spec(&self) -> &SignalSpec {
-        match_tagged_signal!(self, ref signal, signal.spec())
+        match_tagged_signal!(self, ref signal => signal.spec())
     }
 
     pub fn sample_type(&self) -> KnownSampleType {
@@ -98,7 +96,7 @@ impl TaggedSignal {
     pub fn adapt_sample_type<S: FromKnownSample + 'static>(
         self,
     ) -> Box<dyn SignalReader<Sample = S>> {
-        match_tagged_signal!(self, signal, Box::new(SampleTypeAdapter::new(signal)))
+        match_tagged_signal!(self, signal => Box::new(SampleTypeAdapter::new(signal)))
     }
 
     pub fn copy_n(&mut self, reader: Self, n: u64, adapt: bool) -> Result<(), SyphonError> {

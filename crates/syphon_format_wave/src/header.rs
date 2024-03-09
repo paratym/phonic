@@ -135,12 +135,12 @@ impl WaveHeader {
 impl<F> From<WaveHeader> for FormatData<F>
 where
     F: FormatTag,
-    WaveFormatTag: Into<F>,
-    WaveSupportedCodec: Into<F::Codec>,
+    WaveFormatTag: TryInto<F>,
+    WaveSupportedCodec: TryInto<F::Codec>,
 {
     fn from(header: WaveHeader) -> Self {
         let codec = match header.fmt.format_tag {
-            1 | 3 => Some(WaveSupportedCodec::Pcm.into()),
+            1 | 3 => WaveSupportedCodec::Pcm.try_into().ok(),
             _ => None,
         };
 
@@ -160,7 +160,7 @@ where
             .unwrap_or_else(|| Channels::Count(header.fmt.n_channels));
 
         Self {
-            format: Some(WaveFormatTag.into()),
+            format: WaveFormatTag.try_into().ok(),
             streams: vec![StreamSpec {
                 codec: codec.map(Into::into),
                 avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),

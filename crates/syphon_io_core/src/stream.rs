@@ -5,9 +5,7 @@ use std::{
 use syphon_core::SyphonError;
 use syphon_signal::{Sample, Signal, SignalSpecBuilder};
 
-use crate::{DynCodecConstructor, TaggedSignal};
-
-pub trait CodecTag: Sized + Eq + Copy {
+pub trait CodecTag: Sized + Eq + Copy + Send + Sync {
     fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), SyphonError>;
 }
 
@@ -104,7 +102,7 @@ impl<C: CodecTag> StreamSpec<C> {
         if let Some(block_align) = other.block_align {
             if self
                 .block_align
-                .is_some_and(|align| align % block_align != 0)
+                .is_some_and(|align| block_align % align != 0)
             {
                 return Err(SyphonError::SignalMismatch);
             }
@@ -202,38 +200,36 @@ pub trait StreamWriter: Stream {
         Ok(())
     }
 
-    fn write_all_buffered<R>(&mut self, reader: &mut R, buf: &mut [u8]) -> Result<u64, SyphonError>
+    fn copy_all_buffered<R>(&mut self, reader: &mut R, buf: &mut [u8]) -> Result<u64, SyphonError>
     where
         Self: Sized,
         R: StreamReader,
         Self::Tag: TryInto<R::Tag>,
     {
-        if let Err(e) = reader.spec().clone().merge(self.spec().with_tag_type()) {
-            return Err(e);
-        }
+        reader.spec().clone().merge(self.spec().with_tag_type())?;
 
         let mut n_read = 0;
         loop {
             let n = match reader.read(buf) {
                 Ok(0) | Err(SyphonError::EndOfStream) => return Ok(n_read),
                 Ok(n) => n,
-                Err(SyphonError::Interrupted) | Err(SyphonError::NotReady) => continue,
+                Err(SyphonError::Interrupted) => continue,
                 Err(e) => return Err(e),
             };
 
-            self.write_exact(&mut buf[..n])?;
+            self.write_exact(&buf[..n])?;
             n_read += n as u64;
         }
     }
 
-    fn write_all<R>(&mut self, reader: &mut R) -> Result<u64, SyphonError>
+    fn copy_all<R>(&mut self, reader: &mut R) -> Result<u64, SyphonError>
     where
         Self: Sized,
         R: StreamReader,
         Self::Tag: TryInto<R::Tag>,
     {
         let mut buffer = [0u8; 4096];
-        self.write_all_buffered(reader, &mut buffer)
+        self.copy_all_buffered(reader, &mut buffer)
     }
 }
 
@@ -247,22 +243,6 @@ pub trait StreamSeeker: Stream {
         self.seek(self.position()? as i64 - position as i64)
     }
 }
-
-pub trait DynStream: Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker {
-    fn into_codec(self) -> Result<Box<TaggedSignal>, SyphonError>
-    where
-        Self: Sized + 'static,
-        Self::Tag: DynCodecConstructor,
-    {
-        self.spec()
-            .codec
-            .ok_or(SyphonError::MissingData)?
-            .from_stream(self)
-    }
-}
-
-impl<T> DynStream for T where T: Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker
-{}
 
 impl<T> Stream for T
 where

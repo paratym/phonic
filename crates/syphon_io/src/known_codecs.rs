@@ -1,6 +1,6 @@
 use std::hash::Hash;
 use syphon_core::SyphonError;
-use syphon_io_core::{CodecTag, DynCodecConstructor, DynStream, Stream, StreamSpec, TaggedSignal};
+use syphon_io_core::{utils::TaggedSignal, CodecTag, DynCodecConstructor, DynStream, StreamSpec};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
@@ -21,20 +21,26 @@ impl CodecTag for KnownCodec {
 }
 
 impl DynCodecConstructor for KnownCodec {
-    type Tag = Self;
-
-    fn from_stream<S: Stream + 'static>(
-        &self,
-        stream: S,
-    ) -> Result<Box<syphon_io_core::TaggedSignal>, SyphonError> {
-        todo!()
-    }
-
     fn from_signal(
         &self,
         signal: TaggedSignal,
-    ) -> Result<Box<dyn DynStream<Tag = Self::Tag>>, SyphonError> {
-        todo!()
+    ) -> Result<Box<dyn DynStream<Tag = Self>>, SyphonError> {
+        match self {
+            #[cfg(feature = "pcm")]
+            Self::Pcm => crate::codecs::pcm::pcm_codec_from_signal(signal),
+        }
+    }
+
+    fn from_stream<S: DynStream<Tag = Self> + 'static>(
+        stream: S,
+    ) -> Result<TaggedSignal, SyphonError> {
+        match stream.spec().codec {
+            #[cfg(feature = "pcm")]
+            Some(Self::Pcm) => crate::codecs::pcm::pcm_codec_from_stream(stream),
+
+            None => Err(SyphonError::MissingData),
+            _ => Err(SyphonError::Unsupported),
+        }
     }
 }
 

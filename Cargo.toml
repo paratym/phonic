@@ -1,29 +1,30 @@
-[workspace]
-resolver = "2"
-members = [
-	"crates/syphon_core",
-	"crates/syphon_signal",
-	"crates/syphon_synth",
-	"crates/syphon_io",
-	"crates/syphon_io_core",
-	"crates/syphon_format_wave",
-	"crates/syphon_codec_pcm",
-	"crates/syphon_cpal",
-	"examples/player",
-	"examples/synth",
-	"examples/converter",
-]
-
 [package]
 name = "syphon"
 version = "0.0.1"
 edition = "2021"
 
+[workspace]
+resolver = "2"
+members = [
+	"crates/syphon_core",
+	"crates/syphon_signal",
+	"crates/syphon_io",
+	"crates/syphon_synth",
+	"crates/syphon_io_core",
+	"crates/syphon_format_wave",
+	"crates/syphon_codec_pcm",
+	"crates/syphon_cpal",
+	"crates/syphon_rtrb",
+	"examples/player",
+	"examples/synth",
+	"examples/converter",
+]
+
 [features]
 default = ["signal"]
 signal = ["dep:syphon_signal"]
-synth = ["dep:syphon_synth"]
 io = ["dep:syphon_io"]
+synth = ["dep:syphon_synth"]
 
 # io
 io-full = ["io", "wave", "pcm"]
@@ -32,10 +33,15 @@ pcm = ["io", "syphon_io/pcm"]
 
 # integrations
 cpal = ["dep:syphon_cpal"]
+rtrb = ["dep:syphon_rtrb"]
 
 [dependencies]
 syphon_core = { version = "0.1.0", path = "crates/syphon_core" }
-syphon_synth = { version = "0.1.0", path = "crates/syphon_synth", optional = true }
-syphon_io = { version = "0.1.0", path = "crates/syphon_io", optional = true }
-syphon_cpal = { version = "0.1.0", path = "crates/syphon_cpal", optional = true }
 syphon_signal = { version = "0.1.0", path = "crates/syphon_signal", optional = true }
+syphon_io = { version = "0.1.0", path = "crates/syphon_io", optional = true }
+syphon_synth = { version = "0.1.0", path = "crates/syphon_synth", optional = true }
+syphon_cpal = { version = "0.1.0", path = "crates/syphon_cpal", optional = true }
+syphon_rtrb = { version = "0.1.0", path = "crates/syphon_rtrb", optional = true }
+
+[workspace.dependencies]
+log = "0.4"

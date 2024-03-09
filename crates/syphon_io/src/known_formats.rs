@@ -5,7 +5,7 @@ use syphon_core::SyphonError;
 use syphon_format_wave::WAVE_IDENTIFIERS;
 use syphon_io_core::{
     utils::{FormatIdentifier, FormatIdentifiers},
-    DynFormat, DynFormatConstructor, FormatData, FormatTag, StdIoStream,
+    DynFormat, DynFormatConstructor, FormatData, FormatTag, StdIoSource,
 };
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -40,12 +40,10 @@ impl FormatTag for KnownFormat {
 }
 
 impl DynFormatConstructor for KnownFormat {
-    type Tag = Self;
-
-    fn from_std_io<S: StdIoStream + 'static>(
+    fn from_std_io<S: StdIoSource + 'static>(
         &self,
         inner: S,
-    ) -> Result<Box<dyn DynFormat<Tag = Self::Tag>>, SyphonError> {
+    ) -> Result<Box<dyn DynFormat<Tag = Self>>, SyphonError> {
         Ok(match self {
             #[cfg(feature = "wave")]
             KnownFormat::Wave => Box::new(crate::formats::wave::WaveFormat::new(inner)?),
