@@ -2,16 +2,16 @@ use std::{
     fs::{create_dir_all, File},
     path::Path,
 };
-use syphon::{
+use phonic::{
     io::{
         utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, FormatData, FormatReader,
         KnownFormat, StreamReader, StreamSpec, StreamWriter,
     },
     signal::SignalWriter,
-    SyphonError,
+    PhonicError,
 };
 
-fn main() -> Result<(), SyphonError> {
+fn main() -> Result<(), PhonicError> {
     let src_path = Path::new("./examples/generated/sine.wav");
     let src_file = File::open(src_path)?;
 
@@ -25,7 +25,7 @@ fn main() -> Result<(), SyphonError> {
         .adapt_sample_type();
 
     let dst_path = Path::new("./examples/generated/sine_converted.wav");
-    create_dir_all(dst_path.parent().ok_or(SyphonError::IoError)?)?;
+    create_dir_all(dst_path.parent().ok_or(PhonicError::IoError)?)?;
     let dst_file = File::create(dst_path)?;
 
     let dst_fmt = KnownFormat::try_from(&FormatIdentifier::try_from(dst_path)?)?;

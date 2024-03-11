@@ -1,7 +1,0 @@
-[package]
-name = "syphon_signal"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-syphon_core = { version = "0.1.0", path = "../syphon_core" }

@@ -1,4 +1,4 @@
-# Syphon
+# Phonic
 
 A set of types and utilities for audio processing written in pure rust. The main module `signal` defines types for building and describing pcm signals as readers/writers. It is assumed that all signals have a constant sample rate and interleaved channels. the other two: `io` and `dsp` both depend on `signal`. `io` provides audio formatters and codecs also as readers/writers, and methods for dynamically resolving/constructing them. `dsp` (which currently consists of a sine generator) will eventually define types for creating signal chains to generate and manipulate digital signals.
 

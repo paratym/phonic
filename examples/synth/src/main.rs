@@ -3,17 +3,17 @@ use std::{
     path::Path,
     time::Duration,
 };
-use syphon::{
+use phonic::{
     io::{
         codecs::pcm::PcmCodec, formats::wave::WaveFormat, Format, FormatData, FormatWriter, Stream,
         StreamWriter,
     },
     signal::SignalSpec,
     synth::generators::SineGenerator,
-    SyphonError,
+    PhonicError,
 };
 
-fn main() -> Result<(), SyphonError> {
+fn main() -> Result<(), PhonicError> {
     let spec = SignalSpec::builder()
         .with_channels(1)
         .with_frame_rate(44100)

@@ -1,20 +1,20 @@
 [package]
-name = "syphon"
+name = "phonic"
 version = "0.0.1"
 edition = "2021"
 
 [workspace]
 resolver = "2"
 members = [
-	"crates/syphon_core",
-	"crates/syphon_signal",
-	"crates/syphon_io",
-	"crates/syphon_synth",
-	"crates/syphon_io_core",
-	"crates/syphon_format_wave",
-	"crates/syphon_codec_pcm",
-	"crates/syphon_cpal",
-	"crates/syphon_rtrb",
+	"crates/phonic_core",
+	"crates/phonic_signal",
+	"crates/phonic_io",
+	"crates/phonic_synth",
+	"crates/phonic_io_core",
+	"crates/phonic_format_wave",
+	"crates/phonic_codec_pcm",
+	"crates/phonic_cpal",
+	"crates/phonic_rtrb",
 	"examples/player",
 	"examples/synth",
 	"examples/converter",
@@ -22,26 +22,26 @@ members = [
 
 [features]
 default = ["signal"]
-signal = ["dep:syphon_signal"]
-io = ["dep:syphon_io"]
-synth = ["dep:syphon_synth"]
+signal = ["dep:phonic_signal"]
+io = ["dep:phonic_io"]
+synth = ["dep:phonic_synth"]
 
 # io
 io-full = ["io", "wave", "pcm"]
-wave = ["io", "syphon_io/wave"]
-pcm = ["io", "syphon_io/pcm"]
+wave = ["io", "phonic_io/wave"]
+pcm = ["io", "phonic_io/pcm"]
 
 # integrations
-cpal = ["dep:syphon_cpal"]
-rtrb = ["dep:syphon_rtrb"]
+cpal = ["dep:phonic_cpal"]
+rtrb = ["dep:phonic_rtrb"]
 
 [dependencies]
-syphon_core = { version = "0.1.0", path = "crates/syphon_core" }
-syphon_signal = { version = "0.1.0", path = "crates/syphon_signal", optional = true }
-syphon_io = { version = "0.1.0", path = "crates/syphon_io", optional = true }
-syphon_synth = { version = "0.1.0", path = "crates/syphon_synth", optional = true }
-syphon_cpal = { version = "0.1.0", path = "crates/syphon_cpal", optional = true }
-syphon_rtrb = { version = "0.1.0", path = "crates/syphon_rtrb", optional = true }
+phonic_core = { version = "0.1.0", path = "crates/phonic_core" }
+phonic_signal = { version = "0.1.0", path = "crates/phonic_signal", optional = true }
+phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
+phonic_synth = { version = "0.1.0", path = "crates/phonic_synth", optional = true }
+phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }
+phonic_rtrb = { version = "0.1.0", path = "crates/phonic_rtrb", optional = true }
 
 [workspace.dependencies]
 log = "0.4"

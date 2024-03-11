@@ -4,7 +4,7 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 use std::{env, fs::File, path::Path, thread::sleep, time::Duration};
-use syphon::{
+use phonic::{
     cpal::DeviceExt,
     io::{
         match_tagged_signal,
@@ -14,11 +14,11 @@ use syphon::{
     rtrb::RingBufferHalfExt,
     signal::{KnownSample, SignalReader, SignalSpec, SignalWriter},
     synth::generators::SineGenerator,
-    SyphonError,
+    PhonicError,
 };
 
-fn main() -> Result<(), SyphonError> {
-    // let path_arg = env::args().nth(0).ok_or(SyphonError::MissingData)?;
+fn main() -> Result<(), PhonicError> {
+    // let path_arg = env::args().nth(0).ok_or(PhonicError::MissingData)?;
     // let path = Path::new(path_arg.as_str());
     // let file = File::open(path)?;
     //
@@ -41,7 +41,7 @@ fn main() -> Result<(), SyphonError> {
 
 const BUF_DURATION: Duration = Duration::from_millis(200);
 
-fn play<S>(mut signal: S) -> Result<(), SyphonError>
+fn play<S>(mut signal: S) -> Result<(), PhonicError>
 where
     S: SignalReader + Send + Sync,
     S::Sample: Default + KnownSample + SizedSample + Send + 'static,
@@ -52,24 +52,24 @@ where
 
     let output = cpal::default_host()
         .default_output_device()
-        .ok_or(SyphonError::NotFound)?
+        .ok_or(PhonicError::NotFound)?
         .build_output_stream_from_signal(
             consumer.into_signal(*spec),
             |e| panic!("output stream error: {e}"),
             None,
         )
-        .map_err(|_| SyphonError::IoError)?;
+        .map_err(|_| PhonicError::IoError)?;
 
     let mut output_signal = producer.into_signal(*spec);
     output_signal.copy_n(&mut signal, buf_cap as u64)?;
 
-    output.play().map_err(|_| SyphonError::IoError)?;
+    output.play().map_err(|_| PhonicError::IoError)?;
 
     loop {
         match output_signal.copy_all(&mut signal) {
-            Ok(_) | Err(SyphonError::EndOfStream) => break,
-            Err(SyphonError::Interrupted) => continue,
-            Err(SyphonError::NotReady) => sleep(BUF_DURATION / 20),
+            Ok(_) | Err(PhonicError::EndOfStream) => break,
+            Err(PhonicError::Interrupted) => continue,
+            Err(PhonicError::NotReady) => sleep(BUF_DURATION / 20),
             Err(e) => return Err(e),
         }
     }

@@ -1,0 +1,9 @@
+[package]
+name = "phonic_cpal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15.2"
+phonic_core = { version = "0.1.0", path = "../phonic_core" }
+phonic_signal = { version = "0.1.0", path = "../phonic_signal" }

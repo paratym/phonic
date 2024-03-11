@@ -1,0 +1,10 @@
+[package]
+name = "phonic_codec_pcm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byte-slice-cast = "1.2.2"
+phonic_core = { version = "0.1.0", path = "../phonic_core" }
+phonic_io_core = { version = "0.1.0", path = "../phonic_io_core" }
+phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
