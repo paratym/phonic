@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 cpal = "0.15.2"
 rtrb = "0.3.0"
-phonic = { path = "../..", features = ["io-full", "cpal", "rtrb", "synth"] }
+phonic = { path = "../..", features = ["io-full", "cpal", "rtrb"] }

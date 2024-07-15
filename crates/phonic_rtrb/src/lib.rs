@@ -1,7 +1,7 @@
-use rtrb::{chunks::ChunkError, Consumer, Producer};
-use std::marker::PhantomData;
 use phonic_core::PhonicError;
 use phonic_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use rtrb::{chunks::ChunkError, Consumer, Producer};
+use std::marker::PhantomData;
 
 pub struct RealTimeSignal<T, S> {
     spec: SignalSpec,
@@ -45,7 +45,16 @@ impl<T, S: Sample> Signal for RealTimeSignal<T, S> {
 
 impl<S: Sample> SignalReader for RealTimeSignal<Consumer<S>, S> {
     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
-        let n_samples = buf.len().min(self.inner.slots());
+        let n_slots = self.inner.slots();
+        if n_slots == 0 {
+            if !self.inner.is_abandoned() {
+                return Err(PhonicError::NotReady);
+            }
+
+            return Ok(0);
+        }
+
+        let n_samples = buf.len().min(n_slots);
         let read_chunk = self.inner.read_chunk(n_samples).map_err(|e| match e {
             ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
         })?;

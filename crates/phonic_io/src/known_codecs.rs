@@ -1,6 +1,6 @@
-use std::hash::Hash;
 use phonic_core::PhonicError;
-use phonic_io_core::{utils::TaggedSignal, CodecTag, DynCodecConstructor, DynStream, StreamSpec};
+use phonic_io_core::{CodecTag, DynCodecConstructor, DynStream, StreamSpec, TaggedSignal};
+use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[non_exhaustive]
@@ -45,10 +45,14 @@ impl DynCodecConstructor for KnownCodec {
 }
 
 #[cfg(feature = "wave")]
-impl From<crate::formats::wave::WaveSupportedCodec> for KnownCodec {
-    fn from(codec: crate::formats::wave::WaveSupportedCodec) -> Self {
+impl TryFrom<crate::formats::wave::WaveSupportedCodec> for KnownCodec {
+    type Error = PhonicError;
+
+    fn try_from(codec: crate::formats::wave::WaveSupportedCodec) -> Result<Self, Self::Error> {
         match codec {
-            crate::formats::wave::WaveSupportedCodec::Pcm => Self::Pcm,
+            #[cfg(feature = "pcm")]
+            crate::formats::wave::WaveSupportedCodec::Pcm => Ok(Self::Pcm),
+            _ => Err(PhonicError::Unsupported),
         }
     }
 }
@@ -59,6 +63,7 @@ impl TryFrom<KnownCodec> for crate::formats::wave::WaveSupportedCodec {
 
     fn try_from(codec: KnownCodec) -> Result<Self, Self::Error> {
         match codec {
+            #[cfg(feature = "pcm")]
             KnownCodec::Pcm => Ok(Self::Pcm),
             _ => Err(PhonicError::Unsupported),
         }

@@ -1,9 +1,9 @@
 use crate::{Channels, Sample};
+use phonic_core::PhonicError;
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
-use phonic_core::PhonicError;
 
 /// A set of parameters that describes an interleaved pcm signal
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -43,18 +43,8 @@ impl SignalSpec {
             .map(|n| Duration::from_secs_f64(n as f64 / self.frame_rate as f64))
     }
 
-    pub fn merge(mut self, other: &Self) -> Result<Self, PhonicError> {
-        if self.frame_rate != other.frame_rate || self.channels.count() != other.channels.count() {
-            return Err(PhonicError::SignalMismatch);
-        }
-
-        if let Channels::Layout(layout) = other.channels {
-            self.channels = Channels::Layout(layout);
-        }
-
-        self.n_frames = self.n_frames.zip(other.n_frames).map(|(a, b)| a.min(b));
-
-        Ok(self)
+    pub fn is_compatible(&self, other: &Self) -> bool {
+        self.frame_rate == other.frame_rate && self.channels.is_compatible(&other.channels)
     }
 }
 
@@ -84,13 +74,13 @@ impl SignalSpecBuilder {
         self
     }
 
-    pub fn sample_rate(&self) -> Option<u64> {
+    pub fn raw_sample_rate(&self) -> Option<u64> {
         self.frame_rate
             .zip(self.channels)
             .map(|(frame_rate, channels)| frame_rate as u64 * channels.count() as u64)
     }
 
-    pub fn with_sample_rate(mut self, sample_rate: u32) -> Result<Self, PhonicError> {
+    pub fn with_raw_sample_rate(mut self, sample_rate: u32) -> Result<Self, PhonicError> {
         if let Some(c) = self.channels {
             let n_channels = c.count() as u32;
             if sample_rate % n_channels != 0 {
@@ -119,10 +109,9 @@ impl SignalSpecBuilder {
             .map(|(n_frames, channels)| n_frames * channels.count() as u64)
     }
 
-    pub fn with_n_samples(self, n_samples: impl Into<Option<u64>>) -> Self {
+    pub fn with_n_samples(self, n_samples: Option<u64>) -> Self {
         self.with_n_frames(
             n_samples
-                .into()
                 .zip(self.channels)
                 .map(|(n, c)| n * c.count() as u64),
         )
@@ -154,28 +143,16 @@ impl SignalSpecBuilder {
             }
         }
 
-        if let Some((self_ch, other_ch)) = self.channels.zip(other.channels) {
-            if self_ch.count() != other_ch.count() {
-                return Err(PhonicError::SignalMismatch);
-            }
-
-            match (self_ch, other_ch) {
-                (Channels::Layout(s), Channels::Layout(o)) if s != o => {
-                    return Err(PhonicError::SignalMismatch);
-                }
-                (Channels::Count(_), Channels::Layout(_)) => {
-                    self.channels = Some(other_ch);
-                }
-                _ => {}
-            }
+        if let Some((a, b)) = self.channels.zip(other.channels) {
+            self.channels = Some(a.merge(b)?);
         } else {
-            self.channels = self.channels.or(other.channels);
+            self.channels = self.channels.or(other.channels)
         }
 
-        if let Some(n_frames) = other.n_frames {
-            if self.n_frames.get_or_insert(n_frames) != &n_frames {
-                return Err(PhonicError::SignalMismatch);
-            }
+        if let Some((a, b)) = self.n_frames.zip(other.n_frames) {
+            self.n_frames = Some(a.min(b));
+        } else {
+            self.n_frames = self.n_frames.or(other.n_frames)
         }
 
         Ok(())
@@ -216,7 +193,7 @@ pub trait SignalReader: Signal {
 
         while !buf.is_empty() {
             match self.read(&mut buf) {
-                Ok(0) => return Err(PhonicError::EndOfStream),
+                Ok(0) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => buf = &mut buf[n..],
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),
@@ -238,7 +215,7 @@ pub trait SignalWriter: Signal {
 
         while !buf.is_empty() {
             match self.write(&buf) {
-                Ok(0) => return Err(PhonicError::EndOfStream),
+                Ok(0) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => buf = &buf[n..],
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),
@@ -258,8 +235,8 @@ pub trait SignalWriter: Signal {
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let spec = self.spec().merge(reader.spec())?;
-        if n % spec.channels.count() as u64 != 0 {
+        let spec = self.spec();
+        if !spec.is_compatible(reader.spec()) || n % spec.channels.count() as u64 != 0 {
             return Err(PhonicError::SignalMismatch);
         }
 
@@ -267,7 +244,7 @@ pub trait SignalWriter: Signal {
         while n_read < n {
             let buf_len = buf.len().min((n - n_read) as usize);
             let n = match reader.read(&mut buf[..buf_len]) {
-                Ok(0) => return Err(PhonicError::EndOfStream),
+                Ok(0) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => n,
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),
@@ -300,7 +277,7 @@ pub trait SignalWriter: Signal {
     {
         let n = u64::MAX - (u64::MAX % self.spec().channels.count() as u64);
         match self.copy_n_buffered(reader, n, buf) {
-            Ok(_) | Err(PhonicError::EndOfStream) => Ok(()),
+            Ok(_) | Err(PhonicError::OutOfBounds) => Ok(()),
             Err(e) => Err(e),
         }
     }

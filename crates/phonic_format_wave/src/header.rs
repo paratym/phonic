@@ -1,8 +1,8 @@
 use crate::{WaveFormatTag, WaveSupportedCodec};
-use std::io::{Read, Write};
 use phonic_core::PhonicError;
-use phonic_io_core::{FormatData, FormatTag, StreamSpec};
-use phonic_signal::{ChannelLayout, Channels, KnownSampleType, SignalSpecBuilder};
+use phonic_io_core::{FormatData, FormatTag, KnownSampleType, StreamSpec};
+use phonic_signal::{ChannelLayout, Channels, SignalSpecBuilder};
+use std::io::{Read, Write};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
 const WAVE_CHUNK_ID: &[u8; 4] = b"WAVE";

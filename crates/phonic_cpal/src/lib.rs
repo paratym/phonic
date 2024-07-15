@@ -1,13 +1,11 @@
 use cpal::{
     traits::DeviceTrait, BufferSize, BuildStreamError, InputCallbackInfo, OutputCallbackInfo,
     SampleFormat, SampleRate, SizedSample, StreamConfig, StreamError, SupportedStreamConfigRange,
-    SupportedStreamConfigsError,
 };
-use std::time::Duration;
 use phonic_core::PhonicError;
-use phonic_signal::{
-    KnownSample, KnownSampleType, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
-};
+use phonic_io_core::{KnownSample, KnownSampleType};
+use phonic_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use std::time::Duration;
 
 pub trait SignalSpecExt {
     fn from_cpal_config(config: StreamConfig) -> Self;
@@ -92,18 +90,6 @@ impl SupportedStreamConfigRangeExt for SupportedStreamConfigRange {
     }
 }
 
-fn supported_stream_configs_err_to_build_stream_err(
-    e: SupportedStreamConfigsError,
-) -> BuildStreamError {
-    match e {
-        SupportedStreamConfigsError::InvalidArgument => BuildStreamError::InvalidArgument,
-        SupportedStreamConfigsError::DeviceNotAvailable => BuildStreamError::DeviceNotAvailable,
-        SupportedStreamConfigsError::BackendSpecific { err } => {
-            BuildStreamError::BackendSpecific { err }
-        }
-    }
-}
-
 pub trait DeviceExt: DeviceTrait {
     fn build_input_stream_from_signal<S, E>(
         &self,
@@ -116,14 +102,6 @@ pub trait DeviceExt: DeviceTrait {
         S::Sample: SizedSample + KnownSample,
         E: FnMut(StreamError) + Send + 'static,
     {
-        let mut supported_configs = self
-            .supported_input_configs()
-            .map_err(supported_stream_configs_err_to_build_stream_err)?;
-
-        if !supported_configs.any(|c| c.supports_signal(&signal)) {
-            return Err(BuildStreamError::StreamConfigNotSupported);
-        }
-
         self.build_input_stream(
             &signal.spec().into_cpal_config(),
             move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact(buf) {
@@ -146,14 +124,6 @@ pub trait DeviceExt: DeviceTrait {
         S::Sample: SizedSample + KnownSample,
         E: FnMut(StreamError) + Send + 'static,
     {
-        let mut supported_configs = self
-            .supported_output_configs()
-            .map_err(supported_stream_configs_err_to_build_stream_err)?;
-
-        if !supported_configs.any(|c| c.supports_signal(&signal)) {
-            return Err(BuildStreamError::StreamConfigNotSupported);
-        }
-
         self.build_output_stream(
             &signal.spec().into_cpal_config(),
             move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
@@ -161,7 +131,7 @@ pub trait DeviceExt: DeviceTrait {
                     Ok(n) => n,
                     Err(PhonicError::NotReady)
                     | Err(PhonicError::Interrupted)
-                    | Err(PhonicError::EndOfStream) => 0,
+                    | Err(PhonicError::OutOfBounds) => 0,
                     Err(e) => panic!("error reading signal: {e}"),
                 };
 

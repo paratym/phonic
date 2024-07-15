@@ -1,9 +1,6 @@
-use crate::DynSignal;
+use crate::{DynSignal, FromKnownSample, KnownSampleType};
 use phonic_core::PhonicError;
-use phonic_signal::{
-    adapters::SampleTypeAdapter, FromKnownSample, KnownSampleType, Signal, SignalReader,
-    SignalSpec, SignalWriter,
-};
+use phonic_signal::{adapters::SampleTypeAdapter, Signal, SignalReader, SignalSpec, SignalWriter};
 
 pub enum TaggedSignal {
     I8(Box<dyn DynSignal<Sample = i8>>),

@@ -1,21 +1,20 @@
 use byte_slice_cast::{
     AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
 };
+use phonic_core::PhonicError;
+use phonic_io_core::{
+    match_tagged_signal, CodecTag, DynStream, KnownSampleType, Stream, StreamObserver,
+    StreamReader, StreamSeeker, StreamSpec, StreamWriter, TaggedSignal,
+};
+use phonic_signal::{
+    Sample, Signal, SignalObserver, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+};
 use std::{
     marker::PhantomData,
     mem::{align_of, size_of},
 };
-use phonic_core::PhonicError;
-use phonic_io_core::{
-    match_tagged_signal, utils::TaggedSignal, CodecTag, DynCodecConstructor, DynStream, Stream,
-    StreamObserver, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
-};
-use phonic_signal::{
-    KnownSampleType, Sample, Signal, SignalObserver, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
-};
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct PcmCodecTag;
 
 pub struct PcmCodec<T, S: Sample, C: CodecTag = PcmCodecTag> {
@@ -48,7 +47,7 @@ where
     let sample_byte_size = sample_type.unwrap().byte_size();
     let calculated_bitrate = spec
         .decoded_spec
-        .sample_rate()
+        .raw_sample_rate()
         .map(|r| sample_byte_size as f64 * 8.0 * r as f64);
 
     if calculated_bitrate.is_some_and(|rate| spec.avg_bitrate.get_or_insert(rate) != &rate) {
@@ -131,7 +130,7 @@ impl<T, S: Sample, C: CodecTag> PcmCodec<T, S, C> {
 
     pub fn from_signal(inner: T) -> Result<Self, PhonicError>
     where
-        T: Signal,
+        T: Signal<Sample = S>,
         T::Sample: 'static,
         PcmCodecTag: TryInto<C>,
     {

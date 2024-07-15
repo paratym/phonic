@@ -1,6 +1,6 @@
-use crate::{FromSample, IntoSample, Sample};
-use std::{any::TypeId, mem::size_of};
 use phonic_core::PhonicError;
+use phonic_signal::{FromSample, IntoSample, Sample};
+use std::{any::TypeId, mem::size_of};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KnownSampleType {

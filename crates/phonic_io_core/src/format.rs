@@ -1,11 +1,11 @@
 use crate::{utils::StreamSelector, CodecTag, StreamSpec};
+use phonic_core::PhonicError;
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
-use phonic_core::PhonicError;
 
-pub trait FormatTag: Sized + Eq + Copy + Send + Sync {
+pub trait FormatTag: Debug + Sized + Eq + Copy + Send + Sync {
     type Codec: CodecTag;
 
     fn fill_data(data: &mut FormatData<Self>) -> Result<(), PhonicError>;
@@ -30,7 +30,8 @@ pub struct FormatOffset {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum FormatChunk<'a> {
+pub enum FormatChunk<'a, F: FormatTag> {
+    Data { data: &'a FormatData<F> },
     Stream { stream_i: usize, buf: &'a [u8] },
 }
 
@@ -84,13 +85,31 @@ pub trait FormatObserver: Format {
 }
 
 pub trait FormatReader: Format {
-    fn read_data(&mut self) -> Result<(), PhonicError>;
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, PhonicError>;
+    fn read<'a>(&'a mut self, buf: &'a mut [u8])
+        -> Result<FormatChunk<'a, Self::Tag>, PhonicError>;
+
+    fn with_reader_data(mut self) -> Result<Self, PhonicError>
+    where
+        Self: Sized,
+    {
+        if self.data().streams.len() > 0 {
+            return Ok(self);
+        }
+
+        let mut buf = [0; 512];
+
+        loop {
+            match self.read(&mut buf)? {
+                FormatChunk::Data { data } if data.streams.len() > 0 => return Ok(self),
+                FormatChunk::Stream { .. } => return Err(PhonicError::InvalidData),
+                _ => continue,
+            }
+        }
+    }
 }
 
 pub trait FormatWriter: Format {
-    fn write_data(&mut self, data: &FormatData<Self::Tag>) -> Result<(), PhonicError>;
-    fn write(&mut self, chunk: FormatChunk) -> Result<(), PhonicError>;
+    fn write(&mut self, chunk: FormatChunk<Self::Tag>) -> Result<(), PhonicError>;
     fn flush(&mut self) -> Result<(), PhonicError>;
 }
 
@@ -173,6 +192,12 @@ impl<F: FormatTag> FormatData<F> {
     }
 }
 
+impl<'a, F: FormatTag> From<&'a FormatData<F>> for FormatChunk<'a, F> {
+    fn from(data: &'a FormatData<F>) -> Self {
+        FormatChunk::Data { data }
+    }
+}
+
 impl<T, F> Format for T
 where
     T: Deref,
@@ -201,12 +226,11 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<FormatChunk<'a>, PhonicError> {
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> Result<FormatChunk<'a, Self::Tag>, PhonicError> {
         self.deref_mut().read(buf)
-    }
-
-    fn read_data(&mut self) -> Result<(), PhonicError> {
-        self.deref_mut().read_data()
     }
 }
 
@@ -215,11 +239,7 @@ where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write_data(&mut self, data: &FormatData<Self::Tag>) -> Result<(), PhonicError> {
-        self.deref_mut().write_data(data)
-    }
-
-    fn write(&mut self, chunk: FormatChunk) -> Result<(), PhonicError> {
+    fn write(&mut self, chunk: FormatChunk<Self::Tag>) -> Result<(), PhonicError> {
         self.deref_mut().write(chunk)
     }
 

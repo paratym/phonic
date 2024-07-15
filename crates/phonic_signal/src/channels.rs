@@ -1,5 +1,7 @@
 use std::ops::{BitAnd, BitOr, BitXor};
 
+use phonic_core::PhonicError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channels {
     Count(u16),
@@ -23,6 +25,23 @@ impl Channels {
         match self {
             Self::Count(_) => None,
             Self::Layout(layout) => Some(layout),
+        }
+    }
+
+    pub fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Layout(a), Self::Layout(b)) => a == b,
+            (a, b) => a.count() == b.count(),
+        }
+    }
+
+    pub fn merge(self, other: Self) -> Result<Self, PhonicError> {
+        match (self, other) {
+            (a, b) if a == b => Ok(self),
+            (a, b) if a.count() != b.count() => Err(PhonicError::SignalMismatch),
+            (Self::Layout(a), Self::Layout(b)) if a != b => Err(PhonicError::SignalMismatch),
+            (Self::Layout(a), _) | (_, Self::Layout(a)) => Ok(Self::Layout(a)),
+            _ => Err(PhonicError::Unreachable),
         }
     }
 }

@@ -9,24 +9,22 @@ members = [
 	"crates/phonic_core",
 	"crates/phonic_signal",
 	"crates/phonic_io",
-	"crates/phonic_synth",
 	"crates/phonic_io_core",
 	"crates/phonic_format_wave",
 	"crates/phonic_codec_pcm",
 	"crates/phonic_cpal",
 	"crates/phonic_rtrb",
 	"examples/player",
-	"examples/synth",
+	"examples/export",
 	"examples/converter",
 ]
 
 [features]
 default = ["signal"]
 signal = ["dep:phonic_signal"]
-io = ["dep:phonic_io"]
-synth = ["dep:phonic_synth"]
 
 # io
+io = ["dep:phonic_io"]
 io-full = ["io", "wave", "pcm"]
 wave = ["io", "phonic_io/wave"]
 pcm = ["io", "phonic_io/pcm"]
@@ -39,7 +37,6 @@ rtrb = ["dep:phonic_rtrb"]
 phonic_core = { version = "0.1.0", path = "crates/phonic_core" }
 phonic_signal = { version = "0.1.0", path = "crates/phonic_signal", optional = true }
 phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
-phonic_synth = { version = "0.1.0", path = "crates/phonic_synth", optional = true }
 phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }
 phonic_rtrb = { version = "0.1.0", path = "crates/phonic_rtrb", optional = true }
 

@@ -3,9 +3,6 @@ pub use phonic_core::*;
 #[cfg(feature = "signal")]
 pub use phonic_signal as signal;
 
-#[cfg(feature = "synth")]
-pub use phonic_synth as synth;
-
 #[cfg(feature = "io")]
 pub use phonic_io as io;
 

@@ -1,11 +1,12 @@
-use std::{
-    any::TypeId,
-    ops::{Deref, DerefMut},
-};
 use phonic_core::PhonicError;
 use phonic_signal::{Sample, Signal, SignalSpecBuilder};
+use std::{
+    any::TypeId,
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
-pub trait CodecTag: Sized + Eq + Copy + Send + Sync {
+pub trait CodecTag: Debug + Sized + Eq + Copy + Send + Sync {
     fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), PhonicError>;
 }
 
@@ -164,7 +165,7 @@ pub trait StreamReader: Stream {
 
         while !buf.is_empty() {
             match self.read(&mut buf) {
-                Ok(0) => return Err(PhonicError::EndOfStream),
+                Ok(0) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => buf = &mut buf[n..],
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),
@@ -190,7 +191,7 @@ pub trait StreamWriter: Stream {
 
         while !buf.is_empty() {
             match self.write(&buf) {
-                Ok(0) => return Err(PhonicError::EndOfStream),
+                Ok(0) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => buf = &buf[n..],
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),
@@ -211,7 +212,7 @@ pub trait StreamWriter: Stream {
         let mut n_read = 0;
         loop {
             let n = match reader.read(buf) {
-                Ok(0) | Err(PhonicError::EndOfStream) => return Ok(n_read),
+                Ok(0) | Err(PhonicError::OutOfBounds) => return Ok(n_read),
                 Ok(n) => n,
                 Err(PhonicError::Interrupted) => continue,
                 Err(e) => return Err(e),

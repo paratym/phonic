@@ -1,10 +1,10 @@
 use crate::{
-    utils::TaggedSignal, CodecTag, Format, FormatObserver, FormatReader, FormatSeeker, FormatTag,
-    FormatWriter, Stream, StreamObserver, StreamReader, StreamSeeker, StreamWriter,
+    CodecTag, Format, FormatObserver, FormatReader, FormatSeeker, FormatTag, FormatWriter, Stream,
+    StreamObserver, StreamReader, StreamSeeker, StreamWriter, TaggedSignal,
 };
-use std::io::{Read, Seek, Write};
 use phonic_core::PhonicError;
 use phonic_signal::{Signal, SignalObserver, SignalReader, SignalSeeker, SignalWriter};
+use std::io::{Read, Seek, Write};
 
 pub trait StdIoSource: Read + Write + Seek + Send + Sync {}
 impl<T> StdIoSource for T where T: Read + Write + Seek + Send + Sync {}

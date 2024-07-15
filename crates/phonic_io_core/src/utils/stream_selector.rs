@@ -33,7 +33,7 @@ impl<T: FormatObserver> StreamObserver for StreamSelector<T> {
         match self.inner.position()? {
             FormatPosition { stream_i, .. } if stream_i < self.stream_i => Ok(0),
             FormatPosition { stream_i, .. } if stream_i > self.stream_i => {
-                self.spec().n_bytes().ok_or(PhonicError::EndOfStream)
+                self.spec().n_bytes().ok_or(PhonicError::OutOfBounds)
             }
             FormatPosition { byte_i, .. } => Ok(byte_i),
         }

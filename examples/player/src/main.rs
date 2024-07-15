@@ -2,41 +2,31 @@ use cpal::{
     traits::{HostTrait, StreamTrait},
     SizedSample,
 };
-use rtrb::RingBuffer;
-use std::{env, fs::File, path::Path, thread::sleep, time::Duration};
 use phonic::{
     cpal::DeviceExt,
     io::{
-        match_tagged_signal,
-        utils::{FormatIdentifier, TaggedSignal},
-        DynFormatConstructor, DynStream, Format, KnownFormat,
+        match_tagged_signal, utils::FormatIdentifier, DynFormatConstructor, DynStream, Format,
+        FormatReader, KnownFormat, KnownSample, TaggedSignal,
     },
     rtrb::RingBufferHalfExt,
-    signal::{KnownSample, SignalReader, SignalSpec, SignalWriter},
-    synth::generators::SineGenerator,
+    signal::{SignalReader, SignalWriter},
     PhonicError,
 };
+use rtrb::RingBuffer;
+use std::{env, fs::File, path::Path, thread::sleep, time::Duration};
 
 fn main() -> Result<(), PhonicError> {
-    // let path_arg = env::args().nth(0).ok_or(PhonicError::MissingData)?;
-    // let path = Path::new(path_arg.as_str());
-    // let file = File::open(path)?;
-    //
-    // let signal = KnownFormat::try_from(&FormatIdentifier::try_from(path)?)?
-    //     .from_std_io(file)?
-    //     .into_default_stream()?
-    //     .into_codec()?;
-    //
-    // match_tagged_signal!(signal, inner => play(inner))
+    let path_arg = env::args().nth(0).ok_or(PhonicError::MissingData)?;
+    let path = Path::new(path_arg.as_str());
+    let file = File::open(path)?;
 
-    let spec = SignalSpec::builder()
-        .with_channels(2)
-        .with_frame_rate(44100)
-        .with_duration(Duration::from_secs(1))
-        .build()?;
+    let signal = KnownFormat::try_from(&FormatIdentifier::try_from(path)?)?
+        .from_std_io(file)?
+        .with_reader_data()?
+        .into_default_stream()?
+        .into_codec()?;
 
-    let signal = SineGenerator::new(spec, 440.0);
-    play(signal)
+    match_tagged_signal!(signal, inner => play(inner))
 }
 
 const BUF_DURATION: Duration = Duration::from_millis(200);
@@ -67,7 +57,7 @@ where
 
     loop {
         match output_signal.copy_all(&mut signal) {
-            Ok(_) | Err(PhonicError::EndOfStream) => break,
+            Ok(_) | Err(PhonicError::OutOfBounds) => break,
             Err(PhonicError::Interrupted) => continue,
             Err(PhonicError::NotReady) => sleep(BUF_DURATION / 20),
             Err(e) => return Err(e),

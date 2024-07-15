@@ -13,10 +13,10 @@ pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     markers: &[b"RIFF", b"WAVE"],
 };
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct WaveFormatTag;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WaveSupportedCodec {
     Pcm,
 }

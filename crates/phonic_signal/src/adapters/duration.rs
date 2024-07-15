@@ -1,24 +1,19 @@
 use crate::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
-use std::time::Duration;
 use phonic_core::PhonicError;
+use std::time::Duration;
 
 pub struct DurationAdapter<T: Signal> {
     signal: T,
-    spec: SignalSpec,
-    i: u64,
-    inner_consumed: bool,
+    rem_frames: Option<u64>,
 }
 
 impl<T: Signal> DurationAdapter<T> {
     pub fn new(signal: T, n_frames: Option<u64>) -> Self {
         let mut spec = *signal.spec();
-        spec.n_frames = n_frames;
 
         Self {
             signal,
-            spec,
-            i: 0,
-            inner_consumed: false,
+            rem_frames: n_frames,
         }
     }
 
@@ -32,72 +27,46 @@ impl<T: Signal> Signal for DurationAdapter<T> {
     type Sample = T::Sample;
 
     fn spec(&self) -> &SignalSpec {
-        &self.spec
+        &self.signal.spec()
     }
 }
 
 impl<T: SignalReader> SignalReader for DurationAdapter<T> {
-    fn read(&mut self, buffer: &mut [Self::Sample]) -> Result<usize, PhonicError> {
-        if self.spec.n_samples().is_some_and(|n| self.i >= n) {
-            return Ok(0);
-        }
-
+    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
         let n_samples = self
-            .spec
-            .n_samples()
-            .map(|n| ((n - self.i) as usize).min(buffer.len()))
-            .unwrap_or(buffer.len());
+            .rem_frames
+            .map(|r| (r as usize).min(buf.len()))
+            .unwrap_or(buf.len());
 
-        let buffer = &mut buffer[..n_samples];
-
-        if !self.inner_consumed {
-            match self.signal.read(buffer) {
-                Ok(0) => {
-                    self.inner_consumed = true;
-                }
-                Ok(n) => {
-                    self.i += n as u64;
-                    return Ok(n);
-                }
-                err => return err,
+        let buf = &mut buf[..n_samples];
+        match self.signal.read(buf) {
+            Ok(0) => {
+                buf.fill(Self::Sample::ORIGIN);
+                self.rem_frames.as_mut().map(|r| *r -= n_samples as u64);
+                Ok(n_samples)
             }
+            Ok(n) => {
+                self.rem_frames.as_mut().map(|r| *r -= n as u64);
+                Ok(n)
+            }
+            err => err,
         }
-
-        buffer.fill(Self::Sample::ORIGIN);
-        self.i += buffer.len() as u64;
-        return Ok(buffer.len());
     }
 }
 
 impl<T: SignalWriter> SignalWriter for DurationAdapter<T> {
-    fn write(&mut self, buffer: &[Self::Sample]) -> Result<usize, PhonicError> {
-        if self.spec.n_samples().is_some_and(|n| self.i >= n) {
-            return Ok(0);
-        }
-
+    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
         let n_samples = self
-            .spec
-            .n_samples()
-            .map(|n| ((n - self.i) as usize).min(buffer.len()))
-            .unwrap_or(buffer.len());
+            .rem_frames
+            .map(|r| (r as usize).min(buf.len()))
+            .unwrap_or(buf.len());
 
-        let buffer = &buffer[..n_samples];
-
-        if !self.inner_consumed {
-            match self.signal.write(buffer) {
-                Ok(0) => {
-                    self.inner_consumed = true;
-                }
-                Ok(n) => {
-                    self.i += n as u64;
-                    return Ok(n);
-                }
-                err => return err,
-            }
+        let result = self.signal.write(&buf[..n_samples]);
+        if let Ok(n) = result {
+            self.rem_frames.as_mut().map(|r| *r -= n as u64);
         }
 
-        self.i += buffer.len() as u64;
-        return Ok(buffer.len());
+        result
     }
 
     fn flush(&mut self) -> Result<(), PhonicError> {
