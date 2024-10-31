@@ -1,5 +1,5 @@
 use phonic_core::PhonicError;
-use phonic_io_core::{CodecTag, DynCodecConstructor, DynStream, StreamSpec, TaggedSignal};
+use phonic_io_core::{CodecTag, DynCodecConstructor, DynStream, StreamSpecBuilder, TaggedSignal};
 use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -10,10 +10,12 @@ pub enum KnownCodec {
 }
 
 impl CodecTag for KnownCodec {
-    fn fill_spec(spec: &mut StreamSpec<Self>) -> Result<(), PhonicError> {
+    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> Result<(), PhonicError> {
+        use crate::codecs::*;
+
         match spec.codec {
             #[cfg(feature = "pcm")]
-            Some(Self::Pcm) => crate::codecs::pcm::fill_pcm_spec(spec),
+            Some(Self::Pcm) => pcm::infer_pcm_spec(spec),
 
             _ => Ok(()),
         }
@@ -21,24 +23,26 @@ impl CodecTag for KnownCodec {
 }
 
 impl DynCodecConstructor for KnownCodec {
-    fn from_signal(
-        &self,
-        signal: TaggedSignal,
-    ) -> Result<Box<dyn DynStream<Tag = Self>>, PhonicError> {
+    fn encoder(&self, signal: TaggedSignal) -> Result<Box<dyn DynStream<Tag = Self>>, PhonicError> {
+        use crate::codecs::*;
+
         match self {
             #[cfg(feature = "pcm")]
-            Self::Pcm => crate::codecs::pcm::pcm_codec_from_signal(signal),
+            Self::Pcm => pcm::pcm_codec_from_dyn_signal(signal),
+
+            #[allow(unreachable_patterns)]
+            _ => Err(PhonicError::Unsupported),
         }
     }
 
-    fn from_stream<S: DynStream<Tag = Self> + 'static>(
-        stream: S,
-    ) -> Result<TaggedSignal, PhonicError> {
-        match stream.spec().codec {
-            #[cfg(feature = "pcm")]
-            Some(Self::Pcm) => crate::codecs::pcm::pcm_codec_from_stream(stream),
+    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> Result<TaggedSignal, PhonicError> {
+        use crate::codecs::*;
 
-            None => Err(PhonicError::MissingData),
+        match stream.stream_spec().codec {
+            #[cfg(feature = "pcm")]
+            Self::Pcm => pcm::pcm_codec_from_dyn_stream(stream),
+
+            #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
         }
     }
@@ -52,6 +56,8 @@ impl TryFrom<crate::formats::wave::WaveSupportedCodec> for KnownCodec {
         match codec {
             #[cfg(feature = "pcm")]
             crate::formats::wave::WaveSupportedCodec::Pcm => Ok(Self::Pcm),
+
+            #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
         }
     }

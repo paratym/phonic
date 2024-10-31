@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 phonic_core = { version = "0.1.0", path = "../phonic_core" }
-phonic_codec_pcm = { version = "0.1.0", path = "../phonic_codec_pcm" }
+phonic_codec_pcm = { version = "0.1.0", path = "../phonic_codec_pcm", optional = true }
 phonic_io_core = { version = "0.1.0", path = "../phonic_io_core" }
 phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
+
+[features]
+pcm = ["dep:phonic_codec_pcm"]

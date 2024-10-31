@@ -96,29 +96,19 @@ impl TryFrom<TypeId> for KnownSampleType {
     type Error = PhonicError;
 
     fn try_from(id: TypeId) -> Result<Self, Self::Error> {
-        if id == TypeId::of::<u8>() {
-            Ok(Self::U8)
-        } else if id == TypeId::of::<u16>() {
-            Ok(Self::U16)
-        } else if id == TypeId::of::<u32>() {
-            Ok(Self::U32)
-        } else if id == TypeId::of::<u64>() {
-            Ok(Self::U64)
-        } else if id == TypeId::of::<i8>() {
-            Ok(Self::I8)
-        } else if id == TypeId::of::<i16>() {
-            Ok(Self::I16)
-        } else if id == TypeId::of::<i32>() {
-            Ok(Self::I32)
-        } else if id == TypeId::of::<i64>() {
-            Ok(Self::I64)
-        } else if id == TypeId::of::<f32>() {
-            Ok(Self::F32)
-        } else if id == TypeId::of::<f64>() {
-            Ok(Self::F64)
-        } else {
-            Err(PhonicError::Unsupported)
-        }
+        Ok(match id {
+            id if id == TypeId::of::<i8>() => Self::I8,
+            id if id == TypeId::of::<i16>() => Self::I16,
+            id if id == TypeId::of::<i32>() => Self::I32,
+            id if id == TypeId::of::<i64>() => Self::I64,
+            id if id == TypeId::of::<u8>() => Self::U8,
+            id if id == TypeId::of::<u16>() => Self::U16,
+            id if id == TypeId::of::<u32>() => Self::U32,
+            id if id == TypeId::of::<u64>() => Self::U64,
+            id if id == TypeId::of::<f32>() => Self::F32,
+            id if id == TypeId::of::<f64>() => Self::F64,
+            _ => return Err(PhonicError::Unsupported),
+        })
     }
 }
 

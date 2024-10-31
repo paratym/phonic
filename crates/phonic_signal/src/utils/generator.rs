@@ -1,11 +1,11 @@
-use crate::{Sample, Signal, SignalObserver, SignalReader, SignalSeeker, SignalSpec};
+use crate::{IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec};
 use phonic_core::PhonicError;
 use std::marker::PhantomData;
 
 pub struct SignalGenerator<S: Sample, F: Fn(u64, &mut [S]) -> Result<usize, PhonicError>> {
     spec: SignalSpec,
     callback: F,
-    i: u64,
+    pos: u64,
     _sample: PhantomData<S>,
 }
 
@@ -18,7 +18,7 @@ where
         Self {
             spec,
             callback,
-            i: 0,
+            pos: 0,
             _sample: PhantomData,
         }
     }
@@ -36,13 +36,13 @@ where
     }
 }
 
-impl<S, F> SignalObserver for SignalGenerator<S, F>
+impl<S, F> IndexedSignal for SignalGenerator<S, F>
 where
     S: Sample,
     F: Fn(u64, &mut [S]) -> Result<usize, PhonicError>,
 {
-    fn position(&self) -> Result<u64, PhonicError> {
-        Ok(self.i)
+    fn pos(&self) -> u64 {
+        self.pos
     }
 }
 
@@ -52,15 +52,13 @@ where
     F: Fn(u64, &mut [S]) -> Result<usize, PhonicError>,
 {
     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
-        let rem_samples = self
-            .spec
-            .n_samples()
-            .map(|n| n - self.i)
-            .unwrap_or(u64::MAX);
+        let mut n = (self.callback)(self.pos, buf)?;
+        let n_channels = self.spec.channels.count() as usize;
+        n -= n % n_channels;
 
-        let len = buf.len().min(rem_samples as usize);
-        let n = (self.callback)(self.i, &mut buf[..len])?;
-        self.i += n as u64;
+        let n_frames = n / n_channels;
+        self.pos += n_frames as u64;
+
         Ok(n)
     }
 }
@@ -70,13 +68,13 @@ where
     S: Sample,
     F: Fn(u64, &mut [S]) -> Result<usize, PhonicError>,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
-        let i = self.i as i64 + offset;
-        if i.is_negative() {
-            return Err(PhonicError::OutOfBounds);
-        }
+    fn seek(&mut self, mut offset: i64) -> Result<(), PhonicError> {
+        offset -= offset % self.spec.channels.count() as i64;
+        self.pos = self
+            .pos
+            .checked_add_signed(offset)
+            .ok_or(PhonicError::OutOfBounds)?;
 
-        self.i = i as u64;
         Ok(())
     }
 }

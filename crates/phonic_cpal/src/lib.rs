@@ -15,27 +15,26 @@ pub trait SignalSpecExt {
 impl SignalSpecExt for SignalSpec {
     fn from_cpal_config(config: StreamConfig) -> SignalSpec {
         SignalSpec {
-            frame_rate: config.sample_rate.0,
-            channels: config.channels.into(),
-            n_frames: None,
+            sample_rate: config.sample_rate.0,
+            channels: (config.channels as u32).into(),
         }
     }
 
     fn into_cpal_config(self) -> StreamConfig {
         StreamConfig {
-            channels: self.channels.count(),
-            sample_rate: SampleRate(self.frame_rate),
+            channels: self.channels.count() as u16,
+            sample_rate: SampleRate(self.sample_rate),
             buffer_size: BufferSize::Default,
         }
     }
 }
 
-pub trait KnownSampleTpeExt: Sized {
+pub trait KnownSampleTypeExt: Sized {
     fn try_from_cpal_sample_format(format: SampleFormat) -> Result<Self, PhonicError>;
     fn into_cpal_sample_format(self) -> SampleFormat;
 }
 
-impl KnownSampleTpeExt for KnownSampleType {
+impl KnownSampleTypeExt for KnownSampleType {
     fn try_from_cpal_sample_format(format: SampleFormat) -> Result<Self, PhonicError> {
         Ok(match format {
             SampleFormat::I8 => Self::I8,
@@ -84,9 +83,9 @@ impl SupportedStreamConfigRangeExt for SupportedStreamConfigRange {
         let spec = signal.spec();
 
         self.sample_format() == S::Sample::TYPE.into_cpal_sample_format()
-            && self.channels() == spec.channels.count()
-            && self.max_sample_rate().0 >= spec.frame_rate
-            && self.min_sample_rate().0 <= spec.frame_rate
+            && self.channels() == spec.channels.count() as u16
+            && self.max_sample_rate().0 >= spec.sample_rate
+            && self.min_sample_rate().0 <= spec.sample_rate
     }
 }
 
@@ -104,7 +103,7 @@ pub trait DeviceExt: DeviceTrait {
     {
         self.build_input_stream(
             &signal.spec().into_cpal_config(),
-            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact(buf) {
+            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact(buf, false) {
                 Ok(_) | Err(PhonicError::NotReady) | Err(PhonicError::Interrupted) => {}
                 Err(e) => panic!("error writing to signal: {e}"),
             },

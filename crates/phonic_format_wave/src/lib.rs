@@ -1,7 +1,8 @@
-mod data;
 mod format;
 mod header;
+mod tag;
 
-pub use data::*;
 pub use format::*;
 pub use header::*;
+pub use tag::*;
+

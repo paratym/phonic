@@ -93,32 +93,45 @@ impl TaggedSignal {
     pub fn adapt_sample_type<S: FromKnownSample + 'static>(
         self,
     ) -> Box<dyn SignalReader<Sample = S>> {
-        match_tagged_signal!(self, signal => Box::new(SampleTypeAdapter::new(signal)))
+        match_tagged_signal!(self, signal => Box::new(<SampleTypeAdapter<_, _>>::new(signal)))
     }
 
-    pub fn copy_n(&mut self, reader: Self, n: u64, adapt: bool) -> Result<(), PhonicError> {
+    pub fn copy_n(
+        &mut self,
+        reader: Self,
+        n: u64,
+        block: bool,
+        adapt: bool,
+    ) -> Result<(), PhonicError> {
         match (self, reader) {
-            (Self::I8(w), Self::I8(mut r)) => w.copy_n(&mut r, n),
-            (Self::I16(w), Self::I16(mut r)) => w.copy_n(&mut r, n),
-            (Self::I32(w), Self::I32(mut r)) => w.copy_n(&mut r, n),
-            (Self::I64(w), Self::I64(mut r)) => w.copy_n(&mut r, n),
-            (Self::U8(w), Self::U8(mut r)) => w.copy_n(&mut r, n),
-            (Self::U16(w), Self::U16(mut r)) => w.copy_n(&mut r, n),
-            (Self::U32(w), Self::U32(mut r)) => w.copy_n(&mut r, n),
-            (Self::U64(w), Self::U64(mut r)) => w.copy_n(&mut r, n),
-            (Self::F32(w), Self::F32(mut r)) => w.copy_n(&mut r, n),
-            (Self::F64(w), Self::F64(mut r)) => w.copy_n(&mut r, n),
+            (Self::I8(w), Self::I8(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::I16(w), Self::I16(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::I32(w), Self::I32(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::I64(w), Self::I64(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::U8(w), Self::U8(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::U16(w), Self::U16(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::U32(w), Self::U32(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::U64(w), Self::U64(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::F32(w), Self::F32(mut r)) => w.copy_n(&mut r, n, block),
+            (Self::F64(w), Self::F64(mut r)) => w.copy_n(&mut r, n, block),
             _ if !adapt => Err(PhonicError::SignalMismatch),
-            (Self::I8(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::I16(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::I32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::I64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::U8(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::U16(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::U32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::U64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::F32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
-            (Self::F64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n),
+            (Self::I8(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::I16(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::I32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::I64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::U8(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::U16(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::U32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::U64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::F32(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+            (Self::F64(w), r) => w.copy_n(&mut r.adapt_sample_type(), n, block),
+        }
+    }
+
+    pub fn copy_all(&mut self, reader: Self, block: bool, adapt: bool) -> Result<(), PhonicError> {
+        match self.copy_n(reader, u64::MAX, block, adapt) {
+            Err(PhonicError::OutOfBounds) => Ok(()),
+            result => result,
         }
     }
 }

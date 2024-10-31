@@ -1,7 +1,7 @@
 use crate::{WaveFormatTag, WaveSupportedCodec};
 use phonic_core::PhonicError;
-use phonic_io_core::{FormatData, FormatTag, KnownSampleType, StreamSpec};
-use phonic_signal::{ChannelLayout, Channels, SignalSpecBuilder};
+use phonic_io_core::{CodecTag, FormatTag, KnownSampleType, StreamSpec};
+use phonic_signal::{ChannelLayout, Channels, SignalSpec, SignalSpecBuilder};
 use std::io::{Read, Write};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
@@ -132,110 +132,79 @@ impl WaveHeader {
     }
 }
 
-impl<F> From<WaveHeader> for FormatData<F>
+impl<C> TryFrom<WaveHeader> for StreamSpec<C>
 where
-    F: FormatTag,
-    WaveFormatTag: TryInto<F>,
-    WaveSupportedCodec: TryInto<F::Codec>,
-{
-    fn from(header: WaveHeader) -> Self {
-        let codec = match header.fmt.format_tag {
-            1 | 3 => WaveSupportedCodec::Pcm.try_into().ok(),
-            _ => None,
-        };
-
-        let sample_type = match (header.fmt.format_tag, header.fmt.bits_per_sample) {
-            (1, 8) => Some(KnownSampleType::U8),
-            (1, 16) => Some(KnownSampleType::I16),
-            (1, 32) => Some(KnownSampleType::I32),
-            (3, 32) => Some(KnownSampleType::F32),
-            (3, 64) => Some(KnownSampleType::F64),
-            _ => None,
-        };
-
-        let channels = header
-            .fmt
-            .ext
-            .and_then(|ext| Some(ChannelLayout::from_bits(ext.channel_mask).into()))
-            .unwrap_or_else(|| Channels::Count(header.fmt.n_channels));
-
-        Self {
-            format: WaveFormatTag.try_into().ok(),
-            streams: vec![StreamSpec {
-                codec: codec.map(Into::into),
-                avg_bitrate: Some(header.fmt.avg_byte_rate as f64 * 8.0),
-                block_align: Some(header.fmt.block_align as u16),
-                sample_type: sample_type.map(Into::into),
-                decoded_spec: SignalSpecBuilder::new()
-                    .with_channels(channels)
-                    .with_frame_rate(header.fmt.sample_rate)
-                    .with_n_frames(header.fact.map(|fact| fact.n_frames as u64)),
-            }],
-        }
-    }
-}
-
-impl<F> TryFrom<&FormatData<F>> for WaveHeader
-where
-    F: FormatTag,
-    // PhonicCodec: TryInto<F::Codec>,
+    C: CodecTag,
+    WaveSupportedCodec: TryInto<C>,
+    PhonicError: From<<WaveSupportedCodec as TryInto<C>>::Error>,
 {
     type Error = PhonicError;
 
-    fn try_from(data: &FormatData<F>) -> Result<Self, Self::Error> {
-        if data.streams.len() != 1 {
-            return Err(PhonicError::Unsupported);
-        }
+    fn try_from(header: WaveHeader) -> Result<Self, Self::Error> {
+        let codec = match header.fmt.format_tag {
+            1 | 3 => WaveSupportedCodec::Pcm.try_into(),
+            _ => return Err(PhonicError::Unsupported),
+        }?;
 
-        let mut spec = data.streams[0];
-
-        // let expected_codec = PhonicCodec::Pcm.try_into().ok();
-        // if spec.codec.is_some() && spec.codec != expected_codec {
-        //     return Err(PhonicError::Unsupported);
-        // }
-
-        // spec.codec = expected_codec;
-        // F::Codec::fill_spec(&mut spec)?;
-
-        let sample_type = spec
-            .sample_type
-            .ok_or(PhonicError::MissingData)?
-            .try_into()?;
-
-        let format_tag = match sample_type {
-            KnownSampleType::U8 | KnownSampleType::I16 | KnownSampleType::I32 => 1,
-            KnownSampleType::F32 | KnownSampleType::F64 => 3,
+        let sample_type = match (header.fmt.format_tag, header.fmt.bits_per_sample) {
+            (1, 8) => KnownSampleType::U8,
+            (1, 16) => KnownSampleType::I16,
+            (1, 32) => KnownSampleType::I32,
+            (3, 32) => KnownSampleType::F32,
+            (3, 64) => KnownSampleType::F64,
             _ => return Err(PhonicError::Unsupported),
         };
 
-        let n_channels = spec
-            .decoded_spec
-            .channels
-            .ok_or(PhonicError::InvalidData)?
-            .count() as u16;
+        let channels = match header.fmt.ext {
+            Some(ext) => ChannelLayout::from_mask(ext.channel_mask).into(),
+            None => Channels::Count(header.fmt.n_channels as u32),
+        };
 
-        let sample_rate = spec
-            .decoded_spec
-            .frame_rate
-            .ok_or(PhonicError::InvalidData)?;
+        Ok(Self {
+            codec,
+            avg_byte_rate: header.fmt.avg_byte_rate,
+            block_align: header.fmt.block_align as usize,
+            sample_type: sample_type.into(),
+            decoded_spec: SignalSpec {
+                sample_rate: header.fmt.sample_rate,
+                channels,
+            },
+        })
+    }
+}
+
+impl<C> TryFrom<StreamSpec<C>> for WaveHeader
+where
+    C: CodecTag + TryInto<WaveSupportedCodec>,
+    PhonicError: From<<C as TryInto<WaveSupportedCodec>>::Error>,
+{
+    type Error = PhonicError;
+
+    fn try_from(spec: StreamSpec<C>) -> Result<Self, Self::Error> {
+        let codec = spec.codec.try_into()?;
+        let sample_type = KnownSampleType::try_from(spec.sample_type)?;
+
+        let format_tag = match (codec, sample_type) {
+            (
+                WaveSupportedCodec::Pcm,
+                KnownSampleType::U8 | KnownSampleType::I16 | KnownSampleType::I32,
+            ) => 1,
+            (WaveSupportedCodec::Pcm, KnownSampleType::F32 | KnownSampleType::F64) => 3,
+            _ => return Err(PhonicError::Unsupported),
+        };
 
         Ok(Self {
             fmt: FmtChunk {
                 format_tag,
-                n_channels,
-                sample_rate,
-                avg_byte_rate: sample_rate * sample_type.byte_size() as u32,
-                block_align: sample_type.byte_size() as u16 * n_channels,
+                n_channels: spec.decoded_spec.channels.count() as u16,
+                sample_rate: spec.decoded_spec.sample_rate,
+                avg_byte_rate: spec.avg_byte_rate,
+                block_align: spec.block_align as u16,
                 bits_per_sample: sample_type.byte_size() as u16 * 8,
                 ext: None,
             },
-            fact: spec
-                .decoded_spec
-                .n_frames
-                .map(|n| FactChunk { n_frames: n as u32 }),
-            data: DataChunk {
-                byte_len: spec.n_bytes().ok_or(PhonicError::Unsupported)? as u32,
-            },
+            fact: None, // TODO: Some(FactChunk { n_frames: todo!() }),
+            data: DataChunk { byte_len: 0 }, // TODO
         })
     }
 }

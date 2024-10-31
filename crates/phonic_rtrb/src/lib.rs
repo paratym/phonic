@@ -1,28 +1,34 @@
 use phonic_core::PhonicError;
 use phonic_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
-use rtrb::{chunks::ChunkError, Consumer, Producer};
+use rtrb::{chunks::ChunkError, Consumer, Producer, RingBuffer};
 use std::marker::PhantomData;
 
-pub struct RealTimeSignal<T, S> {
+pub struct RealTimeSignal;
+pub struct RealTimeSignalHalf<T, S> {
     spec: SignalSpec,
     inner: T,
     _sample: PhantomData<S>,
 }
 
-pub trait RingBufferHalfExt<S> {
-    fn as_signal(&mut self, spec: SignalSpec) -> RealTimeSignal<&mut Self, S> {
-        RealTimeSignal::new(self, spec)
-    }
+impl RealTimeSignal {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new<S>(
+        buf_cap: usize,
+        spec: SignalSpec,
+    ) -> (
+        RealTimeSignalHalf<Producer<S>, S>,
+        RealTimeSignalHalf<Consumer<S>, S>,
+    ) {
+        let (producer, consumer) = RingBuffer::new(buf_cap);
 
-    fn into_signal(self, spec: SignalSpec) -> RealTimeSignal<Self, S>
-    where
-        Self: Sized,
-    {
-        RealTimeSignal::new(self, spec)
+        (
+            RealTimeSignalHalf::new(producer, spec),
+            RealTimeSignalHalf::new(consumer, spec),
+        )
     }
 }
 
-impl<T, S> RealTimeSignal<T, S> {
+impl<T, S> RealTimeSignalHalf<T, S> {
     fn new(inner: T, spec: SignalSpec) -> Self {
         Self {
             inner,
@@ -32,10 +38,7 @@ impl<T, S> RealTimeSignal<T, S> {
     }
 }
 
-impl<S> RingBufferHalfExt<S> for Producer<S> {}
-impl<S> RingBufferHalfExt<S> for Consumer<S> {}
-
-impl<T, S: Sample> Signal for RealTimeSignal<T, S> {
+impl<T, S: Sample> Signal for RealTimeSignalHalf<T, S> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
@@ -43,84 +46,54 @@ impl<T, S: Sample> Signal for RealTimeSignal<T, S> {
     }
 }
 
-impl<S: Sample> SignalReader for RealTimeSignal<Consumer<S>, S> {
+impl<S: Sample> SignalReader for RealTimeSignalHalf<Consumer<S>, S> {
     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
         let n_slots = self.inner.slots();
         if n_slots == 0 {
-            if !self.inner.is_abandoned() {
-                return Err(PhonicError::NotReady);
-            }
-
-            return Ok(0);
+            return if self.inner.is_abandoned() {
+                Ok(0)
+            } else {
+                Err(PhonicError::NotReady)
+            };
         }
 
         let n_samples = buf.len().min(n_slots);
-        let read_chunk = self.inner.read_chunk(n_samples).map_err(|e| match e {
-            ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
-        })?;
+        let read_chunk = self
+            .inner
+            .read_chunk(n_samples)
+            .map_err(|error| match error {
+                ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
+            })?;
 
-        buf[..n_samples]
-            .iter_mut()
-            .zip(read_chunk.into_iter())
-            .for_each(|(a, b)| *a = b);
-
-        buf[n_samples..].fill(S::ORIGIN);
+        buf.iter_mut().zip(read_chunk).for_each(|(a, b)| *a = b);
         Ok(n_samples)
     }
 }
 
-impl<S: Sample + Default> SignalWriter for RealTimeSignal<Producer<S>, S> {
+impl<S: Sample> SignalWriter for RealTimeSignalHalf<Producer<S>, S> {
     fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
         let n_slots = self.inner.slots();
         if n_slots == 0 {
-            if !self.inner.is_abandoned() {
-                return Err(PhonicError::NotReady);
-            }
-
-            return Ok(0);
+            return if self.inner.is_abandoned() {
+                Ok(0)
+            } else {
+                Err(PhonicError::NotReady)
+            };
         }
 
         let n_samples = buf.len().min(n_slots);
-        let write_chunk = self
-            .inner
-            .write_chunk_uninit(n_samples)
-            .map_err(|e| match e {
-                ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
-            })?;
+        let write_chunk =
+            self.inner
+                .write_chunk_uninit(n_samples)
+                .map_err(|error| match error {
+                    ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
+                })?;
 
-        write_chunk.fill_from_iter(buf[..n_samples].into_iter().copied());
+        write_chunk.fill_from_iter(buf[..n_samples].iter().copied());
         Ok(n_samples)
     }
 
     fn flush(&mut self) -> Result<(), PhonicError> {
         todo!()
-    }
-
-    fn copy_n<R>(&mut self, reader: &mut R, mut n: u64) -> Result<(), PhonicError>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
-        while n > 0 {
-            let n_samples = n.min(self.inner.slots() as u64);
-            if n_samples == 0 {
-                return Err(PhonicError::NotReady);
-            }
-
-            let mut chunk = self
-                .inner
-                .write_chunk(n_samples as usize)
-                .map_err(|e| match e {
-                    ChunkError::TooFewSlots(_) => PhonicError::Unreachable,
-                })?;
-
-            let (buf0, buf1) = chunk.as_mut_slices();
-            reader.read_exact(buf0)?;
-            reader.read_exact(buf1)?;
-            chunk.commit_all();
-            n -= n_samples;
-        }
-
-        Ok(())
     }
 }

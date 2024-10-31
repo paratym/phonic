@@ -1,68 +1,85 @@
 use crate::{
-    CodecTag, Format, FormatObserver, FormatReader, FormatSeeker, FormatTag, FormatWriter, Stream,
-    StreamObserver, StreamReader, StreamSeeker, StreamWriter, TaggedSignal,
+    CodecTag, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
+    IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter, TaggedSignal,
 };
 use phonic_core::PhonicError;
-use phonic_signal::{Signal, SignalObserver, SignalReader, SignalSeeker, SignalWriter};
+use phonic_signal::{
+    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalWriter,
+};
 use std::io::{Read, Seek, Write};
 
 pub trait StdIoSource: Read + Write + Seek + Send + Sync {}
 impl<T> StdIoSource for T where T: Read + Write + Seek + Send + Sync {}
 
-pub trait DynFormat:
-    Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker + Send + Sync
-{
-}
-
-impl<T> DynFormat for T where
-    T: Format + FormatObserver + FormatReader + FormatWriter + FormatSeeker + Send + Sync
-{
-}
+pub trait DynFormat: Format + FormatReader + FormatWriter + FormatSeeker + Send + Sync {}
+impl<T> DynFormat for T where T: Format + FormatReader + FormatWriter + FormatSeeker + Send + Sync {}
 
 pub trait DynStream:
-    Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker + Send + Sync
+    Stream + IndexedStream + FiniteStream + StreamReader + StreamWriter + StreamSeeker + Send + Sync
 {
-    fn into_codec(self) -> Result<TaggedSignal, PhonicError>
+    fn into_decoder(self) -> Result<TaggedSignal, PhonicError>
     where
         Self: Sized + 'static,
         Self::Tag: DynCodecConstructor,
     {
-        Self::Tag::from_stream(self)
+        Self::Tag::decoder(self)
     }
 }
 
 impl<T> DynStream for T where
-    T: Stream + StreamObserver + StreamReader + StreamWriter + StreamSeeker + Send + Sync
+    T: Stream
+        + IndexedStream
+        + FiniteStream
+        + StreamReader
+        + StreamWriter
+        + StreamSeeker
+        + Send
+        + Sync
 {
 }
 
 pub trait DynSignal:
-    Signal + SignalObserver + SignalReader + SignalWriter + SignalSeeker + Send + Sync
+    Signal + IndexedSignal + FiniteSignal + SignalReader + SignalWriter + SignalSeeker + Send + Sync
 {
+    fn into_encoder<C>(self, codec: C) -> Result<Box<dyn DynStream<Tag = C>>, PhonicError>
+    where
+        Self: Sized + 'static,
+        C: DynCodecConstructor,
+        Box<Self>: Into<TaggedSignal>,
+    {
+        codec.encoder(Box::new(self).into())
+    }
 }
+
 impl<T> DynSignal for T where
-    T: Signal + SignalObserver + SignalReader + SignalWriter + SignalSeeker + Send + Sync
+    T: Signal
+        + IndexedSignal
+        + FiniteSignal
+        + SignalReader
+        + SignalWriter
+        + SignalSeeker
+        + Send
+        + Sync
 {
 }
 
 pub trait DynFormatConstructor: FormatTag {
-    fn from_std_io<S: StdIoSource + 'static>(
-        &self,
-        source: S,
-    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>;
+    fn read_index<T>(&self, inner: T) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    where
+        T: StdIoSource + 'static;
 
-    // fn into_std_io<F: Format + 'static>(format: F) -> Result<Box<dyn StdIoSource>, PhonicError>
-    // where
-    //     F::Tag: TryInto<Self>;
+    fn write_index<T, I>(
+        &self,
+        inner: T,
+        index: I,
+    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    where
+        T: StdIoSource + 'static,
+        I: IntoIterator<Item = StreamSpec<Self::Codec>>;
 }
 
 pub trait DynCodecConstructor: CodecTag {
-    fn from_stream<S: DynStream<Tag = Self> + 'static>(
-        stream: S,
-    ) -> Result<TaggedSignal, PhonicError>;
+    fn encoder(&self, signal: TaggedSignal) -> Result<Box<dyn DynStream<Tag = Self>>, PhonicError>;
 
-    fn from_signal(
-        &self,
-        signal: TaggedSignal,
-    ) -> Result<Box<dyn DynStream<Tag = Self>>, PhonicError>;
+    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> Result<TaggedSignal, PhonicError>;
 }

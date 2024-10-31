@@ -1,12 +1,42 @@
 use crate::KnownCodec;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
 use phonic_core::PhonicError;
-use phonic_format_wave::WAVE_IDENTIFIERS;
 use phonic_io_core::{
-    utils::{FormatIdentifier, FormatIdentifiers},
-    DynFormat, DynFormatConstructor, FormatData, FormatTag, StdIoSource,
+    utils::FormatIdentifier, DynFormat, DynFormatConstructor, FormatConstructor, FormatTag,
+    StdIoSource, StreamSpec,
 };
+use std::collections::HashMap;
+
+lazy_static! {
+    static ref KNOWN_FILE_EXTENSIONS: HashMap<&'static str, KnownFormat> = {
+        use crate::formats::*;
+        let mut map = HashMap::new();
+
+        #[cfg(feature = "wave")]
+        map.extend(
+            wave::WAVE_IDENTIFIERS
+                .file_extensions
+                .iter()
+                .map(|ext| (*ext, KnownFormat::Wave)),
+        );
+
+        map
+    };
+    static ref KNOWN_MIME_TYPES: HashMap<&'static str, KnownFormat> = {
+        use crate::formats::*;
+        let mut map = HashMap::new();
+
+        #[cfg(feature = "wave")]
+        map.extend(
+            wave::WAVE_IDENTIFIERS
+                .mime_types
+                .iter()
+                .map(|mime| (*mime, KnownFormat::Wave)),
+        );
+
+        map
+    };
+}
 
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[non_exhaustive]
@@ -15,39 +45,42 @@ pub enum KnownFormat {
     Wave,
 }
 
-lazy_static! {
-    static ref KNOWN_FORMAT_IDENTIFIERS: HashMap<KnownFormat, &'static FormatIdentifiers> = {
-        let mut map = HashMap::new();
-
-        #[cfg(feature = "wave")]
-        map.insert(KnownFormat::Wave, &WAVE_IDENTIFIERS);
-
-        map
-    };
-}
-
 impl FormatTag for KnownFormat {
     type Codec = KnownCodec;
-
-    fn fill_data(data: &mut FormatData<Self>) -> Result<(), PhonicError> {
-        match data.format {
-            #[cfg(feature = "wave")]
-            Some(Self::Wave) => crate::formats::wave::fill_wave_data(data),
-
-            _ => return Ok(()),
-        }
-    }
 }
 
 impl DynFormatConstructor for KnownFormat {
-    fn from_std_io<S: StdIoSource + 'static>(
-        &self,
-        inner: S,
-    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError> {
+    fn read_index<T>(&self, inner: T) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    where
+        T: StdIoSource + 'static,
+    {
+        use crate::formats::*;
+
         Ok(match self {
             #[cfg(feature = "wave")]
-            KnownFormat::Wave => Box::new(crate::formats::wave::WaveFormat::new(inner)?),
+            Self::Wave => Box::new(wave::WaveFormat::read_index(inner)?),
 
+            #[allow(unreachable_patterns)]
+            _ => return Err(PhonicError::Unsupported),
+        })
+    }
+
+    fn write_index<T, I>(
+        &self,
+        inner: T,
+        index: I,
+    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    where
+        T: StdIoSource + 'static,
+        I: IntoIterator<Item = StreamSpec<Self::Codec>>,
+    {
+        use crate::formats::*;
+
+        Ok(match self {
+            #[cfg(feature = "wave")]
+            Self::Wave => Box::new(wave::WaveFormat::write_index(inner, index)?),
+
+            #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
         })
     }
@@ -57,11 +90,12 @@ impl<'a> TryFrom<&FormatIdentifier<'a>> for KnownFormat {
     type Error = PhonicError;
 
     fn try_from(id: &FormatIdentifier<'a>) -> Result<Self, Self::Error> {
-        KNOWN_FORMAT_IDENTIFIERS
-            .iter()
-            .find(|(_, ids)| ids.contains(id))
-            .map(|(fmt, _)| *fmt)
-            .ok_or(PhonicError::NotFound)
+        let format = match id {
+            FormatIdentifier::FileExtension(ext) => KNOWN_FILE_EXTENSIONS.get(ext),
+            FormatIdentifier::MimeType(mime) => KNOWN_MIME_TYPES.get(mime),
+        };
+
+        format.copied().ok_or(PhonicError::Unsupported)
     }
 }
 

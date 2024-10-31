@@ -1,6 +1,6 @@
 use crate::{
-    adapters::{ChannelsAdapter, DurationAdapter, FrameRateAdapter, SampleTypeAdapter},
-    Channels, Sample, Signal,
+    adapters::{ChannelsAdapter, LengthAdapter, SampleRateAdapter, SampleTypeAdapter},
+    Channels, IndexedSignal, Sample, Signal,
 };
 use std::time::Duration;
 
@@ -9,20 +9,33 @@ pub trait SignalAdapter: Signal + Sized {
         SampleTypeAdapter::new(self)
     }
 
-    fn adapt_frame_rate(self, frame: u32) -> FrameRateAdapter<Self> {
-        FrameRateAdapter::new(self, frame)
+    fn adapt_sample_rate(self, sample_rate: u32) -> SampleRateAdapter<Self> {
+        SampleRateAdapter::new(self, sample_rate)
     }
 
     fn adapt_channels(self, channels: impl Into<Channels>) -> ChannelsAdapter<Self> {
-        ChannelsAdapter::new(self, channels.into())
+        ChannelsAdapter::new(self, channels)
     }
 
-    fn adapt_n_frames(self, n_frames: Option<u64>) -> DurationAdapter<Self> {
-        DurationAdapter::new(self, n_frames)
+    fn adapt_len(self, n_frames: u64) -> LengthAdapter<Self>
+    where
+        Self: IndexedSignal,
+    {
+        LengthAdapter::new(self, n_frames)
     }
 
-    fn adapt_duration(self, duration: Duration) -> DurationAdapter<Self> {
-        DurationAdapter::from_duration(self, duration)
+    fn adapt_len_interleaved(self, n_samples: u64) -> LengthAdapter<Self>
+    where
+        Self: IndexedSignal,
+    {
+        LengthAdapter::from_interleaved(self, n_samples)
+    }
+
+    fn adapt_len_duration(self, duration: Duration) -> LengthAdapter<Self>
+    where
+        Self: IndexedSignal,
+    {
+        LengthAdapter::from_duration(self, duration)
     }
 
     // fn adapt_reader_spec<S>(self, spec: &SignalSpec) -> Box<dyn SignalReader<Sample = S>>

@@ -2,49 +2,43 @@ use crate::{utils::StreamSelector, CodecTag, StreamSpec};
 use phonic_core::PhonicError;
 use std::{
     fmt::Debug,
+    hash::Hash,
+    io::{Read, Write},
     ops::{Deref, DerefMut},
 };
 
-pub trait FormatTag: Debug + Sized + Eq + Copy + Send + Sync {
+pub trait FormatTag: Sized + Send + Sync + Debug + Copy + Eq + Hash {
     type Codec: CodecTag;
-
-    fn fill_data(data: &mut FormatData<Self>) -> Result<(), PhonicError>;
 }
 
-#[derive(Debug, Clone)]
-pub struct FormatData<F: FormatTag> {
-    pub format: Option<F>,
-    pub streams: Vec<StreamSpec<F::Codec>>,
-}
+pub trait FormatConstructor<T, F: FormatTag>: Sized {
+    fn read_index(inner: T) -> Result<Self, PhonicError>
+    where
+        Self: Format<Tag = F>,
+        T: Read;
 
-#[derive(Debug, Clone, Copy)]
-pub struct FormatPosition {
-    pub stream_i: usize,
-    pub byte_i: u64,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct FormatOffset {
-    pub stream_offset: isize,
-    pub byte_offset: i64,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum FormatChunk<'a, F: FormatTag> {
-    Data { data: &'a FormatData<F> },
-    Stream { stream_i: usize, buf: &'a [u8] },
+    fn write_index<I>(inner: T, index: I) -> Result<Self, PhonicError>
+    where
+        Self: Format<Tag = F>,
+        T: Write,
+        I: IntoIterator<Item = StreamSpec<F::Codec>>;
 }
 
 pub trait Format {
     type Tag: FormatTag;
 
-    fn data(&self) -> &FormatData<Self::Tag>;
+    fn format(&self) -> Self::Tag;
+    fn streams(&self) -> &[StreamSpec<<Self::Tag as FormatTag>::Codec>];
 
     fn default_stream(&self) -> Option<usize> {
-        self.data()
-            .streams
-            .iter()
-            .position(|spec| spec.codec.is_some())
+        match self.streams() {
+            [] => None,
+            [..] => Some(0),
+        }
+    }
+
+    fn default_stream_spec(&self) -> Option<&StreamSpec<<Self::Tag as FormatTag>::Codec>> {
+        self.default_stream().and_then(|i| self.streams().get(i))
     }
 
     fn as_stream(&mut self, i: usize) -> Result<StreamSelector<&mut Self>, PhonicError>
@@ -80,144 +74,72 @@ pub trait Format {
     }
 }
 
-pub trait FormatObserver: Format {
-    fn position(&self) -> Result<FormatPosition, PhonicError>;
-}
-
 pub trait FormatReader: Format {
-    fn read<'a>(&'a mut self, buf: &'a mut [u8])
-        -> Result<FormatChunk<'a, Self::Tag>, PhonicError>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<(usize, usize), PhonicError>;
 
-    fn with_reader_data(mut self) -> Result<Self, PhonicError>
-    where
-        Self: Sized,
-    {
-        if self.data().streams.len() > 0 {
-            return Ok(self);
-        }
-
-        let mut buf = [0; 512];
-
-        loop {
-            match self.read(&mut buf)? {
-                FormatChunk::Data { data } if data.streams.len() > 0 => return Ok(self),
-                FormatChunk::Stream { .. } => return Err(PhonicError::InvalidData),
-                _ => continue,
-            }
-        }
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<u32, PhonicError> {
+        todo!()
     }
 }
 
 pub trait FormatWriter: Format {
-    fn write(&mut self, chunk: FormatChunk<Self::Tag>) -> Result<(), PhonicError>;
+    fn write(&mut self, stream: usize, buf: &[u8]) -> Result<usize, PhonicError>;
     fn flush(&mut self) -> Result<(), PhonicError>;
-}
+    fn finalize(&mut self) -> Result<(), PhonicError>;
 
-pub trait FormatSeeker: Format {
-    fn seek(&mut self, offset: FormatOffset) -> Result<(), PhonicError>;
+    fn write_exact(&mut self, stream: usize, buf: &[u8]) -> Result<(), PhonicError> {
+        todo!()
+    }
 
-    fn set_position(&mut self, position: FormatPosition) -> Result<(), PhonicError>
+    fn flushed(mut self) -> Result<Self, PhonicError>
     where
-        Self: Sized + FormatObserver,
+        Self: Sized,
     {
-        let current_pos = self.position()?;
-        self.seek(FormatOffset {
-            stream_offset: current_pos.stream_i as isize - position.stream_i as isize,
-            byte_offset: current_pos.byte_i as i64 - position.byte_i as i64,
-        })
-    }
-}
-
-impl<F: FormatTag> FormatData<F> {
-    pub fn new() -> Self {
-        Self {
-            format: None,
-            streams: Vec::new(),
-        }
+        self.flush()?;
+        Ok(self)
     }
 
-    pub fn with_tag_type<T>(self) -> FormatData<T>
+    fn finalized(mut self) -> Result<Self, PhonicError>
     where
-        T: FormatTag,
-        F: TryInto<T>,
-        F::Codec: TryInto<T::Codec>,
+        Self: Sized,
     {
-        FormatData {
-            format: self.format.and_then(|f| f.try_into().ok()),
-            streams: self
-                .streams
-                .into_iter()
-                .map(StreamSpec::with_tag_type)
-                .collect(),
-        }
-    }
-
-    pub fn with_format(mut self, format: F) -> Self {
-        self.format = Some(format);
-        self
-    }
-
-    pub fn with_stream(mut self, spec: StreamSpec<F::Codec>) -> Self {
-        self.streams.push(spec);
-        self
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.streams.is_empty()
-    }
-
-    pub fn merge(&mut self, other: &Self) -> Result<(), PhonicError> {
-        if let Some(format) = other.format {
-            if self.format.get_or_insert(format) != &format {
-                return Err(PhonicError::SignalMismatch);
-            }
-        }
-
-        let mut other_streams = other.streams.iter();
-        for (spec, other) in self.streams.iter_mut().zip(&mut other_streams) {
-            spec.merge(*other)?;
-        }
-
-        self.streams.extend(other_streams);
-        Ok(())
-    }
-
-    pub fn fill(&mut self) -> Result<(), PhonicError> {
-        F::fill_data(self)
-    }
-
-    pub fn filled(mut self) -> Result<Self, PhonicError> {
-        self.fill()?;
+        self.finalize()?;
         Ok(self)
     }
 }
 
-impl<'a, F: FormatTag> From<&'a FormatData<F>> for FormatChunk<'a, F> {
-    fn from(data: &'a FormatData<F>) -> Self {
-        FormatChunk::Data { data }
-    }
+pub trait FormatSeeker: Format {
+    fn seek(&mut self, stream: usize, offset: i64) -> Result<(), PhonicError>;
+
+    // fn set_position(&mut self, position: FormatPosition) -> Result<(), PhonicError>
+    // where
+    //     Self: Sized + FormatObserver,
+    // {
+    //     let current_pos = self.position()?;
+    //     self.seek(FormatOffset {
+    //         stream_offset: current_pos.stream_i as isize - position.stream_i as isize,
+    //         byte_offset: current_pos.byte_i as i64 - position.byte_i as i64,
+    //     })
+    // }
 }
 
-impl<T, F> Format for T
+impl<T> Format for T
 where
     T: Deref,
-    T::Target: Format<Tag = F>,
-    F: FormatTag,
+    T::Target: Format,
 {
-    type Tag = F;
+    type Tag = <T::Target as Format>::Tag;
 
-    fn data(&self) -> &FormatData<Self::Tag> {
-        self.deref().data()
+    fn format(&self) -> Self::Tag {
+        self.deref().format()
     }
-}
 
-impl<T> FormatObserver for T
-where
-    T: Deref,
-    T::Target: FormatObserver,
-{
-    fn position(&self) -> Result<FormatPosition, PhonicError> {
-        self.deref().position()
+    fn streams(&self) -> &[StreamSpec<<Self::Tag as FormatTag>::Codec>] {
+        self.deref().streams()
+    }
+
+    fn default_stream(&self) -> Option<usize> {
+        self.deref().default_stream()
     }
 }
 
@@ -226,10 +148,7 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> Result<FormatChunk<'a, Self::Tag>, PhonicError> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<(usize, usize), PhonicError> {
         self.deref_mut().read(buf)
     }
 }
@@ -239,12 +158,16 @@ where
     T: DerefMut,
     T::Target: FormatWriter,
 {
-    fn write(&mut self, chunk: FormatChunk<Self::Tag>) -> Result<(), PhonicError> {
-        self.deref_mut().write(chunk)
+    fn write(&mut self, stream: usize, buf: &[u8]) -> Result<usize, PhonicError> {
+        self.deref_mut().write(stream, buf)
     }
 
     fn flush(&mut self) -> Result<(), PhonicError> {
         self.deref_mut().flush()
+    }
+
+    fn finalize(&mut self) -> Result<(), PhonicError> {
+        self.deref_mut().finalize()
     }
 }
 
@@ -253,7 +176,7 @@ where
     T: DerefMut,
     T::Target: FormatSeeker,
 {
-    fn seek(&mut self, offset: FormatOffset) -> Result<(), PhonicError> {
-        self.deref_mut().seek(offset)
+    fn seek(&mut self, stream: usize, offset: i64) -> Result<(), PhonicError> {
+        self.deref_mut().seek(stream, offset)
     }
 }

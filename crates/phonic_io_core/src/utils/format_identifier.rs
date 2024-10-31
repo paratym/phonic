@@ -1,5 +1,5 @@
-use std::path::Path;
 use phonic_core::PhonicError;
+use std::{ffi::OsStr, path::Path};
 
 pub struct FormatIdentifiers {
     pub file_extensions: &'static [&'static str],
@@ -13,22 +13,13 @@ pub enum FormatIdentifier<'a> {
     MimeType(&'a str),
 }
 
-impl FormatIdentifiers {
-    pub fn contains(&self, identifier: &FormatIdentifier) -> bool {
-        match identifier {
-            FormatIdentifier::FileExtension(ext) => self.file_extensions.contains(ext),
-            FormatIdentifier::MimeType(mime) => self.mime_types.contains(mime),
-        }
-    }
-}
-
 impl<'a> TryFrom<&'a Path> for FormatIdentifier<'a> {
     type Error = PhonicError;
 
     fn try_from(path: &'a Path) -> Result<Self, Self::Error> {
         path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| FormatIdentifier::FileExtension(ext))
+            .and_then(OsStr::to_str)
+            .map(FormatIdentifier::FileExtension)
             .ok_or(PhonicError::MissingData)
     }
 }

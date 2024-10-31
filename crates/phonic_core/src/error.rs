@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, io};
+use std::{convert::Infallible, error::Error, fmt::Display, io};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PhonicError {
@@ -35,6 +35,12 @@ impl Display for PhonicError {
     }
 }
 
+impl From<Infallible> for PhonicError {
+    fn from(error: Infallible) -> Self {
+        match error {}
+    }
+}
+
 impl From<io::Error> for PhonicError {
     fn from(error: io::Error) -> Self {
         match error.kind() {
@@ -50,8 +56,8 @@ impl From<io::Error> for PhonicError {
 }
 
 impl From<PhonicError> for io::Error {
-    fn from(e: PhonicError) -> Self {
-        let kind = match e {
+    fn from(error: PhonicError) -> Self {
+        let kind = match error {
             PhonicError::Unreachable => io::ErrorKind::Other,
             PhonicError::InvalidData => io::ErrorKind::InvalidData,
             PhonicError::MissingData => io::ErrorKind::InvalidData,
@@ -65,6 +71,6 @@ impl From<PhonicError> for io::Error {
             PhonicError::Other => io::ErrorKind::Other,
         };
 
-        Self::new(kind, e.to_string())
+        Self::new(kind, error.to_string())
     }
 }

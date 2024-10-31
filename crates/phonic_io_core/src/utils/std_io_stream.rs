@@ -1,6 +1,6 @@
-use crate::{StreamObserver, StreamReader, StreamSeeker, StreamWriter};
-use std::io::{Read, Seek, SeekFrom, Write};
+use crate::{FiniteStream, IndexedStream, StreamReader, StreamSeeker, StreamWriter};
 use phonic_core::PhonicError;
+use std::io::{Read, Seek, SeekFrom, Write};
 
 pub struct StdIoStream<T>(T);
 
@@ -28,23 +28,27 @@ where
 
 impl<T> Seek for StdIoStream<T>
 where
-    T: StreamSeeker + StreamObserver,
+    T: StreamSeeker + IndexedStream + FiniteStream,
 {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match pos {
             SeekFrom::Current(offset) => {
                 self.0.seek(offset)?;
-                self.0.position().map_err(Into::into)
+                Ok(self.0.pos())
             }
             SeekFrom::Start(position) => {
-                self.0.set_position(position)?;
-                Ok(position)
+                self.0.set_pos(position)?;
+                Ok(self.0.pos())
             }
             SeekFrom::End(offset) => {
-                let len = self.0.spec().n_bytes().ok_or(PhonicError::MissingData)?;
-                let position = (len as i64 + offset) as u64;
-                self.0.set_position(position)?;
-                Ok(position)
+                let position = self
+                    .0
+                    .len()
+                    .checked_add_signed(offset)
+                    .ok_or(PhonicError::OutOfBounds)?;
+
+                self.0.set_pos(position)?;
+                Ok(self.0.pos())
             }
         }
     }

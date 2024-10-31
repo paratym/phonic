@@ -1,4 +1,4 @@
-pub trait Sample: Copy + Sized + Send + Sync {
+pub trait Sample: Copy + Sized + Send + Sync + 'static {
     const ORIGIN: Self;
     const RANGE: (Self, Self);
 
