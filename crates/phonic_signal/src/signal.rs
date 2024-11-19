@@ -1,4 +1,4 @@
-use crate::{Sample, SignalSpec};
+use crate::{DefaultBuf, Sample, SignalSpec};
 use phonic_core::PhonicError;
 use std::{
     ops::{Deref, DerefMut},
@@ -26,8 +26,6 @@ pub trait IndexedSignal: Signal {
 }
 
 pub trait FiniteSignal: Signal {
-    #![allow(clippy::len_without_is_empty)]
-
     /// returns the total length of this signal as a number of frames.
     fn len(&self) -> u64;
 
@@ -38,6 +36,13 @@ pub trait FiniteSignal: Signal {
     fn len_duration(&self) -> Duration {
         let seconds = self.len() as f64 / self.spec().sample_rate as f64;
         Duration::from_secs_f64(seconds)
+    }
+
+    fn is_empty(&self) -> bool
+    where
+        Self: Sized + IndexedSignal,
+    {
+        self.pos() == self.len()
     }
 
     fn rem(&self) -> u64
@@ -95,6 +100,20 @@ pub trait SignalReader: Signal {
         }
 
         Ok(())
+    }
+
+    fn read_frames<'a>(
+        &mut self,
+        buf: &'a mut [Self::Sample],
+    ) -> Result<impl Iterator<Item = &'a [Self::Sample]>, PhonicError>
+    where
+        Self: Sized,
+    {
+        let n = self.read(buf)?;
+        let n_channels = self.spec().channels.count() as usize;
+        debug_assert_eq!(n % n_channels, 0);
+
+        Ok(buf[..n].chunks_exact(n_channels))
     }
 }
 
@@ -188,7 +207,7 @@ pub trait SignalWriter: Signal {
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let mut buf = [Self::Sample::ORIGIN; 2048];
+        let mut buf = DefaultBuf::default();
         self.copy_n_buffered(reader, n_frames, &mut buf, block)
     }
 
@@ -213,7 +232,7 @@ pub trait SignalWriter: Signal {
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
     {
-        let mut buf = [Self::Sample::ORIGIN; 2048];
+        let mut buf = DefaultBuf::default();
         self.copy_all_buffered(reader, &mut buf, block)
     }
 }
@@ -228,6 +247,20 @@ pub trait SignalSeeker: Signal {
     {
         let frame_offset = position as i64 - self.pos() as i64;
         self.seek(frame_offset)
+    }
+
+    fn seek_start(&mut self) -> Result<(), PhonicError>
+    where
+        Self: Sized + IndexedSignal,
+    {
+        self.set_pos(0)
+    }
+
+    fn seek_end(&mut self) -> Result<(), PhonicError>
+    where
+        Self: Sized + IndexedSignal + FiniteSignal,
+    {
+        self.set_pos(self.len())
     }
 }
 

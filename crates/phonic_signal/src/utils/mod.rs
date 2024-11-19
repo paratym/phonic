@@ -1,3 +1,3 @@
-mod generator;
+mod indexed;
 
-pub use generator::*;
+pub use indexed::*;

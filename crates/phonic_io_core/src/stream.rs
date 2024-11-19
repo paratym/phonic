@@ -14,6 +14,10 @@ pub trait Stream {
 pub trait IndexedStream: Stream {
     fn pos(&self) -> u64;
 
+    fn pos_blocks(&self) -> u64 {
+        self.pos() / self.stream_spec().block_align as u64
+    }
+
     fn pos_duration(&self) -> Duration {
         let seconds = self.pos() as f64 / self.stream_spec().avg_byte_rate as f64;
         Duration::from_secs_f64(seconds)
@@ -21,13 +25,22 @@ pub trait IndexedStream: Stream {
 }
 
 pub trait FiniteStream: Stream {
-    #![allow(clippy::len_without_is_empty)]
-
     fn len(&self) -> u64;
+
+    fn len_blocks(&self) -> u64 {
+        self.len() / self.stream_spec().block_align as u64
+    }
 
     fn len_duration(&self) -> Duration {
         let seconds = self.len() as f64 / self.stream_spec().avg_byte_rate as f64;
         Duration::from_secs_f64(seconds)
+    }
+
+    fn is_empty(&self) -> bool
+    where
+        Self: Sized + IndexedStream,
+    {
+        self.pos() == self.len()
     }
 
     fn rem(&self) -> u64
@@ -35,6 +48,13 @@ pub trait FiniteStream: Stream {
         Self: Sized + IndexedStream,
     {
         self.len() - self.pos()
+    }
+
+    fn rem_blocks(&self) -> u64
+    where
+        Self: Sized + IndexedStream,
+    {
+        self.rem() / self.stream_spec().block_align as u64
     }
 
     fn rem_duration(&self) -> Duration
@@ -202,6 +222,20 @@ pub trait StreamSeeker: Stream {
     {
         let offset = position as i64 - self.pos() as i64;
         self.seek(offset)
+    }
+
+    fn seek_start(&mut self) -> Result<(), PhonicError>
+    where
+        Self: Sized + IndexedStream,
+    {
+        self.set_pos(0)
+    }
+
+    fn seek_end(&mut self) -> Result<(), PhonicError>
+    where
+        Self: Sized + IndexedStream + FiniteStream,
+    {
+        self.set_pos(self.len())
     }
 }
 

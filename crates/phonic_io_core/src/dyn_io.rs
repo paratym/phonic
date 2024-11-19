@@ -45,9 +45,10 @@ pub trait DynSignal:
     where
         Self: Sized + 'static,
         C: DynCodecConstructor,
-        Box<Self>: Into<TaggedSignal>,
+        Box<dyn DynSignal<Sample = Self::Sample>>: Into<TaggedSignal>,
     {
-        codec.encoder(Box::new(self).into())
+        let boxed: Box<dyn DynSignal<Sample = Self::Sample>> = Box::new(self);
+        codec.encoder(boxed.into())
     }
 }
 

@@ -1,7 +1,7 @@
 use phonic::{
+    dsp::ops::TaggedSignalExt,
     io::{
-        utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, FormatReader,
-        KnownFormat, StreamSpec,
+        utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, KnownFormat, StreamSpec,
     },
     signal::SignalWriter,
     PhonicError,
@@ -20,7 +20,7 @@ fn main() -> Result<(), PhonicError> {
         .read_index(src_file)?
         .into_default_stream()?
         .into_decoder()?
-        .adapt_sample_type();
+        .convert();
 
     let spec = StreamSpec::builder()
         .with_decoded_spec(*decoder.spec())
@@ -32,13 +32,11 @@ fn main() -> Result<(), PhonicError> {
     let dst_file = File::create(dst_path)?;
 
     let dst_fmt = KnownFormat::try_from(&FormatIdentifier::try_from(dst_path)?)?;
-    let mut muxer = dst_fmt.write_index(dst_file, [spec])?;
-    let mut encoder = muxer
-        .as_default_stream()?
-        .into_decoder()?
-        .unwrap_i16_signal()?;
+    let muxer = dst_fmt.write_index(dst_file, [spec])?;
+    let mut encoder = muxer.into_default_stream()?.into_decoder()?.unwrap_i16()?;
 
-    encoder.copy_all(&mut decoder, true)?;
+    SignalWriter::copy_all(&mut encoder, &mut decoder, true)?;
+    // TODO: muxer.finalize()
 
-    muxer.finalize()
+    Ok(())
 }

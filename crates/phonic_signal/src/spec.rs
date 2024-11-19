@@ -19,6 +19,13 @@ pub struct SignalSpecBuilder {
 }
 
 impl SignalSpec {
+    pub fn new(sample_rate: u32, channels: impl Into<Channels>) -> Self {
+        Self {
+            sample_rate,
+            channels: channels.into(),
+        }
+    }
+
     pub fn builder() -> SignalSpecBuilder {
         SignalSpecBuilder::new()
     }
