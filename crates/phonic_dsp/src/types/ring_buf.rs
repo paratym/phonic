@@ -1,9 +1,10 @@
-use phonic_core::PhonicError;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+use phonic_signal::{PhonicError, PhonicResult};
 
 #[derive(Clone, Copy)]
 struct Cursor {
@@ -107,7 +108,7 @@ impl<B> SpmcRingBuf<B> {
         self.buf_distance(cursor.pos, self.end)
     }
 
-    pub fn extend_buf(&mut self, n: usize) -> Result<(), PhonicError> {
+    pub fn extend_buf(&mut self, n: usize) -> PhonicResult<()> {
         let available = if self.empty {
             self.buf_len
         } else {
@@ -150,7 +151,7 @@ impl<B> SpmcRingBuf<B> {
         (&self.buf[cursor.pos..self.buf_len], &self.buf[..self.end])
     }
 
-    pub fn advance_instance(&mut self, id: &usize, n: usize) -> Result<(), PhonicError> {
+    pub fn advance_instance(&mut self, id: &usize, n: usize) -> PhonicResult<()> {
         let Some(cursor) = self.cursor.get_mut(id) else {
             return Err(PhonicError::NotFound);
         };

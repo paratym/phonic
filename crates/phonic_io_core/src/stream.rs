@@ -1,5 +1,5 @@
 use crate::{CodecTag, StreamSpec};
-use phonic_core::PhonicError;
+use phonic_signal::{PhonicError, PhonicResult};
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
@@ -68,9 +68,9 @@ pub trait FiniteStream: Stream {
 const POLL_TO_BUF_RATIO: u32 = 6;
 
 pub trait StreamReader: Stream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, PhonicError>;
+    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize>;
 
-    fn read_exact(&mut self, mut buf: &mut [u8], block: bool) -> Result<(), PhonicError> {
+    fn read_exact(&mut self, mut buf: &mut [u8], block: bool) -> PhonicResult<()> {
         let buf_len = buf.len();
         if buf_len % self.stream_spec().block_align != 0 {
             return Err(PhonicError::SignalMismatch);
@@ -98,10 +98,10 @@ pub trait StreamReader: Stream {
 }
 
 pub trait StreamWriter: Stream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, PhonicError>;
-    fn flush(&mut self) -> Result<(), PhonicError>;
+    fn write(&mut self, buf: &[u8]) -> PhonicResult<usize>;
+    fn flush(&mut self) -> PhonicResult<()>;
 
-    fn write_exact(&mut self, mut buf: &[u8], block: bool) -> Result<(), PhonicError> {
+    fn write_exact(&mut self, mut buf: &[u8], block: bool) -> PhonicResult<()> {
         let buf_len = buf.len();
         if buf_len % self.stream_spec().block_align != 0 {
             return Err(PhonicError::SignalMismatch);
@@ -133,7 +133,7 @@ pub trait StreamWriter: Stream {
         n_bytes: usize,
         buf: &mut [u8],
         block: bool,
-    ) -> Result<(), PhonicError>
+    ) -> PhonicResult<()>
     where
         Self: Sized,
         R: StreamReader,
@@ -174,7 +174,7 @@ pub trait StreamWriter: Stream {
         Ok(())
     }
 
-    fn copy_n<R>(&mut self, reader: &mut R, n_bytes: usize, block: bool) -> Result<(), PhonicError>
+    fn copy_n<R>(&mut self, reader: &mut R, n_bytes: usize, block: bool) -> PhonicResult<()>
     where
         Self: Sized,
         R: StreamReader,
@@ -189,7 +189,7 @@ pub trait StreamWriter: Stream {
         reader: &mut R,
         buf: &mut [u8],
         block: bool,
-    ) -> Result<(), PhonicError>
+    ) -> PhonicResult<()>
     where
         Self: Sized,
         R: StreamReader,
@@ -202,7 +202,7 @@ pub trait StreamWriter: Stream {
         }
     }
 
-    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> Result<(), PhonicError>
+    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> PhonicResult<()>
     where
         Self: Sized,
         R: StreamReader,
@@ -214,9 +214,9 @@ pub trait StreamWriter: Stream {
 }
 
 pub trait StreamSeeker: Stream {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError>;
+    fn seek(&mut self, offset: i64) -> PhonicResult<()>;
 
-    fn set_pos(&mut self, position: u64) -> Result<(), PhonicError>
+    fn set_pos(&mut self, position: u64) -> PhonicResult<()>
     where
         Self: Sized + IndexedStream,
     {
@@ -224,14 +224,14 @@ pub trait StreamSeeker: Stream {
         self.seek(offset)
     }
 
-    fn seek_start(&mut self) -> Result<(), PhonicError>
+    fn seek_start(&mut self) -> PhonicResult<()>
     where
         Self: Sized + IndexedStream,
     {
         self.set_pos(0)
     }
 
-    fn seek_end(&mut self) -> Result<(), PhonicError>
+    fn seek_end(&mut self) -> PhonicResult<()>
     where
         Self: Sized + IndexedStream + FiniteStream,
     {
@@ -276,7 +276,7 @@ where
     T: DerefMut,
     T::Target: StreamReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
         self.deref_mut().read(buf)
     }
 }
@@ -286,11 +286,11 @@ where
     T: DerefMut,
     T::Target: StreamWriter,
 {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[u8]) -> PhonicResult<usize> {
         self.deref_mut().write(buf)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.deref_mut().flush()
     }
 }
@@ -300,7 +300,7 @@ where
     T: DerefMut,
     T::Target: StreamSeeker,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.deref_mut().seek(offset)
     }
 }

@@ -1,7 +1,8 @@
 use crate::{WaveFormatTag, WaveSupportedCodec};
-use phonic_core::PhonicError;
 use phonic_io_core::{CodecTag, FormatTag, KnownSampleType, StreamSpec};
-use phonic_signal::{ChannelLayout, Channels, SignalSpec, SignalSpecBuilder};
+use phonic_signal::{
+    ChannelLayout, Channels, PhonicError, PhonicResult, SignalSpec, SignalSpecBuilder,
+};
 use std::io::{Read, Write};
 
 const RIFF_CHUNK_ID: &[u8; 4] = b"RIFF";
@@ -58,7 +59,7 @@ impl WaveHeader {
             + self.data.byte_len
     }
 
-    pub fn read(reader: &mut impl Read) -> Result<Self, PhonicError> {
+    pub fn read(reader: &mut impl Read) -> PhonicResult<Self> {
         let mut buf = [0u8; 40];
 
         reader.read_exact(&mut buf[0..12])?;
@@ -104,7 +105,7 @@ impl WaveHeader {
         })
     }
 
-    pub fn write(&self, writer: &mut impl Write) -> Result<(), PhonicError> {
+    pub fn write(&self, writer: &mut impl Write) -> PhonicResult<()> {
         let mut buf = [0u8; 40];
 
         buf[0..4].copy_from_slice(RIFF_CHUNK_ID);
@@ -218,7 +219,7 @@ impl FmtChunk {
         }
     }
 
-    fn read(buf: &[u8]) -> Result<Self, PhonicError> {
+    fn read(buf: &[u8]) -> PhonicResult<Self> {
         let buf_len = buf.len();
         if buf_len != 16 && buf_len != 18 && buf_len != 40 {
             return Err(PhonicError::InvalidData);
@@ -254,7 +255,7 @@ impl FmtChunk {
         Ok(chunk)
     }
 
-    fn write(&self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn write(&self, buf: &mut [u8]) -> PhonicResult<usize> {
         let byte_len = self.byte_len() as usize;
         if buf.len() < byte_len {
             return Err(PhonicError::InvalidData);
@@ -283,7 +284,7 @@ impl FactChunk {
         4
     }
 
-    fn read(buf: &[u8]) -> Result<Self, PhonicError> {
+    fn read(buf: &[u8]) -> PhonicResult<Self> {
         let buf_len = buf.len();
         if buf_len != 4 {
             return Err(PhonicError::InvalidData);
@@ -294,7 +295,7 @@ impl FactChunk {
         })
     }
 
-    fn write(&self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn write(&self, buf: &mut [u8]) -> PhonicResult<usize> {
         if buf.len() < 4 {
             return Err(PhonicError::InvalidData);
         }

@@ -1,7 +1,6 @@
-use phonic_core::PhonicError;
 use phonic_signal::{
-    DefaultBuf, FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker,
-    SignalSpec, SignalWriter,
+    DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
+    SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::{marker::PhantomData, ops::DerefMut};
 
@@ -91,7 +90,7 @@ where
     S: Sample,
     B: DerefMut<Target = [T::Sample]>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let buf_len = buf.len().min(self.buf.len());
         let n = self.inner.read(&mut self.buf[..buf_len])?;
 
@@ -110,7 +109,7 @@ where
     S: Sample + IntoSample<T::Sample>,
     B: DerefMut<Target = [T::Sample]>,
 {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let buf_len = buf.len().min(self.buf.len());
 
         self.buf
@@ -121,7 +120,7 @@ where
         self.inner.write(&self.buf[..buf_len])
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
@@ -131,7 +130,7 @@ where
     T: SignalSeeker,
     S: Sample,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset)
     }
 }

@@ -1,5 +1,4 @@
-use crate::{DefaultBuf, Sample, SignalSpec};
-use phonic_core::PhonicError;
+use crate::{DefaultBuf, PhonicError, PhonicResult, Sample, SignalSpec};
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
@@ -72,13 +71,13 @@ const POLL_TO_BUF_RATIO: u32 = 6;
 pub trait SignalReader: Signal {
     /// reads samples from this signal into the given buffer.
     /// returns the number of interleaved samples read.
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError>;
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize>;
 
-    fn read_exact(&mut self, mut buf: &mut [Self::Sample], block: bool) -> Result<(), PhonicError> {
+    fn read_exact(&mut self, mut buf: &mut [Self::Sample], block: bool) -> PhonicResult<()> {
         let buf_len = buf.len();
         let spec = self.spec();
         if buf_len % spec.channels.count() as usize != 0 {
-            return Err(PhonicError::SignalMismatch);
+            return Err(PhonicError::InvalidInput);
         }
 
         let poll_interval = spec.sample_rate_duration() * buf_len as u32
@@ -105,7 +104,7 @@ pub trait SignalReader: Signal {
     fn read_frames<'a>(
         &mut self,
         buf: &'a mut [Self::Sample],
-    ) -> Result<impl Iterator<Item = &'a [Self::Sample]>, PhonicError>
+    ) -> PhonicResult<impl Iterator<Item = &'a [Self::Sample]>>
     where
         Self: Sized,
     {
@@ -120,15 +119,16 @@ pub trait SignalReader: Signal {
 pub trait SignalWriter: Signal {
     /// writes samples from the given buffer to this signal.
     /// returns the number of interleaved samples written.
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError>;
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize>;
 
-    fn flush(&mut self) -> Result<(), PhonicError>;
+    fn flush(&mut self) -> PhonicResult<()>;
 
-    fn write_exact(&mut self, mut buf: &[Self::Sample], block: bool) -> Result<(), PhonicError> {
+    fn write_exact(&mut self, mut buf: &[Self::Sample], block: bool) -> PhonicResult<()> {
         let buf_len = buf.len();
         let spec = self.spec();
         if buf_len % spec.channels.count() as usize != 0 {
-            return Err(PhonicError::SignalMismatch);
+            // return Err(PhonicError::SignalMismatch);
+            todo!()
         }
 
         let poll_interval = spec.sample_rate_duration() * buf_len as u32
@@ -152,14 +152,13 @@ pub trait SignalWriter: Signal {
         Ok(())
     }
 
-    /// copies a given number of frames from a `SignalReader` to this signal via a given buffer.
     fn copy_n_buffered<R>(
         &mut self,
         reader: &mut R,
         n_frames: u64,
         buf: &mut [Self::Sample],
         block: bool,
-    ) -> Result<(), PhonicError>
+    ) -> PhonicResult<()>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
@@ -169,7 +168,8 @@ pub trait SignalWriter: Signal {
         let buf_len = buf.len();
 
         if !spec.is_compatible(reader.spec()) || buf_len < n_channels as usize {
-            return Err(PhonicError::SignalMismatch);
+            // return Err(PhonicError::SignalMismatch);
+            todo!()
         }
 
         let n_samples = n_frames.saturating_mul(n_channels as u64);
@@ -202,7 +202,7 @@ pub trait SignalWriter: Signal {
     /// copies a given number of frames from a `SignalReader` directly to this signal.
     /// if this method isn't implemented it falls back to copying via a stack allocated
     /// buffer.
-    fn copy_n<R>(&mut self, reader: &mut R, n_frames: u64, block: bool) -> Result<(), PhonicError>
+    fn copy_n<R>(&mut self, reader: &mut R, n_frames: u64, block: bool) -> PhonicResult<()>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
@@ -216,7 +216,7 @@ pub trait SignalWriter: Signal {
         reader: &mut R,
         buf: &mut [Self::Sample],
         block: bool,
-    ) -> Result<(), PhonicError>
+    ) -> PhonicResult<()>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
@@ -227,7 +227,7 @@ pub trait SignalWriter: Signal {
         }
     }
 
-    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> Result<(), PhonicError>
+    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> PhonicResult<()>
     where
         Self: Sized,
         R: SignalReader<Sample = Self::Sample>,
@@ -239,9 +239,9 @@ pub trait SignalWriter: Signal {
 
 pub trait SignalSeeker: Signal {
     /// moves the current position of the stream by the given number of frames
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError>;
+    fn seek(&mut self, offset: i64) -> PhonicResult<()>;
 
-    fn set_pos(&mut self, position: u64) -> Result<(), PhonicError>
+    fn set_pos(&mut self, position: u64) -> PhonicResult<()>
     where
         Self: Sized + IndexedSignal,
     {
@@ -249,14 +249,14 @@ pub trait SignalSeeker: Signal {
         self.seek(frame_offset)
     }
 
-    fn seek_start(&mut self) -> Result<(), PhonicError>
+    fn seek_start(&mut self) -> PhonicResult<()>
     where
         Self: Sized + IndexedSignal,
     {
         self.set_pos(0)
     }
 
-    fn seek_end(&mut self) -> Result<(), PhonicError>
+    fn seek_end(&mut self) -> PhonicResult<()>
     where
         Self: Sized + IndexedSignal + FiniteSignal,
     {
@@ -304,7 +304,7 @@ where
     T: DerefMut,
     T::Target: SignalReader<Sample = S>,
 {
-    fn read(&mut self, buffer: &mut [S]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buffer: &mut [S]) -> PhonicResult<usize> {
         self.deref_mut().read(buffer)
     }
 }
@@ -315,11 +315,11 @@ where
     T: DerefMut,
     T::Target: SignalWriter<Sample = S>,
 {
-    fn write(&mut self, buffer: &[S]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buffer: &[S]) -> PhonicResult<usize> {
         self.deref_mut().write(buffer)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.deref_mut().flush()
     }
 }
@@ -330,7 +330,7 @@ where
     T: DerefMut,
     T::Target: SignalSeeker<Sample = S>,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.deref_mut().seek(offset)
     }
 }

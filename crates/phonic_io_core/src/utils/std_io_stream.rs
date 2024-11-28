@@ -1,5 +1,4 @@
 use crate::{FiniteStream, IndexedStream, StreamReader, StreamSeeker, StreamWriter};
-use phonic_core::PhonicError;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 pub struct StdIoStream<T>(T);

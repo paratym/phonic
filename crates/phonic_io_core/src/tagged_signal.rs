@@ -1,6 +1,5 @@
 use crate::DynSignal;
-use phonic_core::PhonicError;
-use phonic_signal::{Sample, Signal, SignalSpec};
+use phonic_signal::{PhonicError, Sample, Signal, SignalSpec};
 use std::{any::TypeId, mem::size_of};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -134,7 +133,7 @@ macro_rules! impl_unwrap {
         pub fn $name(self) -> Result<Box<dyn DynSignal<Sample = $sample>>, PhonicError> {
             match self {
                 Self::$variant(signal) => Ok(signal),
-                _ => Err(PhonicError::SignalMismatch),
+                _ => todo!(), /* Err(PhonicError::SignalMismatch) */
             }
         }
     };

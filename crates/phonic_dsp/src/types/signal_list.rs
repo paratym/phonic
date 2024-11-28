@@ -1,7 +1,6 @@
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader,
+    SignalSeeker, SignalSpec, SignalWriter,
 };
 
 pub trait SignalList {
@@ -40,16 +39,16 @@ pub trait FiniteSignalList: SignalList {
 }
 
 pub trait SignalReaderList: SignalList {
-    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> Result<usize, PhonicError>;
+    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize>;
 }
 
 pub trait SignalWriterList: SignalList {
-    fn write(&mut self, i: usize, buf: &[Self::Sample]) -> Result<usize, PhonicError>;
-    fn flush(&mut self, i: usize) -> Result<(), PhonicError>;
+    fn write(&mut self, i: usize, buf: &[Self::Sample]) -> PhonicResult<usize>;
+    fn flush(&mut self, i: usize) -> PhonicResult<()>;
 }
 
 pub trait SignalSeekerList: SignalList {
-    fn seek(&mut self, i: usize, offset: i64) -> Result<(), PhonicError>;
+    fn seek(&mut self, i: usize, offset: i64) -> PhonicResult<()>;
 }
 
 impl<T: Signal, const N: usize> SignalList for [T; N] {
@@ -83,23 +82,23 @@ impl<T: FiniteSignal, const N: usize> FiniteSignalList for [T; N] {
 }
 
 impl<T: SignalReader, const N: usize> SignalReaderList for [T; N] {
-    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         self[i].read(buf)
     }
 }
 
 impl<T: SignalWriter, const N: usize> SignalWriterList for [T; N] {
-    fn write(&mut self, i: usize, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, i: usize, buf: &[Self::Sample]) -> PhonicResult<usize> {
         self[i].write(buf)
     }
 
-    fn flush(&mut self, i: usize) -> Result<(), PhonicError> {
+    fn flush(&mut self, i: usize) -> PhonicResult<()> {
         self[i].flush()
     }
 }
 
 impl<T: SignalSeeker, const N: usize> SignalSeekerList for [T; N] {
-    fn seek(&mut self, i: usize, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, i: usize, offset: i64) -> PhonicResult<()> {
         self[i].seek(offset)
     }
 }
@@ -137,23 +136,23 @@ macro_rules! impl_slice_list {
         }
 
         impl<$signal: SignalReader> SignalReaderList for $typ {
-            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
                 self[i].read(buf)
             }
         }
 
         impl<$signal: SignalWriter> SignalWriterList for $typ {
-            fn write(&mut self, i: usize, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+            fn write(&mut self, i: usize, buf: &[Self::Sample]) -> PhonicResult<usize> {
                 self[i].write(buf)
             }
 
-            fn flush(&mut self, i: usize) -> Result<(), PhonicError> {
+            fn flush(&mut self, i: usize) -> PhonicResult<()> {
                 self[i].flush()
             }
         }
 
         impl<$signal: SignalSeeker> SignalSeekerList for $typ {
-            fn seek(&mut self, i: usize, offset: i64) -> Result<(), PhonicError> {
+            fn seek(&mut self, i: usize, offset: i64) -> PhonicResult<()> {
                 self[i].seek(offset)
             }
         }
@@ -219,7 +218,7 @@ macro_rules! impl_tuple_list {
             $first: SignalReader,
             $($rest: SignalReader<Sample = $first::Sample>),+
         > SignalReaderList for ($first, $($rest),+) {
-            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
                 match i {
                     $first_i => self.$first_i.read(buf),
                     $($rest_i => self.$rest_i.read(buf)),+,
@@ -232,7 +231,7 @@ macro_rules! impl_tuple_list {
             $first: SignalWriter,
             $($rest: SignalWriter<Sample = $first::Sample>),+
         > SignalWriterList for ($first, $($rest),+) {
-            fn write(&mut self, i: usize, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+            fn write(&mut self, i: usize, buf: &[Self::Sample]) -> PhonicResult<usize> {
                 match i {
                     $first_i => self.$first_i.write(buf),
                     $($rest_i => self.$rest_i.write(buf)),+,
@@ -240,7 +239,7 @@ macro_rules! impl_tuple_list {
                 }
             }
 
-            fn flush(&mut self, i: usize)  -> Result<(), PhonicError> {
+            fn flush(&mut self, i: usize)  -> PhonicResult<()> {
                 match i {
                     $first_i => self.$first_i.flush(),
                     $($rest_i => self.$rest_i.flush()),+,
@@ -253,7 +252,7 @@ macro_rules! impl_tuple_list {
             $first: SignalSeeker,
             $($rest: SignalSeeker<Sample = $first::Sample>),+
         > SignalSeekerList for ($first, $($rest),+) {
-            fn seek(&mut self, i: usize, offset: i64) -> Result<(), PhonicError> {
+            fn seek(&mut self, i: usize, offset: i64) -> PhonicResult<()> {
                 match i {
                     $first_i => self.$first_i.seek(offset),
                     $($rest_i => self.$rest_i.seek(offset)),+,

@@ -1,5 +1,6 @@
-use phonic_core::PhonicError;
-use phonic_signal::{FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalSpec};
+use phonic_signal::{
+    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
+};
 
 pub struct Repeat<T> {
     inner: T,
@@ -46,10 +47,10 @@ impl<T: FiniteSignal> FiniteSignal for Repeat<T> {
 }
 
 impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         while self.current < self.reps {
             let result = self.inner.read(buf);
-            if result != Ok(0) {
+            if !result.as_ref().is_ok_and(|n| *n == 0) {
                 return result;
             }
 
@@ -62,7 +63,7 @@ impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> 
 }
 
 impl<T: IndexedSignal + FiniteSignal + SignalSeeker> SignalSeeker for Repeat<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }

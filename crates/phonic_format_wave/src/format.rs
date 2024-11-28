@@ -1,9 +1,9 @@
 use crate::{WaveFormatTag, WaveHeader};
-use phonic_core::PhonicError;
 use phonic_io_core::{
     Format, FormatConstructor, FormatReader, FormatSeeker, FormatTag, FormatWriter, IndexedStream,
     Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
+use phonic_signal::{PhonicError, PhonicResult};
 use std::io::{Read, Seek, Write};
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
@@ -17,7 +17,7 @@ where
     StreamSpec<F::Codec>: TryInto<WaveHeader, Error = PhonicError>,
     WaveHeader: TryInto<StreamSpec<F::Codec>, Error = PhonicError>,
 {
-    fn read_index(mut inner: T) -> Result<Self, PhonicError>
+    fn read_index(mut inner: T) -> PhonicResult<Self>
     where
         Self: Format<Tag = F>,
         T: Read,
@@ -32,7 +32,7 @@ where
         })
     }
 
-    fn write_index<I>(mut inner: T, index: I) -> Result<Self, PhonicError>
+    fn write_index<I>(mut inner: T, index: I) -> PhonicResult<Self>
     where
         Self: Format<Tag = F>,
         T: Write,
@@ -87,7 +87,7 @@ where
     F: FormatTag,
     Self: Format<Tag = F> + StreamReader<Tag = F::Codec>,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<(usize, usize), PhonicError> {
+    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
         let n = StreamReader::read(self, buf)?;
         Ok((0, n))
     }
@@ -99,18 +99,18 @@ where
     F: FormatTag,
     Self: Format<Tag = F> + StreamWriter<Tag = F::Codec>,
 {
-    fn write(&mut self, stream: usize, buf: &[u8]) -> Result<usize, PhonicError> {
+    fn write(&mut self, stream: usize, buf: &[u8]) -> PhonicResult<usize> {
         match stream {
             0 => StreamWriter::write(self, buf),
             _ => Err(PhonicError::NotFound),
         }
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         StreamWriter::flush(self)
     }
 
-    fn finalize(&mut self) -> Result<(), PhonicError> {
+    fn finalize(&mut self) -> PhonicResult<()> {
         todo!()
     }
 }
@@ -121,7 +121,7 @@ where
     F: FormatTag,
     Self: Format<Tag = F> + StreamSeeker<Tag = F::Codec>,
 {
-    fn seek(&mut self, stream: usize, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, stream: usize, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }
@@ -145,7 +145,7 @@ where
 }
 
 impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.stream_spec().block_align;
 
@@ -153,7 +153,7 @@ impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
         loop {
             match self.inner.read(&mut buf[n..len])? {
                 0 if n == 0 => break,
-                0 => return Err(PhonicError::SignalMismatch),
+                0 => return Err(todo!()),
                 n_read => n += n_read,
             }
 
@@ -168,7 +168,7 @@ impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
 }
 
 impl<T: Write, F: FormatTag> StreamWriter for WaveFormat<T, F> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[u8]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.stream_spec().block_align;
 
@@ -176,7 +176,7 @@ impl<T: Write, F: FormatTag> StreamWriter for WaveFormat<T, F> {
         loop {
             match self.inner.write(&buf[n..len])? {
                 0 if n == 0 => break,
-                0 => return Err(PhonicError::SignalMismatch),
+                0 => return Err(todo!()),
                 n_written => n += n_written,
             }
 
@@ -189,13 +189,13 @@ impl<T: Write, F: FormatTag> StreamWriter for WaveFormat<T, F> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush().map_err(Into::into)
     }
 }
 
 impl<T: Seek, F: FormatTag> StreamSeeker for WaveFormat<T, F> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }

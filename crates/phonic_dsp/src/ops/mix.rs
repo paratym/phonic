@@ -5,9 +5,9 @@ use crate::{
         SignalSeekerList,
     },
 };
-use phonic_core::PhonicError;
 use phonic_signal::{
-    DefaultBuf, FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
+    DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
+    SignalSeeker, SignalSpec,
 };
 use std::ops::DerefMut;
 
@@ -25,14 +25,14 @@ pub trait MixSample {
 }
 
 impl<T: IndexedSignalList, B> Mix<T, B> {
-    pub fn new(inner: T) -> Result<Self, PhonicError>
+    pub fn new(inner: T) -> PhonicResult<Self>
     where
         B: Default,
     {
         Self::new_buffered(inner, B::default())
     }
 
-    pub fn new_buffered(inner: T, buf: B) -> Result<Self, PhonicError> {
+    pub fn new_buffered(inner: T, buf: B) -> PhonicResult<Self> {
         let spec = inner.spec()?;
         let queue = PosQueue::new(&inner);
 
@@ -55,11 +55,11 @@ impl<T: IndexedSignalList, B> Mix<T, B> {
     }
 }
 
-impl<T, U, B> Mix<(T, Complement<U>), B>
+impl<T, C, B> Mix<(T, Complement<C>), B>
 where
-    (T, Complement<U>): IndexedSignalList,
+    (T, Complement<C>): IndexedSignalList,
 {
-    pub fn cancel(inner: T, other: U) -> Result<Self, PhonicError>
+    pub fn cancel(inner: T, other: C) -> PhonicResult<Self>
     where
         B: Default,
     {
@@ -67,7 +67,7 @@ where
         Self::new((inner, complement))
     }
 
-    pub fn cancel_buffered(inner: T, other: U, buf: B) -> Result<Self, PhonicError> {
+    pub fn cancel_buffered(inner: T, other: C, buf: B) -> PhonicResult<Self> {
         let complement = Complement::new(other);
         Self::new_buffered((inner, complement), buf)
     }
@@ -137,7 +137,7 @@ where
     T::Sample: MixSample,
     B: DerefMut<Target = [T::Sample]>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
             return Ok(0);
         };
@@ -207,7 +207,7 @@ impl<T, B> SignalSeeker for Mix<T, B>
 where
     T: IndexedSignalList + SignalSeekerList,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }

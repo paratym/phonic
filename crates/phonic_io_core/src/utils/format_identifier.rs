@@ -1,4 +1,4 @@
-use phonic_core::PhonicError;
+use phonic_signal::PhonicError;
 use std::{ffi::OsStr, path::Path};
 
 pub struct FormatIdentifiers {

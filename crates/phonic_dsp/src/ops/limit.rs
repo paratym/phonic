@@ -1,6 +1,7 @@
 use crate::ops::ComplementSample;
-use phonic_core::PhonicError;
-use phonic_signal::{FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker};
+use phonic_signal::{
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
+};
 
 pub struct Limit<T: Signal> {
     inner: T,
@@ -81,7 +82,7 @@ impl<T: SignalReader> SignalReader for Limit<T>
 where
     Self::Sample: LimitSample,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.read(buf)?;
 
         buf[..n]
@@ -93,7 +94,7 @@ where
 }
 
 impl<T: SignalSeeker> SignalSeeker for Limit<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset)
     }
 }

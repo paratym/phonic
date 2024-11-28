@@ -1,8 +1,9 @@
+use phonic_signal::PhonicError;
+
 use crate::{
     FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter, IndexedStream,
     Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
-use phonic_core::PhonicError;
 
 pub struct StreamSelector<F> {
     inner: F,

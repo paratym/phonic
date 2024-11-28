@@ -1,7 +1,7 @@
 use crate::{
-    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalSpec, SignalWriter,
 };
-use phonic_core::PhonicError;
 
 pub struct Indexed<T> {
     inner: T,
@@ -35,7 +35,7 @@ impl<T: FiniteSignal> FiniteSignal for Indexed<T> {
 }
 
 impl<T: SignalReader> SignalReader for Indexed<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.read(buf)?;
         self.pos += n as u64;
         Ok(n)
@@ -43,19 +43,19 @@ impl<T: SignalReader> SignalReader for Indexed<T> {
 }
 
 impl<T: SignalWriter> SignalWriter for Indexed<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.write(buf)?;
         self.pos += n as u64;
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
 
 impl<T: SignalSeeker> SignalSeeker for Indexed<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.pos = self
             .pos
             .checked_add_signed(offset)

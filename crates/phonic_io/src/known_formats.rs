@@ -1,10 +1,10 @@
 use crate::KnownCodec;
 use lazy_static::lazy_static;
-use phonic_core::PhonicError;
 use phonic_io_core::{
     utils::FormatIdentifier, DynFormat, DynFormatConstructor, FormatConstructor, FormatTag,
     StdIoSource, StreamSpec,
 };
+use phonic_signal::{PhonicError, PhonicResult};
 use std::collections::HashMap;
 
 lazy_static! {
@@ -50,7 +50,7 @@ impl FormatTag for KnownFormat {
 }
 
 impl DynFormatConstructor for KnownFormat {
-    fn read_index<T>(&self, inner: T) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    fn read_index<T>(&self, inner: T) -> PhonicResult<Box<dyn DynFormat<Tag = Self>>>
     where
         T: StdIoSource + 'static,
     {
@@ -65,11 +65,7 @@ impl DynFormatConstructor for KnownFormat {
         })
     }
 
-    fn write_index<T, I>(
-        &self,
-        inner: T,
-        index: I,
-    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    fn write_index<T, I>(&self, inner: T, index: I) -> PhonicResult<Box<dyn DynFormat<Tag = Self>>>
     where
         T: StdIoSource + 'static,
         I: IntoIterator<Item = StreamSpec<Self::Codec>>,
@@ -113,6 +109,8 @@ impl TryFrom<KnownFormat> for crate::formats::wave::WaveFormatTag {
     fn try_from(format: KnownFormat) -> Result<Self, Self::Error> {
         match format {
             KnownFormat::Wave => Ok(Self),
+
+            #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
         }
     }

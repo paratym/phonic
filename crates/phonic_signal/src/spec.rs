@@ -1,5 +1,4 @@
-use crate::Channels;
-use phonic_core::PhonicError;
+use crate::{Channels, PhonicError, PhonicResult};
 use std::{f64, time::Duration};
 
 /// A set of parameters that describes an interleaved pcm signal
@@ -43,16 +42,17 @@ impl SignalSpec {
         self.sample_rate == other.sample_rate && self.channels.is_compatible(&other.channels)
     }
 
-    pub fn merge(&mut self, other: &Self) -> Result<(), PhonicError> {
+    pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if self.sample_rate != other.sample_rate {
-            return Err(PhonicError::SignalMismatch);
+            // return Err(PhonicError::SignalMismatch);
+            todo!()
         }
 
         self.channels.merge(&other.channels)?;
         Ok(())
     }
 
-    pub fn merged(mut self, other: &Self) -> Result<Self, PhonicError> {
+    pub fn merged(mut self, other: &Self) -> PhonicResult<Self> {
         self.merge(other)?;
         Ok(self)
     }
@@ -118,10 +118,11 @@ impl SignalSpecBuilder {
         sample_rates_compatible && channels_compatible
     }
 
-    pub fn merge(&mut self, other: &Self) -> Result<(), PhonicError> {
+    pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if let Some(sample_rate) = other.sample_rate {
             if self.sample_rate.get_or_insert(sample_rate) != &sample_rate {
-                return Err(PhonicError::SignalMismatch);
+                // return Err(PhonicError::SignalMismatch);
+                todo!()
             }
         }
 
@@ -134,12 +135,12 @@ impl SignalSpecBuilder {
         Ok(())
     }
 
-    pub fn merged(mut self, other: &Self) -> Result<Self, PhonicError> {
+    pub fn merged(mut self, other: &Self) -> PhonicResult<Self> {
         self.merge(other)?;
         Ok(self)
     }
 
-    pub fn build(self) -> Result<SignalSpec, PhonicError> {
+    pub fn build(self) -> PhonicResult<SignalSpec> {
         self.try_into()
     }
 }

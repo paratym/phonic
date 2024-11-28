@@ -1,5 +1,4 @@
-use phonic_core::PhonicError;
-use phonic_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use phonic_signal::{PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter};
 use std::marker::PhantomData;
 
 pub struct NullSignal<S> {
@@ -25,7 +24,7 @@ impl<S: Sample> Signal for NullSignal<S> {
 }
 
 impl<S: Sample> SignalReader for NullSignal<S> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.spec().channels.count() as usize;
 
@@ -35,14 +34,14 @@ impl<S: Sample> SignalReader for NullSignal<S> {
 }
 
 impl<S: Sample> SignalWriter for NullSignal<S> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.spec().channels.count() as usize;
 
         Ok(len)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         Ok(())
     }
 }

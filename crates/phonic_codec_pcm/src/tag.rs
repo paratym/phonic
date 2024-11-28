@@ -1,20 +1,20 @@
 use crate::PcmCodec;
-use phonic_core::PhonicError;
 use phonic_io_core::{
     match_tagged_signal, CodecConstructor, CodecTag, DynStream, KnownSampleType, StreamSpecBuilder,
     TaggedSignal,
 };
+use phonic_signal::{PhonicError, PhonicResult};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct PcmCodecTag;
 
 impl CodecTag for PcmCodecTag {
-    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> Result<(), PhonicError> {
+    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> PhonicResult<()> {
         infer_pcm_spec(spec)
     }
 }
 
-pub fn infer_pcm_spec<C>(spec: &mut StreamSpecBuilder<C>) -> Result<(), PhonicError>
+pub fn infer_pcm_spec<C>(spec: &mut StreamSpecBuilder<C>) -> PhonicResult<()>
 where
     C: CodecTag,
     PcmCodecTag: TryInto<C>,
@@ -22,7 +22,7 @@ where
 {
     if let Ok(expected_codec) = PcmCodecTag.try_into() {
         if *spec.codec.get_or_insert(expected_codec) != expected_codec {
-            return Err(PhonicError::InvalidData);
+            return Err(PhonicError::Unsupported);
         }
     }
 
@@ -40,7 +40,7 @@ where
         .map(|rate| rate * sample_type.byte_size() as u32)
     {
         if *spec.avg_byte_rate.get_or_insert(calculated_byte_rate) != calculated_byte_rate {
-            return Err(PhonicError::InvalidData);
+            return Err(PhonicError::Unsupported);
         }
     }
 
@@ -50,14 +50,14 @@ where
         .map(|c| c.count() as usize * sample_type.byte_size())
     {
         if *spec.block_align.get_or_insert(calculated_block_align) % calculated_block_align != 0 {
-            return Err(PhonicError::InvalidData);
+            return Err(PhonicError::Unsupported);
         }
     }
 
     Ok(())
 }
 
-pub fn pcm_codec_from_dyn_stream<S>(stream: S) -> Result<TaggedSignal, PhonicError>
+pub fn pcm_codec_from_dyn_stream<S>(stream: S) -> PhonicResult<TaggedSignal>
 where
     S: DynStream + 'static,
     PcmCodecTag: TryInto<S::Tag>,
@@ -114,7 +114,7 @@ where
 
 pub fn pcm_codec_from_dyn_signal<C>(
     signal: TaggedSignal,
-) -> Result<Box<dyn DynStream<Tag = C>>, PhonicError>
+) -> PhonicResult<Box<dyn DynStream<Tag = C>>>
 where
     C: CodecTag + 'static,
     PcmCodecTag: TryInto<C>,

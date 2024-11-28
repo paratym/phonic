@@ -1,6 +1,5 @@
 use crate::CodecTag;
-use phonic_core::PhonicError;
-use phonic_signal::{Sample, Signal, SignalSpec, SignalSpecBuilder};
+use phonic_signal::{PhonicError, PhonicResult, Sample, Signal, SignalSpec, SignalSpecBuilder};
 use std::{any::TypeId, fmt::Debug, time::Duration};
 
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +67,7 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
         Self::default()
     }
 
-    pub fn with_tag_type<T>(self) -> Result<StreamSpecBuilder<T>, PhonicError>
+    pub fn with_tag_type<T>(self) -> PhonicResult<StreamSpecBuilder<T>>
     where
         T: CodecTag,
         C: TryInto<T>,
@@ -120,16 +119,18 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
             && self.decoded_spec.is_empty()
     }
 
-    pub fn merge(&mut self, other: &Self) -> Result<(), PhonicError> {
+    pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if let Some(codec) = other.codec {
             if self.codec.get_or_insert(codec) != &codec {
-                return Err(PhonicError::SignalMismatch);
+                // return Err(PhonicError::SignalMismatch);
+                todo!()
             }
         }
 
         if let Some(byte_rate) = other.avg_byte_rate {
             if self.avg_byte_rate.get_or_insert(byte_rate) != &byte_rate {
-                return Err(PhonicError::SignalMismatch);
+                // return Err(PhonicError::SignalMismatch);
+                todo!()
             }
         }
 
@@ -138,7 +139,8 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
                 .block_align
                 .is_some_and(|align| block_align % align != 0)
             {
-                return Err(PhonicError::SignalMismatch);
+                // return Err(PhonicError::SignalMismatch);
+                todo!()
             }
 
             self.block_align = Some(block_align);
@@ -147,21 +149,21 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
         self.decoded_spec.merge(&other.decoded_spec)
     }
 
-    pub fn merged(mut self, other: &Self) -> Result<Self, PhonicError> {
+    pub fn merged(mut self, other: &Self) -> PhonicResult<Self> {
         self.merge(other)?;
         Ok(self)
     }
 
-    pub fn infer(&mut self) -> Result<(), PhonicError> {
+    pub fn infer(&mut self) -> PhonicResult<()> {
         C::infer_spec(self)
     }
 
-    pub fn inferred(mut self) -> Result<Self, PhonicError> {
+    pub fn inferred(mut self) -> PhonicResult<Self> {
         self.infer()?;
         Ok(self)
     }
 
-    pub fn build(self) -> Result<StreamSpec<C>, PhonicError> {
+    pub fn build(self) -> PhonicResult<StreamSpec<C>> {
         self.try_into()
     }
 }

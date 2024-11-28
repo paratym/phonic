@@ -1,7 +1,7 @@
 use crate::gen::NullSignal;
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalSpec, SignalWriter,
 };
 use std::time::Duration;
 
@@ -136,7 +136,7 @@ impl<T: Signal> FiniteSignal for Slice<T> {
 }
 
 impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n_before = self.start.saturating_sub(self.inner.pos());
         if n_before > 0 {
             let mut null = NullSignal::new(*self.spec());
@@ -152,7 +152,7 @@ impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
 }
 
 impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let n_before = self.start.saturating_sub(self.inner.pos());
         if n_before > 0 {
             let mut null = NullSignal::new(*self.spec());
@@ -166,13 +166,13 @@ impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
 
 impl<T: SignalSeeker> SignalSeeker for Slice<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         let pos = self
             .pos()
             .checked_add_signed(offset)

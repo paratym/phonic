@@ -1,5 +1,5 @@
-use phonic_core::PhonicError;
 use phonic_io_core::{utils::FormatIdentifiers, CodecTag, FormatTag, StreamSpecBuilder};
+use phonic_signal::{PhonicError, PhonicResult};
 
 pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
     file_extensions: &["wav", "wave"],
@@ -22,7 +22,7 @@ impl FormatTag for WaveFormatTag {
 }
 
 impl CodecTag for WaveSupportedCodec {
-    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> Result<(), PhonicError> {
+    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> PhonicResult<()> {
         match spec.codec {
             #[cfg(feature = "pcm")]
             Some(Self::Pcm) => phonic_codec_pcm::infer_pcm_spec(spec),

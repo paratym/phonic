@@ -1,6 +1,8 @@
 use crate::ops::IntoSample;
-use phonic_core::PhonicError;
-use phonic_signal::{IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec};
+use phonic_signal::{
+    IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
+    SignalSpec,
+};
 use std::{
     f64::{self, consts::PI},
     marker::PhantomData,
@@ -111,7 +113,7 @@ impl<S: Sample> SignalReader for Osc<S>
 where
     f64: IntoSample<S>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n_channels = self.spec.channels.count() as usize;
         let frames = buf.chunks_exact_mut(n_channels);
         let n_frames = frames.len();
@@ -134,7 +136,7 @@ where
 }
 
 impl<S: Sample> SignalSeeker for Osc<S> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.pos = self
             .pos
             .checked_add_signed(offset)

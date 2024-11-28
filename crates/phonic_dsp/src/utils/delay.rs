@@ -1,8 +1,7 @@
 use crate::gen::NullSignal;
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
+    SignalSpec, SignalWriter,
 };
 use std::time::Duration;
 
@@ -104,7 +103,7 @@ impl<T: FiniteSignal> FiniteSignal for Delay<T> {
 }
 
 impl<T: SignalReader> SignalReader for Delay<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
         let n_channels = self.spec().channels.count() as usize;
         buf_len -= n_channels;
@@ -126,7 +125,7 @@ impl<T: SignalReader> SignalReader for Delay<T> {
 }
 
 impl<T: SignalWriter> SignalWriter for Delay<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         if self.rem_padding > 0 {
             let mut null = NullSignal::new(*self.spec());
             self.inner.copy_n(&mut null, self.rem_padding, false)?;
@@ -135,13 +134,13 @@ impl<T: SignalWriter> SignalWriter for Delay<T> {
         self.inner.write(buf)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
 
 impl<T: IndexedSignal + SignalSeeker> SignalSeeker for Delay<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }

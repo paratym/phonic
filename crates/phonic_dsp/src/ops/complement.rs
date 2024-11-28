@@ -1,9 +1,8 @@
-use std::ops::Neg;
-
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
+    SignalSpec,
 };
+use std::ops::Neg;
 
 pub trait ComplementSample: Sample {
     fn complement(self) -> Self;
@@ -52,7 +51,7 @@ where
     T: SignalReader,
     T::Sample: ComplementSample,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.read(buf)?;
         buf[..n].iter_mut().for_each(|s| *s = s.complement());
         Ok(n)
@@ -60,7 +59,7 @@ where
 }
 
 impl<T: SignalSeeker> SignalSeeker for Complement<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset)
     }
 }

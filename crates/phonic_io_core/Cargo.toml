@@ -4,6 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rtrb = "0.3.0"
-phonic_core = { version = "0.1.0", path = "../phonic_core" }
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
+phonic_signal = { version = "0.1.0", path = "../phonic_signal", features = ["io"] }

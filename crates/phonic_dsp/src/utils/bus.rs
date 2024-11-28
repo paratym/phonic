@@ -1,6 +1,5 @@
 use crate::types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalWriterList};
-use phonic_core::PhonicError;
-use phonic_signal::{FiniteSignal, IndexedSignal, Signal, SignalSpec, SignalWriter};
+use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalSpec, SignalWriter};
 
 pub struct Bus<T> {
     inner: T,
@@ -9,7 +8,7 @@ pub struct Bus<T> {
 }
 
 impl<T> Bus<T> {
-    pub fn new(inner: T) -> Result<Self, PhonicError>
+    pub fn new(inner: T) -> PhonicResult<Self>
     where
         T: IndexedSignalList,
     {
@@ -49,7 +48,7 @@ impl<T: FiniteSignalList> FiniteSignal for Bus<T> {
 }
 
 impl<T: SignalWriterList> SignalWriter for Bus<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
             return Ok(0);
         };
@@ -100,7 +99,7 @@ impl<T: SignalWriterList> SignalWriter for Bus<T> {
         Ok(n_written)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         let mut range = 0..self.inner.count();
         range.try_for_each(|i| self.inner.flush(i))
     }

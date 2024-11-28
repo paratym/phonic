@@ -2,9 +2,10 @@ use cpal::{
     traits::DeviceTrait, BufferSize, BuildStreamError, InputCallbackInfo, OutputCallbackInfo,
     SampleFormat, SampleRate, SizedSample, StreamConfig, StreamError, SupportedStreamConfigRange,
 };
-use phonic_core::PhonicError;
 use phonic_io_core::{KnownSample, KnownSampleType};
-use phonic_signal::{Sample, Signal, SignalReader, SignalSpec, SignalWriter};
+use phonic_signal::{
+    PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+};
 use std::time::Duration;
 
 pub trait SignalSpecExt {
@@ -30,12 +31,12 @@ impl SignalSpecExt for SignalSpec {
 }
 
 pub trait KnownSampleTypeExt: Sized {
-    fn try_from_cpal_sample_format(format: SampleFormat) -> Result<Self, PhonicError>;
+    fn try_from_cpal_sample_format(format: SampleFormat) -> PhonicResult<Self>;
     fn into_cpal_sample_format(self) -> SampleFormat;
 }
 
 impl KnownSampleTypeExt for KnownSampleType {
-    fn try_from_cpal_sample_format(format: SampleFormat) -> Result<Self, PhonicError> {
+    fn try_from_cpal_sample_format(format: SampleFormat) -> PhonicResult<Self> {
         Ok(match format {
             SampleFormat::I8 => Self::I8,
             SampleFormat::I16 => Self::I16,

@@ -1,7 +1,6 @@
 use crate::ops::{Convert, FromSample, IntoSample};
-use phonic_core::PhonicError;
 use phonic_io::{match_tagged_signal, DynSignal, TaggedSignal};
-use phonic_signal::Sample;
+use phonic_signal::{PhonicResult, Sample};
 
 pub trait FromKnownSample:
     Sample
@@ -68,8 +67,8 @@ pub trait TaggedSignalExt {
     where
         S: FromKnownSample + IntoKnownSample;
 
-    fn copy_n_converted(&mut self, reader: &mut Self) -> Result<(), PhonicError>;
-    fn copy_all_converted(&mut self, reader: &mut Self) -> Result<(), PhonicError>;
+    fn copy_n_converted(&mut self, reader: &mut Self) -> PhonicResult<()>;
+    fn copy_all_converted(&mut self, reader: &mut Self) -> PhonicResult<()>;
 }
 
 impl TaggedSignalExt for TaggedSignal {
@@ -80,11 +79,11 @@ impl TaggedSignalExt for TaggedSignal {
         match_tagged_signal!(self, signal => Box::new(<Convert<_, _>>::new(signal)))
     }
 
-    fn copy_n_converted(&mut self, reader: &mut Self) -> Result<(), PhonicError> {
+    fn copy_n_converted(&mut self, reader: &mut Self) -> PhonicResult<()> {
         todo!()
     }
 
-    fn copy_all_converted(&mut self, reader: &mut Self) -> Result<(), PhonicError> {
+    fn copy_all_converted(&mut self, reader: &mut Self) -> PhonicResult<()> {
         todo!()
     }
 }

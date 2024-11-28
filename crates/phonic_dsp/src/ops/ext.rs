@@ -1,6 +1,5 @@
 use crate::ops::{ClipSample, Complement, ComplementSample, Convert, Gain, Limit, Mix};
-use phonic_core::PhonicError;
-use phonic_signal::{IndexedSignal, Sample, Signal};
+use phonic_signal::{IndexedSignal, PhonicResult, Sample, Signal};
 
 pub trait OpSignalExt: Sized + Signal {
     fn complement(self) -> Complement<Self> {
@@ -49,7 +48,7 @@ pub trait OpSignalExt: Sized + Signal {
         Limit::clip(self)
     }
 
-    fn mix<T>(self, other: T) -> Result<Mix<(Self, T)>, PhonicError>
+    fn mix<T>(self, other: T) -> PhonicResult<Mix<(Self, T)>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
@@ -57,7 +56,7 @@ pub trait OpSignalExt: Sized + Signal {
         Mix::new((self, other))
     }
 
-    fn mix_buffered<T, B>(self, other: T, buf: B) -> Result<Mix<(Self, T), B>, PhonicError>
+    fn mix_buffered<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, T), B>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
@@ -65,7 +64,7 @@ pub trait OpSignalExt: Sized + Signal {
         Mix::new_buffered((self, other), buf)
     }
 
-    fn cancel<T>(self, other: T) -> Result<Mix<(Self, Complement<T>)>, PhonicError>
+    fn cancel<T>(self, other: T) -> PhonicResult<Mix<(Self, Complement<T>)>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
@@ -74,11 +73,7 @@ pub trait OpSignalExt: Sized + Signal {
         Mix::cancel(self, other)
     }
 
-    fn cancel_buffered<T, B>(
-        self,
-        other: T,
-        buf: B,
-    ) -> Result<Mix<(Self, Complement<T>), B>, PhonicError>
+    fn cancel_buffered<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, Complement<T>), B>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,

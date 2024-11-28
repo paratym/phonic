@@ -1,10 +1,9 @@
 use crate::utils::{Concat, Delay, Observer, Repeat, SignalEvent, Slice, Split};
-use phonic_core::PhonicError;
-use phonic_signal::{FiniteSignal, IndexedSignal, Signal};
+use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal};
 use std::time::Duration;
 
 pub trait UtilSignalExt: Sized + Signal {
-    fn concat<T>(self, other: T) -> Result<Concat<(Self, T)>, PhonicError>
+    fn concat<T>(self, other: T) -> PhonicResult<Concat<(Self, T)>>
     where
         T: Signal<Sample = Self::Sample>,
     {

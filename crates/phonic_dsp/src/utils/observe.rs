@@ -1,6 +1,6 @@
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
 };
 
 pub enum SignalEvent<'b, T: Signal> {
@@ -85,7 +85,7 @@ impl<T: FiniteSignal> FiniteSignal for Observer<T> {
 }
 
 impl<T: SignalReader> SignalReader for Observer<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.read(buf)?;
 
         match &self.callback {
@@ -99,7 +99,7 @@ impl<T: SignalReader> SignalReader for Observer<T> {
 }
 
 impl<T: SignalWriter> SignalWriter for Observer<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.write(buf)?;
 
         match &self.callback {
@@ -111,13 +111,13 @@ impl<T: SignalWriter> SignalWriter for Observer<T> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
 
 impl<T: SignalSeeker> SignalSeeker for Observer<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset)?;
 
         match &self.callback {

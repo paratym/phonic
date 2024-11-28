@@ -1,6 +1,6 @@
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
+    SignalSpec,
 };
 use std::ops::Mul;
 
@@ -64,7 +64,7 @@ impl<T: SignalReader> SignalReader for Gain<T>
 where
     Self::Sample: GainSample,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n = self.inner.read(buf)?;
         buf[..n].iter_mut().for_each(|s| *s = s.gain(&self.amp));
 
@@ -73,7 +73,7 @@ where
 }
 
 impl<T: SignalSeeker> SignalSeeker for Gain<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset)
     }
 }

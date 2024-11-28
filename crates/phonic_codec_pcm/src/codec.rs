@@ -2,14 +2,13 @@ use crate::{infer_pcm_spec, PcmCodecTag};
 use byte_slice_cast::{
     AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
 };
-use phonic_core::PhonicError;
 use phonic_io_core::{
     CodecConstructor, CodecTag, FiniteStream, IndexedStream, Stream, StreamReader, StreamSeeker,
     StreamSpec, StreamSpecBuilder, StreamWriter,
 };
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader,
+    SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::{
     marker::PhantomData,
@@ -27,7 +26,7 @@ where
     PcmCodecTag: TryInto<C>,
     PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
 {
-    fn encoder(inner: T) -> Result<Self, PhonicError>
+    fn encoder(inner: T) -> PhonicResult<Self>
     where
         Self: Stream<Tag = C>,
         T: Signal,
@@ -42,7 +41,7 @@ where
         })
     }
 
-    fn decoder(inner: T) -> Result<Self, PhonicError>
+    fn decoder(inner: T) -> PhonicResult<Self>
     where
         Self: Signal,
         T: Stream,
@@ -96,7 +95,7 @@ where
     S: Sample + ToMutByteSlice,
     C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let byte_buf = buf.as_mut_byte_slice();
         let n_bytes = self.inner.read(byte_buf)?;
         debug_assert_eq!(n_bytes % self.stream_spec().block_align, 0);
@@ -111,7 +110,7 @@ where
     S: Sample + ToByteSlice,
     C: CodecTag,
 {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let byte_buf = buf.as_byte_slice();
         let n_bytes = self.inner.write(byte_buf)?;
         debug_assert_eq!(n_bytes % self.stream_spec().block_align, 0);
@@ -119,13 +118,13 @@ where
         Ok(n_bytes / size_of::<S>())
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush().map_err(Into::into)
     }
 }
 
 impl<T: StreamSeeker, S: Sample, C: CodecTag> SignalSeeker for PcmCodec<T, S, C> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset * size_of::<S>() as i64)
     }
 }
@@ -166,15 +165,13 @@ where
     S: Sample + FromByteSlice,
     C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
         let start_i = buf.as_ptr() as usize % align_of::<S>();
         let front_aligned_len = buf.len() - start_i;
         let aligned_len = front_aligned_len - (front_aligned_len % size_of::<S>());
 
         let aligned_buf = &mut buf[start_i..start_i + aligned_len];
-        let sample_buf = aligned_buf
-            .as_mut_slice_of::<S>()
-            .map_err(|_| PhonicError::Unreachable)?;
+        let sample_buf = aligned_buf.as_mut_slice_of::<S>().unwrap();
 
         let n_samples = self.inner.read(sample_buf)?;
         let n_bytes = n_samples * size_of::<S>();
@@ -193,7 +190,7 @@ where
     S: Sample + FromByteSlice,
     C: CodecTag,
 {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[u8]) -> PhonicResult<usize> {
         //         let start_i = size_of::<S>() - (buf.as_ptr() as usize % align_of::<S>());
         //         let aligned_len = buf.len() - start_i;
         //         let usable_len = aligned_len - (aligned_len % size_of::<S>());
@@ -208,7 +205,7 @@ where
         todo!()
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
     }
 }
@@ -219,7 +216,7 @@ where
     S: Sample,
     C: CodecTag,
 {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         self.inner.seek(offset / size_of::<S>() as i64)
     }
 }

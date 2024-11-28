@@ -2,9 +2,8 @@ use crate::{
     CodecTag, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
     IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter, TaggedSignal,
 };
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
 };
 use std::io::{Read, Seek, Write};
 
@@ -17,7 +16,7 @@ impl<T> DynFormat for T where T: Format + FormatReader + FormatWriter + FormatSe
 pub trait DynStream:
     Stream + IndexedStream + FiniteStream + StreamReader + StreamWriter + StreamSeeker + Send + Sync
 {
-    fn into_decoder(self) -> Result<TaggedSignal, PhonicError>
+    fn into_decoder(self) -> PhonicResult<TaggedSignal>
     where
         Self: Sized + 'static,
         Self::Tag: DynCodecConstructor,
@@ -41,7 +40,7 @@ impl<T> DynStream for T where
 pub trait DynSignal:
     Signal + IndexedSignal + FiniteSignal + SignalReader + SignalWriter + SignalSeeker + Send + Sync
 {
-    fn into_encoder<C>(self, codec: C) -> Result<Box<dyn DynStream<Tag = C>>, PhonicError>
+    fn into_encoder<C>(self, codec: C) -> PhonicResult<Box<dyn DynStream<Tag = C>>>
     where
         Self: Sized + 'static,
         C: DynCodecConstructor,
@@ -65,22 +64,18 @@ impl<T> DynSignal for T where
 }
 
 pub trait DynFormatConstructor: FormatTag {
-    fn read_index<T>(&self, inner: T) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    fn read_index<T>(&self, inner: T) -> PhonicResult<Box<dyn DynFormat<Tag = Self>>>
     where
         T: StdIoSource + 'static;
 
-    fn write_index<T, I>(
-        &self,
-        inner: T,
-        index: I,
-    ) -> Result<Box<dyn DynFormat<Tag = Self>>, PhonicError>
+    fn write_index<T, I>(&self, inner: T, index: I) -> PhonicResult<Box<dyn DynFormat<Tag = Self>>>
     where
         T: StdIoSource + 'static,
         I: IntoIterator<Item = StreamSpec<Self::Codec>>;
 }
 
 pub trait DynCodecConstructor: CodecTag {
-    fn encoder(&self, signal: TaggedSignal) -> Result<Box<dyn DynStream<Tag = Self>>, PhonicError>;
+    fn encoder(&self, signal: TaggedSignal) -> PhonicResult<Box<dyn DynStream<Tag = Self>>>;
 
-    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> Result<TaggedSignal, PhonicError>;
+    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> PhonicResult<TaggedSignal>;
 }

@@ -2,9 +2,9 @@ use crate::types::{
     FiniteSignalList, IndexedSignalList, SignalList, SignalReaderList, SignalSeekerList,
     SignalWriterList,
 };
-use phonic_core::PhonicError;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
 };
 
 pub struct Concat<T> {
@@ -14,7 +14,7 @@ pub struct Concat<T> {
 }
 
 impl<T: SignalList> Concat<T> {
-    pub fn new(inner: T) -> Result<Self, PhonicError> {
+    pub fn new(inner: T) -> PhonicResult<Self> {
         Ok(Self {
             current_i: 0,
             spec: inner.spec()?,
@@ -54,7 +54,7 @@ impl<T: FiniteSignalList> FiniteSignal for Concat<T> {
 }
 
 impl<T: SignalReaderList> SignalReader for Concat<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         while self.current_i < self.inner.count() {
             let n = self.inner.read(self.current_i, buf)?;
             if n == 0 {
@@ -70,7 +70,7 @@ impl<T: SignalReaderList> SignalReader for Concat<T> {
 }
 
 impl<T: SignalWriterList> SignalWriter for Concat<T> {
-    fn write(&mut self, buf: &[Self::Sample]) -> Result<usize, PhonicError> {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         while self.current_i < self.inner.count() {
             let n = self.inner.write(self.current_i, buf)?;
             if n == 0 {
@@ -82,13 +82,13 @@ impl<T: SignalWriterList> SignalWriter for Concat<T> {
         Ok(0)
     }
 
-    fn flush(&mut self) -> Result<(), PhonicError> {
+    fn flush(&mut self) -> PhonicResult<()> {
         todo!()
     }
 }
 
 impl<T: IndexedSignalList + SignalSeekerList> SignalSeeker for Concat<T> {
-    fn seek(&mut self, offset: i64) -> Result<(), PhonicError> {
+    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }
 }

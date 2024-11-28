@@ -1,19 +1,18 @@
 use crate::{Stream, StreamSpecBuilder};
-use phonic_core::PhonicError;
-use phonic_signal::Signal;
+use phonic_signal::{PhonicError, PhonicResult, Signal};
 use std::{fmt::Debug, hash::Hash};
 
 pub trait CodecTag: Sized + Send + Sync + Debug + Copy + Eq + Hash {
-    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> Result<(), PhonicError>;
+    fn infer_spec(spec: &mut StreamSpecBuilder<Self>) -> PhonicResult<()>;
 }
 
 pub trait CodecConstructor<T, C: CodecTag>: Sized {
-    fn encoder(inner: T) -> Result<Self, PhonicError>
+    fn encoder(inner: T) -> PhonicResult<Self>
     where
         Self: Stream<Tag = C>,
         T: Signal;
 
-    fn decoder(inner: T) -> Result<Self, PhonicError>
+    fn decoder(inner: T) -> PhonicResult<Self>
     where
         Self: Signal,
         T: Stream,

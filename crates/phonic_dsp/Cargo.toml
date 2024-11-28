@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-phonic_core = { version = "0.1.0", path = "../phonic_core" }
 phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
 phonic_io = { version = "0.1.0", path = "../phonic_io", optional = true }
 

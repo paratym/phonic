@@ -1,4 +1,4 @@
-use phonic_core::PhonicError;
+use crate::{PhonicError, PhonicResult};
 use std::ops::{BitAnd, BitOr, BitXor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,7 @@ impl Channels {
         }
     }
 
-    pub fn merge(&mut self, other: &Self) -> Result<(), PhonicError> {
+    pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         match (&*self, other) {
             (Self::Layout(a), Self::Layout(b)) if a == b => Ok(()),
             (Self::Count(a), Self::Count(b)) if a == b => Ok(()),
@@ -47,11 +47,11 @@ impl Channels {
                 Ok(())
             }
 
-            _ => Err(PhonicError::SignalMismatch),
+            _ => Err(todo!()),
         }
     }
 
-    pub fn merged(mut self, other: &Self) -> Result<Self, PhonicError> {
+    pub fn merged(mut self, other: &Self) -> PhonicResult<Self> {
         self.merge(other)?;
         Ok(self)
     }
