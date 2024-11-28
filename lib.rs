@@ -1,6 +1,3 @@
-pub use phonic_core::*;
-
-#[cfg(feature = "signal")]
 pub use phonic_signal as signal;
 
 #[cfg(feature = "dsp")]

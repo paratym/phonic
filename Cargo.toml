@@ -3,6 +3,9 @@ name = "phonic"
 version = "0.0.1"
 edition = "2021"
 
+[lib]
+path = "lib.rs"
+
 [workspace]
 resolver = "2"
 members = [
@@ -40,3 +43,7 @@ phonic_dsp = { version = "0.1.0", path = "crates/phonic_dsp", optional = true }
 phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
 phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }
 phonic_rtrb = { version = "0.1.0", path = "crates/phonic_rtrb", optional = true }
+
+[dev-dependencies]
+cpal = "0.15.3"
+rtrb = "0.3.1"
