@@ -127,8 +127,10 @@ impl<T: SignalReader> SignalReader for Delay<T> {
 impl<T: SignalWriter> SignalWriter for Delay<T> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         if self.rem_padding > 0 {
-            let mut null = NullSignal::new(*self.spec());
-            self.inner.copy_n(&mut null, self.rem_padding, false)?;
+            // let mut null = NullSignal::new(*self.spec());
+            // self.inner.copy_n(&mut null, self.rem_padding, false)?;
+
+            todo!()
         }
 
         self.inner.write(buf)

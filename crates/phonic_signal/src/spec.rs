@@ -38,10 +38,6 @@ impl SignalSpec {
         Duration::from_secs_f64(seconds)
     }
 
-    pub fn is_compatible(&self, other: &Self) -> bool {
-        self.sample_rate == other.sample_rate && self.channels.is_compatible(&other.channels)
-    }
-
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if self.sample_rate != other.sample_rate {
             // return Err(PhonicError::SignalMismatch);
@@ -100,22 +96,8 @@ impl SignalSpecBuilder {
         self.sample_rate.is_none() && self.channels.is_none()
     }
 
-    pub fn is_filled(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.sample_rate.is_some() && self.channels.is_some()
-    }
-
-    pub fn is_compatible(&self, other: &Self) -> bool {
-        let sample_rates_compatible = !(self
-            .sample_rate
-            .zip(other.sample_rate)
-            .is_some_and(|(a, b)| a != b));
-
-        let channels_compatible = !(self
-            .channels
-            .zip(other.channels)
-            .is_some_and(|(a, ref b)| !a.is_compatible(b)));
-
-        sample_rates_compatible && channels_compatible
     }
 
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {

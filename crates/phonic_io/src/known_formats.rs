@@ -82,10 +82,10 @@ impl DynFormatConstructor for KnownFormat {
     }
 }
 
-impl<'a> TryFrom<&FormatIdentifier<'a>> for KnownFormat {
+impl<'a> TryFrom<FormatIdentifier<'a>> for KnownFormat {
     type Error = PhonicError;
 
-    fn try_from(id: &FormatIdentifier<'a>) -> Result<Self, Self::Error> {
+    fn try_from(id: FormatIdentifier<'a>) -> Result<Self, Self::Error> {
         let format = match id {
             FormatIdentifier::FileExtension(ext) => KNOWN_FILE_EXTENSIONS.get(ext),
             FormatIdentifier::MimeType(mime) => KNOWN_MIME_TYPES.get(mime),

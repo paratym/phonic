@@ -27,13 +27,6 @@ impl Channels {
         }
     }
 
-    pub fn is_compatible(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Layout(a), Self::Layout(b)) => a == b,
-            (a, b) => a.count() == b.count(),
-        }
-    }
-
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         match (&*self, other) {
             (Self::Layout(a), Self::Layout(b)) if a == b => Ok(()),

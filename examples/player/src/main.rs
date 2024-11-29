@@ -1,6 +1,6 @@
 use cpal::{
     traits::{HostTrait, StreamTrait},
-    SizedSample,
+    BufferSize, SizedSample,
 };
 use phonic::{
     cpal::DeviceExt,
@@ -8,18 +8,17 @@ use phonic::{
         match_tagged_signal, utils::FormatIdentifier, DynFormatConstructor, DynStream, Format,
         KnownFormat, KnownSample, TaggedSignal,
     },
-    rtrb::RealTimeSignal,
-    signal::{SignalReader, SignalWriter},
-    PhonicError,
+    rtrb::SignalBuffer,
+    signal::{utils::PollSignalWriter, PhonicError, PhonicResult, SignalReader, SignalWriter},
 };
 use std::{env, fs::File, path::Path, time::Duration};
 
-fn main() -> Result<(), PhonicError> {
+fn main() -> PhonicResult<()> {
     let path_arg = env::args().nth(1).ok_or(PhonicError::MissingData)?;
     let path = Path::new(path_arg.as_str());
     let file = File::open(path)?;
 
-    let format = KnownFormat::try_from(&FormatIdentifier::try_from(path)?)?;
+    let format = KnownFormat::try_from(FormatIdentifier::try_from(path)?)?;
     let signal = format
         .read_index(file)?
         .into_default_stream()?
@@ -30,26 +29,26 @@ fn main() -> Result<(), PhonicError> {
 
 const BUF_DURATION: Duration = Duration::from_millis(200);
 
-fn play<S>(mut signal: S) -> Result<(), PhonicError>
+fn play<S>(mut signal: S) -> PhonicResult<()>
 where
     S: SignalReader + Send + Sync,
     S::Sample: KnownSample + SizedSample + Send + 'static,
 {
     let spec = signal.spec();
-    let buf_cap =
-        spec.sample_rate_interleaved() as usize * BUF_DURATION.as_millis() as usize / 1000;
-
-    let (mut producer, consumer) = RealTimeSignal::new(buf_cap, *spec);
+    let (mut producer, consumer) = SignalBuffer::new_duration(*spec, BUF_DURATION);
 
     let output = cpal::default_host()
         .default_output_device()
-        .ok_or(PhonicError::IoError)?
-        .build_output_stream_from_signal(consumer, |e| panic!("output error: {e}"), None)
-        .map_err(|_| PhonicError::IoError)?;
+        .ok_or(PhonicError::NotFound)?
+        .build_output_stream_from_signal(
+            consumer,
+            |e| panic!("output error: {e}"),
+            BufferSize::Default,
+            None,
+        )
+        .unwrap();
 
-    output.play().map_err(|_| PhonicError::IoError)?;
-    producer.copy_all(&mut signal, true)?;
-
-    std::thread::sleep(BUF_DURATION);
-    output.pause().map_err(|_| PhonicError::IoError)
+    output.play().unwrap();
+    producer.copy_all(&mut signal)?;
+    producer.flush()
 }

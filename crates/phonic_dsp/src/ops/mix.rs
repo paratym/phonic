@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use phonic_signal::{
-    DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
     SignalSeeker, SignalSpec,
 };
 use std::ops::DerefMut;

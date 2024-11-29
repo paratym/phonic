@@ -1,4 +1,4 @@
-use crate::{DefaultBuf, PhonicError, PhonicResult, Sample, SignalSpec};
+use crate::{PhonicResult, Sample, SignalSpec};
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
@@ -66,40 +66,10 @@ pub trait FiniteSignal: Signal {
     }
 }
 
-const POLL_TO_BUF_RATIO: u32 = 6;
-
 pub trait SignalReader: Signal {
     /// reads samples from this signal into the given buffer.
     /// returns the number of interleaved samples read.
     fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize>;
-
-    fn read_exact(&mut self, mut buf: &mut [Self::Sample], block: bool) -> PhonicResult<()> {
-        let buf_len = buf.len();
-        let spec = self.spec();
-        if buf_len % spec.channels.count() as usize != 0 {
-            return Err(PhonicError::InvalidInput);
-        }
-
-        let poll_interval = spec.sample_rate_duration() * buf_len as u32
-            / spec.channels.count()
-            / POLL_TO_BUF_RATIO;
-
-        while !buf.is_empty() {
-            match self.read(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => buf = &mut buf[n..],
-            }
-        }
-
-        Ok(())
-    }
 
     fn read_frames<'a>(
         &mut self,
@@ -122,119 +92,6 @@ pub trait SignalWriter: Signal {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize>;
 
     fn flush(&mut self) -> PhonicResult<()>;
-
-    fn write_exact(&mut self, mut buf: &[Self::Sample], block: bool) -> PhonicResult<()> {
-        let buf_len = buf.len();
-        let spec = self.spec();
-        if buf_len % spec.channels.count() as usize != 0 {
-            // return Err(PhonicError::SignalMismatch);
-            todo!()
-        }
-
-        let poll_interval = spec.sample_rate_duration() * buf_len as u32
-            / spec.channels.count()
-            / POLL_TO_BUF_RATIO;
-
-        while !buf.is_empty() {
-            match self.write(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => buf = &buf[n..],
-            };
-        }
-
-        Ok(())
-    }
-
-    fn copy_n_buffered<R>(
-        &mut self,
-        reader: &mut R,
-        n_frames: u64,
-        buf: &mut [Self::Sample],
-        block: bool,
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
-        let spec = self.spec();
-        let n_channels = spec.channels.count();
-        let buf_len = buf.len();
-
-        if !spec.is_compatible(reader.spec()) || buf_len < n_channels as usize {
-            // return Err(PhonicError::SignalMismatch);
-            todo!()
-        }
-
-        let n_samples = n_frames.saturating_mul(n_channels as u64);
-        let mut n = 0;
-
-        let poll_interval =
-            self.spec().sample_rate_duration() * buf_len as u32 / n_channels / POLL_TO_BUF_RATIO;
-
-        while n < n_samples {
-            let len = buf_len.min((n_samples - n) as usize);
-            let n_read = match reader.read(&mut buf[..len]) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => n,
-            };
-
-            self.write_exact(&buf[..n_read], block)?;
-            n += n_read as u64;
-        }
-
-        Ok(())
-    }
-
-    /// copies a given number of frames from a `SignalReader` directly to this signal.
-    /// if this method isn't implemented it falls back to copying via a stack allocated
-    /// buffer.
-    fn copy_n<R>(&mut self, reader: &mut R, n_frames: u64, block: bool) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
-        let mut buf = DefaultBuf::default();
-        self.copy_n_buffered(reader, n_frames, &mut buf, block)
-    }
-
-    fn copy_all_buffered<R>(
-        &mut self,
-        reader: &mut R,
-        buf: &mut [Self::Sample],
-        block: bool,
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
-        match self.copy_n_buffered(reader, u64::MAX, buf, block) {
-            Err(PhonicError::OutOfBounds) => Ok(()),
-            result => result,
-        }
-    }
-
-    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
-        let mut buf = DefaultBuf::default();
-        self.copy_all_buffered(reader, &mut buf, block)
-    }
 }
 
 pub trait SignalSeeker: Signal {

@@ -139,8 +139,9 @@ impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
     fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         let n_before = self.start.saturating_sub(self.inner.pos());
         if n_before > 0 {
-            let mut null = NullSignal::new(*self.spec());
-            null.copy_n_buffered(&mut self.inner, n_before, buf, false)?;
+            // let mut null = NullSignal::new(*self.spec());
+            // null.copy_n_buffered(&mut self.inner, n_before, buf, false)?;
+            todo!()
         }
 
         let buf_len = buf.len().min(self.rem_interleaved() as usize);
@@ -155,8 +156,9 @@ impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let n_before = self.start.saturating_sub(self.inner.pos());
         if n_before > 0 {
-            let mut null = NullSignal::new(*self.spec());
-            self.inner.copy_n(&mut null, n_before, false)?;
+            // let mut null = NullSignal::new(*self.spec());
+            // self.inner.copy_n(&mut null, n_before, false)?;
+            todo!()
         }
 
         let buf_len = buf.len().min(self.rem_interleaved() as usize);

@@ -1,5 +1,5 @@
 use phonic_signal::{
-    DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
     SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::{marker::PhantomData, ops::DerefMut};

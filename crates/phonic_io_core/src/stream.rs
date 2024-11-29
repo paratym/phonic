@@ -1,5 +1,5 @@
 use crate::{CodecTag, StreamSpec};
-use phonic_signal::{PhonicError, PhonicResult};
+use phonic_signal::PhonicResult;
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
@@ -65,152 +65,13 @@ pub trait FiniteStream: Stream {
     }
 }
 
-const POLL_TO_BUF_RATIO: u32 = 6;
-
 pub trait StreamReader: Stream {
     fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize>;
-
-    fn read_exact(&mut self, mut buf: &mut [u8], block: bool) -> PhonicResult<()> {
-        let buf_len = buf.len();
-        if buf_len % self.stream_spec().block_align != 0 {
-            return Err(PhonicError::SignalMismatch);
-        }
-
-        let poll_interval =
-            self.stream_spec().avg_byte_rate_duration() * buf_len as u32 / POLL_TO_BUF_RATIO;
-
-        while !buf.is_empty() {
-            match self.read(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => buf = &mut buf[n..],
-            };
-        }
-
-        Ok(())
-    }
 }
 
 pub trait StreamWriter: Stream {
     fn write(&mut self, buf: &[u8]) -> PhonicResult<usize>;
     fn flush(&mut self) -> PhonicResult<()>;
-
-    fn write_exact(&mut self, mut buf: &[u8], block: bool) -> PhonicResult<()> {
-        let buf_len = buf.len();
-        if buf_len % self.stream_spec().block_align != 0 {
-            return Err(PhonicError::SignalMismatch);
-        }
-
-        let poll_interval =
-            self.stream_spec().avg_byte_rate_duration() * buf_len as u32 / POLL_TO_BUF_RATIO;
-
-        while !buf.is_empty() {
-            match self.write(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => buf = &buf[n..],
-            };
-        }
-
-        Ok(())
-    }
-
-    fn copy_n_buffered<R>(
-        &mut self,
-        reader: &mut R,
-        n_bytes: usize,
-        buf: &mut [u8],
-        block: bool,
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-    {
-        let spec = self.stream_spec();
-        let buf_len = buf.len();
-
-        if !spec.is_compatible(reader.stream_spec())
-            || n_bytes % spec.block_align != 0
-            || buf_len < spec.block_align
-        {
-            return Err(PhonicError::SignalMismatch);
-        }
-
-        let poll_interval =
-            self.stream_spec().avg_byte_rate_duration() * buf_len as u32 / POLL_TO_BUF_RATIO;
-
-        let mut n = 0;
-        while n < n_bytes {
-            let len = buf_len.min(n_bytes - n);
-            let n_read = match reader.read(&mut buf[..len]) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
-                Err(PhonicError::Interrupted) if block => continue,
-                Err(PhonicError::NotReady) if block => {
-                    std::thread::sleep(poll_interval);
-                    continue;
-                }
-
-                Err(e) => return Err(e),
-                Ok(n) => n,
-            };
-
-            self.write_exact(&buf[..n_read], block)?;
-            n += n_read;
-        }
-
-        Ok(())
-    }
-
-    fn copy_n<R>(&mut self, reader: &mut R, n_bytes: usize, block: bool) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-    {
-        let mut buf = [0u8; 4096];
-        self.copy_n_buffered(reader, n_bytes, &mut buf, block)
-    }
-
-    fn copy_all_buffered<R>(
-        &mut self,
-        reader: &mut R,
-        buf: &mut [u8],
-        block: bool,
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-    {
-        let n_bytes = usize::MAX - (usize::MAX % self.stream_spec().block_align);
-        match self.copy_n_buffered(reader, n_bytes, buf, block) {
-            Err(PhonicError::OutOfBounds) => Ok(()),
-            result => result,
-        }
-    }
-
-    fn copy_all<R>(&mut self, reader: &mut R, block: bool) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-    {
-        let mut buf = [0u8; 4096];
-        self.copy_all_buffered(reader, &mut buf, block)
-    }
 }
 
 pub trait StreamSeeker: Stream {

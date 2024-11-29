@@ -49,16 +49,33 @@ impl<C: CodecTag> StreamSpec<C> {
         Duration::from_secs_f64(seconds)
     }
 
-    pub fn is_compatible<T: CodecTag + TryInto<C>>(&self, other: &StreamSpec<T>) -> bool {
-        let Ok(codec) = other.codec.try_into() else {
-            return false;
-        };
+    pub fn merge<T>(&mut self, other: &StreamSpec<T>) -> PhonicResult<()>
+    where
+        T: CodecTag + TryInto<C>,
+        PhonicError: From<<T as TryInto<C>>::Error>,
+    {
+        let min_align = self.block_align.min(other.block_align);
+        let max_align = self.block_align.max(other.block_align);
 
-        self.codec == codec
-            && self.avg_byte_rate == other.avg_byte_rate
-            && self.block_align % other.block_align == 0
-            && self.sample_type == other.sample_type
-            && self.decoded_spec.is_compatible(&other.decoded_spec)
+        if self.codec != other.codec.try_into()?
+            || self.avg_byte_rate != other.avg_byte_rate
+            || self.sample_type != other.sample_type
+            || max_align % min_align != 0
+        {
+            todo!()
+        }
+
+        self.block_align = max_align;
+        self.decoded_spec.merge(&other.decoded_spec)
+    }
+
+    pub fn merged<T>(mut self, other: &StreamSpec<T>) -> PhonicResult<Self>
+    where
+        T: CodecTag + TryInto<C>,
+        PhonicError: From<<T as TryInto<C>>::Error>,
+    {
+        self.merge(other)?;
+        Ok(self)
     }
 }
 
@@ -110,6 +127,13 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
     pub fn with_decoded_spec(mut self, decoded_spec: impl Into<SignalSpecBuilder>) -> Self {
         self.decoded_spec = decoded_spec.into();
         self
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.avg_byte_rate.is_some()
+            && self.block_align.is_some()
+            && self.sample_type.is_some()
+            && self.decoded_spec.is_full()
     }
 
     pub fn is_empty(&self) -> bool {
