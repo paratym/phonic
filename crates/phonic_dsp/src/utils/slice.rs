@@ -1,7 +1,6 @@
-use crate::gen::NullSignal;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
-    SignalSpec, SignalWriter,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
+    SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::time::Duration;
 
@@ -9,17 +8,12 @@ pub struct Slice<T> {
     inner: T,
     start: u64,
     end: u64,
-    pos: u64,
 }
 
 impl<T> Slice<T> {
     pub fn new(inner: T, start: u64, end: u64) -> Self {
-        Self {
-            inner,
-            start,
-            end: end.max(start),
-            pos: 0,
-        }
+        debug_assert!(start < end);
+        Self { inner, start, end }
     }
 
     pub fn new_interleaved(inner: T, start: u64, end: u64) -> Self
@@ -123,9 +117,9 @@ impl<T: Signal> Signal for Slice<T> {
     }
 }
 
-impl<T: Signal> IndexedSignal for Slice<T> {
+impl<T: IndexedSignal> IndexedSignal for Slice<T> {
     fn pos(&self) -> u64 {
-        self.pos
+        self.inner.pos().saturating_sub(self.start).min(self.len())
     }
 }
 
@@ -135,37 +129,59 @@ impl<T: Signal> FiniteSignal for Slice<T> {
     }
 }
 
+impl<T: IndexedSignal + SignalReader> Slice<T> {
+    fn read_padding(&mut self, buf: &mut [<Self as Signal>::Sample]) -> PhonicResult<()> {
+        let buf_len = buf.len();
+        let n_channels = self.spec().channels.count() as usize;
+
+        loop {
+            let pos = self.inner.pos();
+            let n_before = self.start.saturating_sub(pos);
+            if n_before == 0 {
+                break Ok(());
+            }
+
+            let len = buf_len.min(n_before as usize * n_channels);
+            self.inner.read(&mut buf[..len])?;
+        }
+    }
+}
+
 impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
     fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let n_before = self.start.saturating_sub(self.inner.pos());
-        if n_before > 0 {
-            // let mut null = NullSignal::new(*self.spec());
-            // null.copy_n_buffered(&mut self.inner, n_before, buf, false)?;
-            todo!()
+        self.read_padding(buf)?;
+
+        let len = buf.len().min(self.rem_interleaved() as usize);
+        self.inner.read(&mut buf[..len])
+    }
+}
+
+impl<T: IndexedSignal + SignalWriter> Slice<T> {
+    fn write_padding(&mut self) -> PhonicResult<()> {
+        let buf = DefaultBuf::default();
+
+        let buf_len = buf.len();
+        let n_channels = self.spec().channels.count() as usize;
+
+        loop {
+            let pos = self.inner.pos();
+            let n_before = self.start.saturating_sub(pos);
+            if n_before == 0 {
+                break Ok(());
+            }
+
+            let len = buf_len.min(n_before as usize * n_channels);
+            self.inner.write(&buf[..len])?;
         }
-
-        let buf_len = buf.len().min(self.rem_interleaved() as usize);
-        let n = self.inner.read(&mut buf[..buf_len])?;
-        self.pos += n as u64;
-
-        Ok(n)
     }
 }
 
 impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        let n_before = self.start.saturating_sub(self.inner.pos());
-        if n_before > 0 {
-            // let mut null = NullSignal::new(*self.spec());
-            // self.inner.copy_n(&mut null, n_before, false)?;
-            todo!()
-        }
+        self.write_padding()?;
 
-        let buf_len = buf.len().min(self.rem_interleaved() as usize);
-        let n = self.inner.write(&buf[..buf_len])?;
-        self.pos += n as u64;
-
-        Ok(n)
+        let len = buf.len().min(self.rem_interleaved() as usize);
+        self.inner.write(&buf[..len])
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
@@ -173,16 +189,16 @@ impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
     }
 }
 
-impl<T: SignalSeeker> SignalSeeker for Slice<T> {
+impl<T: IndexedSignal + SignalSeeker> SignalSeeker for Slice<T> {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        let pos = self
+        if self
             .pos()
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .is_none_or(|pos| pos > self.len())
+        {
+            return Err(PhonicError::OutOfBounds);
+        }
 
-        self.inner.seek(offset)?;
-        self.pos = pos;
-
-        Ok(())
+        self.inner.seek(offset)
     }
 }

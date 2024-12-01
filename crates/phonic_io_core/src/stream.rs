@@ -1,7 +1,7 @@
 use crate::{CodecTag, StreamSpec};
 use phonic_signal::PhonicResult;
 use std::{
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Neg},
     time::Duration,
 };
 
@@ -77,11 +77,17 @@ pub trait StreamWriter: Stream {
 pub trait StreamSeeker: Stream {
     fn seek(&mut self, offset: i64) -> PhonicResult<()>;
 
-    fn set_pos(&mut self, position: u64) -> PhonicResult<()>
+    fn set_pos(&mut self, pos: u64) -> PhonicResult<()>
     where
         Self: Sized + IndexedStream,
     {
-        let offset = position as i64 - self.pos() as i64;
+        let current_pos = self.pos();
+        let offset = if pos >= current_pos {
+            (pos - current_pos) as i64
+        } else {
+            ((current_pos - pos) as i64).neg()
+        };
+
         self.seek(offset)
     }
 

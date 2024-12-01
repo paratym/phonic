@@ -2,7 +2,9 @@ use crate::{Stream, StreamReader, StreamWriter};
 use phonic_signal::{utils::DefaultBuf, PhonicError, PhonicResult};
 
 pub trait PollStream: Stream {
-    fn poll_interval();
+    fn poll_interval() {
+        todo!()
+    }
 }
 
 pub trait PollStreamReader: PollStream + StreamReader {
@@ -16,7 +18,7 @@ pub trait PollStreamReader: PollStream + StreamReader {
         }
     }
 
-    fn read_exact(&mut self, mut buf: &mut [u8]) -> PhonicResult<()> {
+    fn read_exact_poll(&mut self, mut buf: &mut [u8]) -> PhonicResult<()> {
         let buf_len = buf.len();
         if buf_len % self.stream_spec().block_align != 0 {
             return Err(PhonicError::InvalidInput);
@@ -51,7 +53,7 @@ pub trait PollStreamWriter: PollStream + StreamWriter {
         }
     }
 
-    fn write_exact(&mut self, mut buf: &[u8]) -> PhonicResult<()> {
+    fn write_exact_poll(&mut self, mut buf: &[u8]) -> PhonicResult<()> {
         let buf_len = buf.len();
         if buf_len % self.stream_spec().block_align != 0 {
             return Err(PhonicError::InvalidInput);
@@ -73,19 +75,21 @@ pub trait PollStreamWriter: PollStream + StreamWriter {
 
         Ok(())
     }
+}
 
-    fn copy_n_buffered<R>(
+pub trait PollStreamCopy<R>
+where
+    Self: Sized + PollStreamWriter,
+    R: PollStreamReader,
+    R::Tag: TryInto<Self::Tag>,
+    PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
+{
+    fn copy_n_buffered_poll(
         &mut self,
         reader: &mut R,
         n_bytes: usize,
         buf: &mut [u8],
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
-    {
+    ) -> PhonicResult<()> {
         let spec = self.stream_spec().merged(reader.stream_spec())?;
         let buf_len = buf.len();
 
@@ -108,31 +112,19 @@ pub trait PollStreamWriter: PollStream + StreamWriter {
                 Ok(n) => n,
             };
 
-            self.write_exact(&buf[..n_read])?;
+            self.write_exact_poll(&buf[..n_read])?;
             n += n_read;
         }
 
         Ok(())
     }
 
-    fn copy_n<R>(&mut self, reader: &mut R, n_bytes: usize) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
-    {
+    fn copy_n_poll(&mut self, reader: &mut R, n_bytes: usize) -> PhonicResult<()> {
         let mut buf = DefaultBuf::default();
-        self.copy_n_buffered(reader, n_bytes, &mut buf)
+        self.copy_n_buffered_poll(reader, n_bytes, &mut buf)
     }
 
-    fn copy_all_buffered<R>(&mut self, reader: &mut R, buf: &mut [u8]) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
-    {
+    fn copy_all_buffered_poll(&mut self, reader: &mut R, buf: &mut [u8]) -> PhonicResult<()> {
         let _ = self.stream_spec().merged(reader.stream_spec())?;
 
         loop {
@@ -148,22 +140,29 @@ pub trait PollStreamWriter: PollStream + StreamWriter {
                 Ok(n) => n,
             };
 
-            match self.write_exact(&buf[..n_read]) {
+            match self.write_exact_poll(&buf[..n_read]) {
                 Ok(()) => continue,
-                Err(PhonicError::OutOfBounds) => return Ok(()), // TODO: write remainder
+                Err(PhonicError::OutOfBounds) => return Ok(()),
                 Err(e) => return Err(e),
             }
         }
     }
 
-    fn copy_all<R>(&mut self, reader: &mut R) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: StreamReader,
-        R::Tag: TryInto<Self::Tag>,
-        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
-    {
+    fn copy_all_poll(&mut self, reader: &mut R) -> PhonicResult<()> {
         let mut buf = DefaultBuf::default();
-        self.copy_all_buffered(reader, &mut buf)
+        self.copy_all_buffered_poll(reader, &mut buf)
     }
+}
+
+impl<T: Stream> PollStream for T {}
+impl<T: StreamReader> PollStreamReader for T {}
+impl<T: StreamWriter> PollStreamWriter for T {}
+
+impl<T, R> PollStreamCopy<R> for T
+where
+    Self: Sized + PollStreamWriter,
+    R: PollStreamReader,
+    R::Tag: TryInto<Self::Tag>,
+    PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
+{
 }

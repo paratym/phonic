@@ -9,7 +9,9 @@ use phonic::{
         KnownFormat, KnownSample, TaggedSignal,
     },
     rtrb::SignalBuffer,
-    signal::{utils::PollSignalWriter, PhonicError, PhonicResult, SignalReader, SignalWriter},
+    signal::{
+        utils::PollSignalCopy, BlockingSignalWriter, PhonicError, PhonicResult, SignalReader,
+    },
 };
 use std::{env, fs::File, path::Path, time::Duration};
 
@@ -21,20 +23,19 @@ fn main() -> PhonicResult<()> {
     let format = KnownFormat::try_from(FormatIdentifier::try_from(path)?)?;
     let signal = format
         .read_index(file)?
-        .into_default_stream()?
+        .into_primary_stream()?
         .into_decoder()?;
 
     match_tagged_signal!(signal, inner => play(inner))
 }
 
-const BUF_DURATION: Duration = Duration::from_millis(200);
-
 fn play<S>(mut signal: S) -> PhonicResult<()>
 where
     S: SignalReader + Send + Sync,
-    S::Sample: KnownSample + SizedSample + Send + 'static,
+    S::Sample: KnownSample + SizedSample,
 {
     let spec = signal.spec();
+    const BUF_DURATION: Duration = Duration::from_millis(200);
     let (mut producer, consumer) = SignalBuffer::new_duration(*spec, BUF_DURATION);
 
     let output = cpal::default_host()
@@ -45,10 +46,9 @@ where
             |e| panic!("output error: {e}"),
             BufferSize::Default,
             None,
-        )
-        .unwrap();
+        );
 
-    output.play().unwrap();
-    producer.copy_all(&mut signal)?;
-    producer.flush()
+    output.unwrap().play().unwrap();
+    producer.copy_all_poll(&mut signal)?;
+    producer.flush_blocking()
 }

@@ -1,13 +1,13 @@
 use crate::Sample;
 use std::ops::{Deref, DerefMut};
 
-pub const DEFAULT_BUF_SIZE: usize = 4096;
+pub const DEFAULT_BUF_LEN: usize = 4096;
 
-pub struct DefaultBuf<S: Sample>([S; DEFAULT_BUF_SIZE]);
+pub struct DefaultBuf<S: Sample>([S; DEFAULT_BUF_LEN]);
 
 impl<S: Sample> Default for DefaultBuf<S> {
     fn default() -> Self {
-        Self([S::ORIGIN; DEFAULT_BUF_SIZE])
+        Self([S::ORIGIN; DEFAULT_BUF_LEN])
     }
 }
 

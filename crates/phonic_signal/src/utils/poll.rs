@@ -1,7 +1,11 @@
 use crate::{utils::DefaultBuf, PhonicError, PhonicResult, Signal, SignalReader, SignalWriter};
 
 pub trait PollSignal: Signal {
-    fn poll_interval();
+    fn poll_interval() {
+        // https://doc.rust-lang.org/std/hint/fn.spin_loop.html
+        // https://doc.rust-lang.org/std/thread/fn.yield_now.html
+        todo!()
+    }
 }
 
 pub trait PollSignalReader: PollSignal + SignalReader {
@@ -15,9 +19,8 @@ pub trait PollSignalReader: PollSignal + SignalReader {
         }
     }
 
-    fn read_exact(&mut self, mut buf: &mut [Self::Sample]) -> PhonicResult<()> {
-        let spec = self.spec();
-        if buf.len() % spec.channels.count() as usize != 0 {
+    fn read_exact_poll(&mut self, mut buf: &mut [Self::Sample]) -> PhonicResult<()> {
+        if buf.len() % self.spec().channels.count() as usize != 0 {
             return Err(PhonicError::InvalidInput);
         }
 
@@ -46,9 +49,8 @@ pub trait PollSignalWriter: PollSignal + SignalWriter {
         }
     }
 
-    fn write_exact(&mut self, mut buf: &[Self::Sample]) -> PhonicResult<()> {
-        let spec = self.spec();
-        if buf.len() % spec.channels.count() as usize != 0 {
+    fn write_exact_poll(&mut self, mut buf: &[Self::Sample]) -> PhonicResult<()> {
+        if buf.len() % self.spec().channels.count() as usize != 0 {
             return Err(PhonicError::InvalidInput);
         }
 
@@ -65,16 +67,28 @@ pub trait PollSignalWriter: PollSignal + SignalWriter {
         Ok(())
     }
 
-    fn copy_n_buffered<R>(
+    fn flush_poll(&mut self) -> PhonicResult<()> {
+        loop {
+            match self.flush() {
+                Err(PhonicError::Interrupted) => continue,
+                Err(PhonicError::NotReady) => Self::poll_interval(),
+                result => return result,
+            }
+        }
+    }
+}
+
+pub trait PollSignalCopy<R>
+where
+    Self: Sized + PollSignalWriter,
+    R: PollSignalReader<Sample = Self::Sample>,
+{
+    fn copy_n_buffered_poll(
         &mut self,
         reader: &mut R,
         n_frames: u64,
         buf: &mut [Self::Sample],
-    ) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
+    ) -> PhonicResult<()> {
         let spec = self.spec().merged(reader.spec())?;
         let n_samples = n_frames * spec.channels.count() as u64;
         let mut n = 0;
@@ -93,27 +107,23 @@ pub trait PollSignalWriter: PollSignal + SignalWriter {
                 Ok(n) => n,
             };
 
-            self.write_exact(&buf[..n_read])?;
+            self.write_exact_poll(&buf[..n_read])?;
             n += n_read as u64;
         }
 
         Ok(())
     }
 
-    fn copy_n<R>(&mut self, reader: &mut R, n_frames: u64) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
+    fn copy_n_poll(&mut self, reader: &mut R, n_frames: u64) -> PhonicResult<()> {
         let mut buf = DefaultBuf::default();
-        self.copy_n_buffered(reader, n_frames, &mut buf)
+        self.copy_n_buffered_poll(reader, n_frames, &mut buf)
     }
 
-    fn copy_all_buffered<R>(&mut self, reader: &mut R, buf: &mut [Self::Sample]) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
+    fn copy_all_buffered_poll(
+        &mut self,
+        reader: &mut R,
+        buf: &mut [Self::Sample],
+    ) -> PhonicResult<()> {
         let _ = self.spec().merged(reader.spec())?;
 
         loop {
@@ -129,9 +139,9 @@ pub trait PollSignalWriter: PollSignal + SignalWriter {
                 Ok(n) => n,
             };
 
-            match self.write_exact(&buf[..n_read]) {
+            match self.write_exact_poll(&buf[..n_read]) {
                 Ok(()) => continue,
-                Err(PhonicError::OutOfBounds) => break, // TODO: write remainder
+                Err(PhonicError::OutOfBounds) => break,
                 Err(e) => return Err(e),
             };
         }
@@ -139,21 +149,19 @@ pub trait PollSignalWriter: PollSignal + SignalWriter {
         Ok(())
     }
 
-    fn copy_all<R>(&mut self, reader: &mut R) -> PhonicResult<()>
-    where
-        Self: Sized,
-        R: SignalReader<Sample = Self::Sample>,
-    {
+    fn copy_all_poll(&mut self, reader: &mut R) -> PhonicResult<()> {
         let mut buf = DefaultBuf::default();
-        self.copy_all_buffered(reader, &mut buf)
+        self.copy_all_buffered_poll(reader, &mut buf)
     }
 }
 
-impl<T: Signal> PollSignal for T {
-    fn poll_interval() {
-        todo!()
-    }
-}
-
+impl<T: Signal> PollSignal for T {}
 impl<T: SignalReader> PollSignalReader for T {}
 impl<T: SignalWriter> PollSignalWriter for T {}
+
+impl<T, R> PollSignalCopy<R> for T
+where
+    T: Sized + PollSignalWriter,
+    R: SignalReader<Sample = T::Sample>,
+{
+}

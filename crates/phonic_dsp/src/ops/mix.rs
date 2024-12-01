@@ -1,13 +1,10 @@
 use crate::{
     ops::Complement,
-    types::{
-        FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList,
-        SignalSeekerList,
-    },
+    types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList},
 };
 use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
-    SignalSeeker, SignalSpec,
+    SignalSpec,
 };
 use std::ops::DerefMut;
 
@@ -203,17 +200,8 @@ where
     }
 }
 
-impl<T, B> SignalSeeker for Mix<T, B>
-where
-    T: IndexedSignalList + SignalSeekerList,
-{
-    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        todo!()
-    }
-}
-
-macro_rules! impl_mix_sample {
-    ($sample:ty, $name:ident, $other:ident, $func:expr) => {
+macro_rules! impl_mix {
+    ($sample:ident, $name:ident, $other:ident, $func:expr) => {
         impl MixSample for $sample {
             #[inline]
             fn mix(self, $other: Self) -> Self {
@@ -224,15 +212,28 @@ macro_rules! impl_mix_sample {
     };
 }
 
-impl_mix_sample!(i8, a, b, a.saturating_add(b));
-impl_mix_sample!(i16, a, b, a.saturating_add(b));
-impl_mix_sample!(i32, a, b, a.saturating_add(b));
-impl_mix_sample!(i64, a, b, a.saturating_add(b));
+macro_rules! impl_unsigned_mix {
+    ($sample:ident, $name:ident, $other:ident) => {
+        impl_mix!($sample, $name, $other, {
+            let amp = $other.abs_diff($sample::ORIGIN);
+            if $other >= $sample::ORIGIN {
+                $name.saturating_add(amp)
+            } else {
+                $name.saturating_sub(amp)
+            }
+        });
+    };
+}
 
-// impl_mix_sample!(u8, a, b, a.saturating_add(b));
-// impl_mix_sample!(u16, a, b, a.saturating_add(b));
-// impl_mix_sample!(u32, a, b, a.saturating_add(b));
-// impl_mix_sample!(u64, a, b, a.saturating_add(b));
+impl_mix!(i8, a, b, a.saturating_add(b));
+impl_mix!(i16, a, b, a.saturating_add(b));
+impl_mix!(i32, a, b, a.saturating_add(b));
+impl_mix!(i64, a, b, a.saturating_add(b));
 
-impl_mix_sample!(f32, a, b, a + b);
-impl_mix_sample!(f64, a, b, a + b);
+impl_unsigned_mix!(u8, a, b);
+impl_unsigned_mix!(u16, a, b);
+impl_unsigned_mix!(u32, a, b);
+impl_unsigned_mix!(u64, a, b);
+
+impl_mix!(f32, a, b, a + b);
+impl_mix!(f64, a, b, a + b);

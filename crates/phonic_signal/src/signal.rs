@@ -1,6 +1,6 @@
 use crate::{PhonicResult, Sample, SignalSpec};
 use std::{
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Neg},
     time::Duration,
 };
 
@@ -98,12 +98,18 @@ pub trait SignalSeeker: Signal {
     /// moves the current position of the stream by the given number of frames
     fn seek(&mut self, offset: i64) -> PhonicResult<()>;
 
-    fn set_pos(&mut self, position: u64) -> PhonicResult<()>
+    fn set_pos(&mut self, pos: u64) -> PhonicResult<()>
     where
         Self: Sized + IndexedSignal,
     {
-        let frame_offset = position as i64 - self.pos() as i64;
-        self.seek(frame_offset)
+        let current_pos = self.pos();
+        let offset = if pos >= current_pos {
+            (pos - current_pos) as i64
+        } else {
+            ((current_pos - pos) as i64).neg()
+        };
+
+        self.seek(offset)
     }
 
     fn seek_start(&mut self) -> PhonicResult<()>
@@ -120,8 +126,6 @@ pub trait SignalSeeker: Signal {
         self.set_pos(self.len())
     }
 }
-
-// TODO: call overridden methods
 
 impl<T> Signal for T
 where

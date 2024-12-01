@@ -16,6 +16,9 @@ pub enum PhonicError {
     /// The receiver is missing data required to complete the operation.
     MissingData,
 
+    /// The parameters of the input did not match the parameters of the receiver.
+    ParamMismatch,
+
     /// The requested entity could not be found.
     NotFound,
 
@@ -50,6 +53,7 @@ impl std::fmt::Display for PhonicError {
             Self::InvalidState => write!(f, "invalid state"),
             Self::InvalidData => write!(f, "invalid data"),
             Self::MissingData => write!(f, "missing data"),
+            Self::ParamMismatch => write!(f, "parameter mismatch"),
             Self::NotFound => write!(f, "not found"),
             Self::OutOfBounds => write!(f, "out of bounds"),
             Self::NotReady => write!(f, "not ready"),
@@ -81,5 +85,22 @@ impl From<std::io::Error> for PhonicError {
             ErrorKind::WriteZero | ErrorKind::WouldBlock => Self::NotReady,
             _ => Self::Io(error),
         }
+    }
+}
+
+impl<T> From<std::sync::TryLockError<T>> for PhonicError {
+    fn from(error: std::sync::TryLockError<T>) -> Self {
+        use std::sync::TryLockError;
+
+        match error {
+            TryLockError::WouldBlock => PhonicError::NotReady,
+            TryLockError::Poisoned(e) => e.into(),
+        }
+    }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for PhonicError {
+    fn from(_error: std::sync::PoisonError<T>) -> Self {
+        Self::InvalidState
     }
 }

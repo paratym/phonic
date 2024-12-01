@@ -83,7 +83,8 @@ impl<T: SignalWriterList> SignalWriter for Concat<T> {
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        todo!()
+        let mut range = 0..self.inner.count();
+        range.try_for_each(|i| self.inner.flush(i))
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::KnownCodec;
 use lazy_static::lazy_static;
 use phonic_io_core::{
-    utils::FormatIdentifier, DynFormat, DynFormatConstructor, FormatConstructor, FormatTag,
-    StdIoSource, StreamSpec,
+    utils::{DropFinalize, FormatIdentifier},
+    DynFormat, DynFormatConstructor, FormatConstructor, FormatTag, StdIoSource, StreamSpec,
 };
 use phonic_signal::{PhonicError, PhonicResult};
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ impl DynFormatConstructor for KnownFormat {
 
         Ok(match self {
             #[cfg(feature = "wave")]
-            Self::Wave => Box::new(wave::WaveFormat::read_index(inner)?),
+            Self::Wave => Box::new(DropFinalize(wave::WaveFormat::read_index(inner)?)),
 
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
@@ -74,7 +74,7 @@ impl DynFormatConstructor for KnownFormat {
 
         Ok(match self {
             #[cfg(feature = "wave")]
-            Self::Wave => Box::new(wave::WaveFormat::write_index(inner, index)?),
+            Self::Wave => Box::new(DropFinalize(wave::WaveFormat::write_index(inner, index)?)),
 
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),

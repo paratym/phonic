@@ -40,7 +40,7 @@ impl Channels {
                 Ok(())
             }
 
-            _ => Err(todo!()),
+            _ => Err(PhonicError::ParamMismatch),
         }
     }
 

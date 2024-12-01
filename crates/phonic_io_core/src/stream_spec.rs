@@ -62,7 +62,7 @@ impl<C: CodecTag> StreamSpec<C> {
             || self.sample_type != other.sample_type
             || max_align % min_align != 0
         {
-            todo!()
+            return Err(PhonicError::ParamMismatch);
         }
 
         self.block_align = max_align;
@@ -144,30 +144,30 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
     }
 
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
-        if let Some(codec) = other.codec {
-            if self.codec.get_or_insert(codec) != &codec {
-                // return Err(PhonicError::SignalMismatch);
-                todo!()
-            }
+        if other
+            .codec
+            .is_some_and(|codec| *self.codec.get_or_insert(codec) != codec)
+        {
+            return Err(PhonicError::ParamMismatch);
         }
 
-        if let Some(byte_rate) = other.avg_byte_rate {
-            if self.avg_byte_rate.get_or_insert(byte_rate) != &byte_rate {
-                // return Err(PhonicError::SignalMismatch);
-                todo!()
-            }
+        if other
+            .avg_byte_rate
+            .is_some_and(|rate| *self.avg_byte_rate.get_or_insert(rate) != rate)
+        {
+            return Err(PhonicError::ParamMismatch);
         }
 
-        if let Some(block_align) = other.block_align {
-            if self
-                .block_align
-                .is_some_and(|align| block_align % align != 0)
-            {
-                // return Err(PhonicError::SignalMismatch);
-                todo!()
+        if let Some(align) = other.block_align {
+            let self_align = self.block_align.unwrap_or(align);
+            let min = align.min(self_align);
+            let max = align.max(self_align);
+
+            if max % min != 0 {
+                return Err(PhonicError::ParamMismatch);
             }
 
-            self.block_align = Some(block_align);
+            self.block_align = Some(max);
         }
 
         self.decoded_spec.merge(&other.decoded_spec)

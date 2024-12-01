@@ -130,10 +130,10 @@ macro_rules! match_tagged_signal {
 
 macro_rules! impl_unwrap {
     ($name:ident, $sample:ty, $variant:ident) => {
-        pub fn $name(self) -> Result<Box<dyn DynSignal<Sample = $sample>>, PhonicError> {
+        pub fn $name(self) -> Option<Box<dyn DynSignal<Sample = $sample>>> {
             match self {
-                Self::$variant(signal) => Ok(signal),
-                _ => todo!(), /* Err(PhonicError::SignalMismatch) */
+                Self::$variant(signal) => Some(signal),
+                _ => None,
             }
         }
     };

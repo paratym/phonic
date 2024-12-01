@@ -1,10 +1,9 @@
+use phonic_signal::{PhonicError, PhonicResult};
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicUsize, Ordering},
 };
-
-use phonic_signal::{PhonicError, PhonicResult};
 
 #[derive(Clone, Copy)]
 struct Cursor {

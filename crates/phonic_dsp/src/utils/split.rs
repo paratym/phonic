@@ -1,6 +1,7 @@
 use crate::types::SpmcRingBuf;
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, Signal, SignalReader, SignalSpec,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
+    SignalReader, SignalSpec,
 };
 use std::{
     cell::RefCell,
@@ -19,11 +20,11 @@ pub struct Split<T: Signal, B = DefaultBuf<<T as Signal>::Sample>> {
     inner_ref: Rc<RefCell<SplitInner<T, B>>>,
 }
 
+// TODO
 // pub struct SplitSync<T: Signal> {
 //     id: usize,
 //     inner_ref: Arc<RwLock<SplitInner<T>>>,
 // }
-//
 
 impl<T: Signal, B> SplitInner<T, B> {
     fn new(inner: T, buf: SpmcRingBuf<B>) -> Self {
@@ -87,33 +88,48 @@ where
     }
 }
 
-// impl<T, B> SignalReader for Split<T, B>
-// where
-//     T: SignalReader,
-//     B: DerefMut<Target = [T::Sample]>,
-// {
-//     fn read(&mut self, buf: &mut [Self::Sample]) -> Result<usize, PhonicError> {
-//         let mut inner = self.inner_ref.as_ref().borrow_mut();
-//         let cursor = inner.cursor.get(&self.id).ok_or(PhonicError::MissingData)?;
-//         if cursor.empty || inner.empty {
-//             inner.fill_buf()?;
-//         }
-//
-//         let (trailing, leading) = inner.buf.instance_buf(&self.id);
-//
-//         let n_trailing = buf.len().min(trailing.len());
-//         buf[..n_trailing].copy_from_slice(&trailing[..n_trailing]);
-//
-//         let n_leading = (buf.len() - n_trailing).min(leading.len());
-//         let n_samples = n_trailing + n_leading;
-//         if n_leading > 0 {
-//             buf[n_trailing..n_samples].copy_from_slice(&leading[..n_leading]);
-//         }
-//
-//         inner.buf.advance_instance(&self.id, n_samples)?;
-//         Ok(n_samples)
-//     }
-// }
+impl<T, B> Split<T, B>
+where
+    T: SignalReader,
+    B: DerefMut<Target = [T::Sample]>,
+{
+    fn read_inner(&mut self, buf: &mut [<Self as Signal>::Sample]) -> PhonicResult<()> {
+        todo!()
+    }
+}
+
+impl<T, B> SignalReader for Split<T, B>
+where
+    T: SignalReader,
+    B: DerefMut<Target = [T::Sample]>,
+{
+    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+        // self.read_inner(buf)?;
+        //
+        // let mut inner = self.inner_ref.as_ref().borrow_mut();
+        // let (trailing, leading) = inner.buf.instance_buf(&self.id);
+        //
+        // if trailing.is_empty() {
+        //     return Err(PhonicError::NotReady);
+        // }
+        //
+        // let buf_len = buf.len();
+        // let n_trailing = trailing.len().min(buf_len);
+        // buf[..n_trailing].copy_from_slice(&trailing[..n_trailing]);
+        //
+        // let mut n_leading = leading.len().min(buf_len - n_trailing);
+        // n_leading -= n_leading % self.spec.channels.count() as usize;
+        //
+        // let n_samples = n_trailing + n_leading;
+        // if n_leading > 0 {
+        //     buf[n_trailing..n_samples].copy_from_slice(&leading[..n_leading]);
+        // }
+        //
+        // inner.buf.advance_instance(&self.id, n_samples)?;
+        // Ok(n_samples)
+        todo!()
+    }
+}
 
 impl<T: Signal, B> Clone for Split<T, B> {
     fn clone(&self) -> Self {

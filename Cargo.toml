@@ -9,7 +9,6 @@ path = "lib.rs"
 [workspace]
 resolver = "2"
 members = [
-	"crates/phonic_core",
 	"crates/phonic_signal",
 	"crates/phonic_dsp",
 	"crates/phonic_io",
@@ -24,11 +23,10 @@ members = [
 ]
 
 [features]
-default = ["signal"]
-signal = ["dep:phonic_signal"]
+default = []
 dsp = ["dep:phonic_dsp"]
 
-io = ["dep:phonic_io", "phonic_dsp/io"]
+io = ["dep:phonic_io", "phonic_dsp?/io"]
 io-full = ["io", "wave", "pcm"]
 wave = ["io", "phonic_io/wave"]
 pcm = ["io", "phonic_io/pcm"]
@@ -37,8 +35,7 @@ cpal = ["dep:phonic_cpal"]
 rtrb = ["dep:phonic_rtrb"]
 
 [dependencies]
-phonic_core = { version = "0.1.0", path = "crates/phonic_core" }
-phonic_signal = { version = "0.1.0", path = "crates/phonic_signal", optional = true }
+phonic_signal = { version = "0.1.0", path = "crates/phonic_signal" }
 phonic_dsp = { version = "0.1.0", path = "crates/phonic_dsp", optional = true }
 phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
 phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }

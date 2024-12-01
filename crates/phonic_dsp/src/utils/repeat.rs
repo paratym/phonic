@@ -1,5 +1,5 @@
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
+    FiniteSignal, IndexedSignal, PhonicResult, SignalReader, SignalSeeker, SignalSpec,
 };
 
 pub struct Repeat<T> {
@@ -64,6 +64,12 @@ impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> 
 
 impl<T: IndexedSignal + FiniteSignal + SignalSeeker> SignalSeeker for Repeat<T> {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        todo!()
+        let pos = self.pos().checked_add_signed(offset);
+        if pos.is_none_or(|pos| pos > self.len()) {
+            return Err(PhonicError::OutOfBounds);
+        }
+
+        let inner_pos = pos.unwrap() % self.inner.len();
+        self.inner.set_pos(inner_pos)
     }
 }

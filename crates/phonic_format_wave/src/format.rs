@@ -1,7 +1,8 @@
 use crate::{WaveFormatTag, WaveHeader};
 use phonic_io_core::{
-    Format, FormatConstructor, FormatReader, FormatSeeker, FormatTag, FormatWriter, IndexedStream,
-    Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
+    FiniteFormat, FiniteStream, Format, FormatConstructor, FormatReader, FormatSeeker, FormatTag,
+    FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
+    StreamWriter,
 };
 use phonic_signal::{PhonicError, PhonicResult};
 use std::io::{Read, Seek, Write};
@@ -79,6 +80,48 @@ where
     fn streams(&self) -> &[StreamSpec<<Self::Tag as FormatTag>::Codec>] {
         std::slice::from_ref(&self.spec)
     }
+
+    fn current_stream(&self) -> usize {
+        0
+    }
+
+    fn primary_stream(&self) -> Option<usize> {
+        Some(0)
+    }
+}
+
+impl<T, F> IndexedFormat for WaveFormat<T, F>
+where
+    F: FormatTag,
+    Self: Format<Tag = F> + IndexedStream<Tag = F::Codec>,
+{
+    fn pos(&self) -> u64 {
+        IndexedStream::pos(self)
+    }
+
+    fn stream_pos(&self, stream: usize) -> u64 {
+        match stream {
+            0 => IndexedStream::pos(self),
+            _ => 0,
+        }
+    }
+}
+
+impl<T, F> FiniteFormat for WaveFormat<T, F>
+where
+    F: FormatTag,
+    Self: Format<Tag = F> + FiniteStream<Tag = F::Codec>,
+{
+    fn len(&self) -> u64 {
+        FiniteStream::len(self)
+    }
+
+    fn stream_len(&self, stream: usize) -> u64 {
+        match stream {
+            0 => FiniteStream::len(self),
+            _ => 0,
+        }
+    }
 }
 
 impl<T, F> FormatReader for WaveFormat<T, F>
@@ -134,13 +177,15 @@ impl<T, F: FormatTag> Stream for WaveFormat<T, F> {
     }
 }
 
-impl<T, F> IndexedStream for WaveFormat<T, F>
-where
-    F: FormatTag,
-    Self: Format<Tag = F>,
-{
+impl<T, F: FormatTag> IndexedStream for WaveFormat<T, F> {
     fn pos(&self) -> u64 {
         self.pos
+    }
+}
+
+impl<T, F: FormatTag> FiniteStream for WaveFormat<T, F> {
+    fn len(&self) -> u64 {
+        todo!()
     }
 }
 
@@ -153,7 +198,7 @@ impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
         loop {
             match self.inner.read(&mut buf[n..len])? {
                 0 if n == 0 => break,
-                0 => return Err(todo!()),
+                0 => return Err(PhonicError::InvalidState),
                 n_read => n += n_read,
             }
 
@@ -176,7 +221,7 @@ impl<T: Write, F: FormatTag> StreamWriter for WaveFormat<T, F> {
         loop {
             match self.inner.write(&buf[n..len])? {
                 0 if n == 0 => break,
-                0 => return Err(todo!()),
+                0 => return Err(PhonicError::InvalidData),
                 n_written => n += n_written,
             }
 

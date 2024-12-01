@@ -40,8 +40,7 @@ impl SignalSpec {
 
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if self.sample_rate != other.sample_rate {
-            // return Err(PhonicError::SignalMismatch);
-            todo!()
+            return Err(PhonicError::ParamMismatch);
         }
 
         self.channels.merge(&other.channels)?;
@@ -103,8 +102,7 @@ impl SignalSpecBuilder {
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if let Some(sample_rate) = other.sample_rate {
             if self.sample_rate.get_or_insert(sample_rate) != &sample_rate {
-                // return Err(PhonicError::SignalMismatch);
-                todo!()
+                return Err(PhonicError::ParamMismatch);
             }
         }
 

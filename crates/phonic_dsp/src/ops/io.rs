@@ -1,6 +1,11 @@
+use std::ops::Deref;
+
 use crate::ops::{Convert, FromSample, IntoSample};
 use phonic_io::{match_tagged_signal, DynSignal, TaggedSignal};
-use phonic_signal::{PhonicResult, Sample};
+use phonic_signal::{
+    utils::{DefaultBuf, PollSignalCopy},
+    PhonicResult, Sample,
+};
 
 pub trait FromKnownSample:
     Sample
@@ -66,9 +71,6 @@ pub trait TaggedSignalExt {
     fn convert<S>(self) -> Box<dyn DynSignal<Sample = S>>
     where
         S: FromKnownSample + IntoKnownSample;
-
-    fn copy_n_converted(&mut self, reader: &mut Self) -> PhonicResult<()>;
-    fn copy_all_converted(&mut self, reader: &mut Self) -> PhonicResult<()>;
 }
 
 impl TaggedSignalExt for TaggedSignal {
@@ -77,13 +79,5 @@ impl TaggedSignalExt for TaggedSignal {
         S: FromKnownSample + IntoKnownSample,
     {
         match_tagged_signal!(self, signal => Box::new(<Convert<_, _>>::new(signal)))
-    }
-
-    fn copy_n_converted(&mut self, reader: &mut Self) -> PhonicResult<()> {
-        todo!()
-    }
-
-    fn copy_all_converted(&mut self, reader: &mut Self) -> PhonicResult<()> {
-        todo!()
     }
 }

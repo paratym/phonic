@@ -4,13 +4,14 @@ use cpal::{
 };
 use phonic_io_core::{KnownSample, KnownSampleType};
 use phonic_signal::{
+    utils::{PollSignalReader, PollSignalWriter},
     PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
 use std::time::Duration;
 
 pub trait SignalSpecExt {
     fn from_cpal_config(config: StreamConfig) -> Self;
-    fn into_cpal_config(self) -> StreamConfig;
+    fn into_cpal_config(self, buffer_size: BufferSize) -> StreamConfig;
 }
 
 impl SignalSpecExt for SignalSpec {
@@ -21,11 +22,11 @@ impl SignalSpecExt for SignalSpec {
         }
     }
 
-    fn into_cpal_config(self) -> StreamConfig {
+    fn into_cpal_config(self, buffer_size: BufferSize) -> StreamConfig {
         StreamConfig {
             channels: self.channels.count() as u16,
             sample_rate: SampleRate(self.sample_rate),
-            buffer_size: BufferSize::Default,
+            buffer_size,
         }
     }
 }
@@ -95,6 +96,7 @@ pub trait DeviceExt: DeviceTrait {
         &self,
         mut signal: S,
         error_callback: E,
+        buffer_size: BufferSize,
         timeout: Option<Duration>,
     ) -> Result<Self::Stream, BuildStreamError>
     where
@@ -103,9 +105,9 @@ pub trait DeviceExt: DeviceTrait {
         E: FnMut(StreamError) + Send + 'static,
     {
         self.build_input_stream(
-            &signal.spec().into_cpal_config(),
-            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact(buf, false) {
-                Ok(_) | Err(PhonicError::NotReady) | Err(PhonicError::Interrupted) => {}
+            &signal.spec().into_cpal_config(buffer_size),
+            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact_poll(buf) {
+                Ok(_) | Err(PhonicError::OutOfBounds) => {}
                 Err(e) => panic!("error writing to signal: {e}"),
             },
             error_callback,
@@ -117,6 +119,7 @@ pub trait DeviceExt: DeviceTrait {
         &self,
         mut signal: S,
         error_callback: E,
+        buffer_size: BufferSize,
         timeout: Option<Duration>,
     ) -> Result<Self::Stream, BuildStreamError>
     where
@@ -125,17 +128,12 @@ pub trait DeviceExt: DeviceTrait {
         E: FnMut(StreamError) + Send + 'static,
     {
         self.build_output_stream(
-            &signal.spec().into_cpal_config(),
-            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
-                let n = match signal.read(buf) {
-                    Ok(n) => n,
-                    Err(PhonicError::NotReady)
-                    | Err(PhonicError::Interrupted)
-                    | Err(PhonicError::OutOfBounds) => 0,
-                    Err(e) => panic!("error reading signal: {e}"),
-                };
-
-                buf[n..].fill(S::Sample::ORIGIN);
+            &signal.spec().into_cpal_config(buffer_size),
+            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| match signal.read_exact_poll(buf) {
+                Ok(()) => (),
+                // TODO: read remainder
+                Err(PhonicError::OutOfBounds) => buf.fill(S::Sample::ORIGIN),
+                Err(e) => panic!("error reading from signal: {e}"),
             },
             error_callback,
             timeout,

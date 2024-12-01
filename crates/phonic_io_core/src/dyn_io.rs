@@ -1,6 +1,7 @@
 use crate::{
-    CodecTag, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
-    IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter, TaggedSignal,
+    CodecTag, FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag,
+    FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
+    StreamWriter, TaggedSignal,
 };
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
@@ -10,8 +11,22 @@ use std::io::{Read, Seek, Write};
 pub trait StdIoSource: Read + Write + Seek + Send + Sync {}
 impl<T> StdIoSource for T where T: Read + Write + Seek + Send + Sync {}
 
-pub trait DynFormat: Format + FormatReader + FormatWriter + FormatSeeker + Send + Sync {}
-impl<T> DynFormat for T where T: Format + FormatReader + FormatWriter + FormatSeeker + Send + Sync {}
+pub trait DynFormat:
+    Format + IndexedFormat + FiniteFormat + FormatReader + FormatWriter + FormatSeeker + Send + Sync
+{
+}
+
+impl<T> DynFormat for T where
+    T: Format
+        + IndexedFormat
+        + FiniteFormat
+        + FormatReader
+        + FormatWriter
+        + FormatSeeker
+        + Send
+        + Sync
+{
+}
 
 pub trait DynStream:
     Stream + IndexedStream + FiniteStream + StreamReader + StreamWriter + StreamSeeker + Send + Sync

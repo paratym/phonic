@@ -153,169 +153,181 @@ macro_rules! impl_convert {
     };
 }
 
-#[inline(always)]
-fn i8_to_u8(s: i8) -> u8 {
-    (s as u8).wrapping_add(0x80)
-}
-
 impl_convert!(
     i8 as s,
+
     // signed
     i8 => s,
     i16 => (s as i16) << 8,
     i32 => (s as i32) << 24,
     i64 => (s as i64) << 56,
-    // unsigned
-    u8 => i8_to_u8(s),
-    u16 => (i8_to_u8(s) as u16) << 8,
-    u32 => (i8_to_u8(s) as u32) << 24,
-    u64 => todo!(),
-    // float
-    f32 => s as f32 / 128.0,
-    f64 => s as f64 / 128.0
-);
 
-#[inline(always)]
-fn i16_to_u16(s: i16) -> u16 {
-    (s as u16).wrapping_add(0x8000)
-}
+    // unsigned
+    u8 => (s as u8).wrapping_add(1 << 7),
+    u16 => IntoSample::<u8>::into_sample(s).into_sample(),
+    u32 => IntoSample::<u8>::into_sample(s).into_sample(),
+    u64 => IntoSample::<u8>::into_sample(s).into_sample(),
+
+    // float
+    f32 => s as f32 / (i8::MAX as f32 + 1.0),
+    f64 => s as f64 / (i8::MAX as f64 + 1.0)
+);
 
 impl_convert!(
     i16 as s,
+
     // signed
     i8 => (s >> 8) as i8,
     i16 => s,
     i32 => (s as i32) << 16,
-    i64 => (s as i64) << 56,
-    // unsigned
-    u8 => (i16_to_u16(s) >> 8) as u8,
-    u16 => i16_to_u16(s),
-    u32 => (i16_to_u16(s) as u32) << 16,
-    u64 => todo!(),
-    // float
-    f32 => s as f32 / 32_768.0,
-    f64 => s as f64 / 32_768.0
-);
+    i64 => (s as i64) << 48,
 
-#[inline(always)]
-fn i32_to_u32(s: i32) -> u32 {
-    (s as u32).wrapping_add(0x8000_0000)
-}
+    // unsigned
+    u8 => IntoSample::<u16>::into_sample(s).into_sample(),
+    u16 => (s as u16).wrapping_add(1 << 15),
+    u32 => IntoSample::<u16>::into_sample(s).into_sample(),
+    u64 => IntoSample::<u16>::into_sample(s).into_sample(),
+
+    // float
+    f32 => s as f32 / (i16::MAX as f32 + 1.0),
+    f64 => s as f64 / (i16::MAX as f64 + 1.0)
+);
 
 impl_convert!(
     i32 as s,
+
     // signed
     i8 => (s >> 24) as i8,
     i16 => (s >> 16) as i16,
     i32 => s,
-    i64 => todo!(),
+    i64 => (s as i64) << 32,
+
     // unsigned
-    u8 => (i32_to_u32(s) >> 24) as u8,
-    u16 => (i32_to_u32(s) >> 16) as u16,
-    u32 => i32_to_u32(s),
-    u64 => todo!(),
+    u8 => IntoSample::<u32>::into_sample(s).into_sample(),
+    u16 => IntoSample::<u32>::into_sample(s).into_sample(),
+    u32 => (s as u32).wrapping_add(1 << 31),
+    u64 => IntoSample::<u32>::into_sample(s).into_sample(),
+
     // float
-    f32 => (s as f64 / 2_147_483_648.0) as f32,
-    f64 => s as f64 / 2_147_483_648.0
+    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
+    f64 => s as f64 / (i32::MAX as f64 + 1.0)
 );
 
 impl_convert!(
     i64 as s,
+
     // signed
-    i8 => todo!(),
-    i16 => todo!(),
-    i32 => todo!(),
+    i8 => (s >> 56) as i8,
+    i16 => (s >> 48) as i16,
+    i32 => (s >> 32) as i32,
     i64 => s,
+
     // unsigned
-    u8 => todo!(),
-    u16 => todo!(),
-    u32 => todo!(),
-    u64 => todo!(),
+    u8 => IntoSample::<u64>::into_sample(s).into_sample(),
+    u16 => IntoSample::<u64>::into_sample(s).into_sample(),
+    u32 => IntoSample::<u64>::into_sample(s).into_sample(),
+    u64 => (s as u64).wrapping_add(1 << 63),
+
     // float
-    f32 => todo!(),
-    f64 => todo!()
+    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
+    f64 => s as f64 / (i64::MAX as f64 + 1.0)
 );
 
 impl_convert!(
     u8 as s,
+
     // signed
-    i8 => s.wrapping_sub(0x80) as i8,
-    i16 => ((s.wrapping_sub(0x80) as i8) as i16) << 8,
-    i32 => ((s.wrapping_sub(0x80) as i8) as i32) << 24,
-    i64 => ((s.wrapping_sub(0x80) as i8) as i64) << 56,
+    i8 => s.wrapping_sub(1 << 7) as i8,
+    i16 => IntoSample::<i8>::into_sample(s).into_sample(),
+    i32 => IntoSample::<i8>::into_sample(s).into_sample(),
+    i64 => IntoSample::<i8>::into_sample(s).into_sample(),
+
     // unsigned
     u8 => s,
     u16 => (s as u16) << 8,
     u32 => (s as u32) << 24,
     u64 => (s as u64) << 56,
+
     // float
-    f32 => ((s as f32) / 128.0) - 1.0,
-    f64 => ((s as f64) / 128.0) - 1.0
+    f32 => ((s as f32) / (u8::ORIGIN as f32 + 1.0)) - 1.0,
+    f64 => ((s as f64) / (u8::ORIGIN as f64 + 1.0)) - 1.0
 );
 
 impl_convert!(
     u16 as s,
+
     // signed
-    i8 => (s.wrapping_sub(0x8000) >> 8) as i8,
-    i16 => s.wrapping_sub(0x8000) as i16,
-    i32 => ((s.wrapping_sub(0x8000) as i16) as i32) << 16,
-    i64 => ((s.wrapping_sub(0x8000) as i16) as i64) << 48,
+    i8 => IntoSample::<i16>::into_sample(s).into_sample(),
+    i16 => s.wrapping_sub(1 << 15) as i16,
+    i32 => IntoSample::<i16>::into_sample(s).into_sample(),
+    i64 => IntoSample::<i16>::into_sample(s).into_sample(),
+
     // unsigned
     u8 => (s >> 8) as u8,
     u16 => s,
     u32 => (s as u32) << 16,
     u64 => (s as u64) << 48,
+
     // float
-    f32 => ((s as f32) / 32_768.0) - 1.0,
-    f64 => ((s as f64) / 32_768.0) - 1.0
+    f32 => ((s as f32) / (u16::ORIGIN as f32 + 1.0)) - 1.0,
+    f64 => ((s as f64) / (u16::ORIGIN as f64 + 1.0)) - 1.0
 );
 
 impl_convert!(
     u32 as s,
+
     // signed
-    i8 => (s.wrapping_sub(0x8000_0000) >> 24) as i8,
-    i16 => (s.wrapping_sub(0x8000_0000) >> 16) as i16,
-    i32 => s.wrapping_sub(0x8000_0000) as i32,
-    i64 => ((s.wrapping_sub(0x8000_0000) as i32) as i64) << 48,
+    i8 => IntoSample::<i32>::into_sample(s).into_sample(),
+    i16 => IntoSample::<i32>::into_sample(s).into_sample(),
+    i32 => s.wrapping_sub(1 << 31) as i32,
+    i64 => IntoSample::<i32>::into_sample(s).into_sample(),
+
     // unsigned
     u8 => (s >> 24) as u8,
     u16 => (s >> 16) as u16,
     u32 => s,
     u64 => (s as u64) << 32,
+
     // float
-    f32 => (((s as f64) / 2_147_483_648.0) - 1.0) as f32,
-    f64 => ((s as f64) / 2_147_483_648.0) - 1.0
+    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
+    f64 => ((s as f64) / (u32::ORIGIN as f64 + 1.0)) - 1.0
 );
 
 impl_convert!(
     u64 as s,
+
     // signed
-    i8 => todo!(),
-    i16 => todo!(),
-    i32 => todo!(),
-    i64 => todo!(),
+    i8 => IntoSample::<i64>::into_sample(s).into_sample(),
+    i16 => IntoSample::<i64>::into_sample(s).into_sample(),
+    i32 => IntoSample::<i64>::into_sample(s).into_sample(),
+    i64 => s.wrapping_sub(1 << 63) as i64,
+
     // unsigned
-    u8 => todo!(),
-    u16 => todo!(),
-    u32 => todo!(),
+    u8 => (s >> 56) as u8,
+    u16 => (s >> 48) as u16,
+    u32 => (s >> 32) as u32,
     u64 => s,
+
     // float
-    f32 => todo!(),
-    f64 => todo!()
+    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
+    f64 => ((s as f64) / (u64::ORIGIN as f64 + 1.0)) - 1.0
 );
 
 impl_convert!(
     f32 as s,
+
     // signed
-    i8 => todo!(),
-    i16 => todo!(),
-    i32 => todo!(),
-    i64 => todo!(),
+    i8 => (s * i8::MAX as f32) as i8,
+    i16 => (s * i16::MAX as f32) as i16,
+    i32 => IntoSample::<f64>::into_sample(s).into_sample(),
+    i64 => IntoSample::<f64>::into_sample(s).into_sample(),
+
     // unsigned
-    u8 => todo!(),
-    u16 => todo!(),
-    u32 => todo!(),
-    u64 => todo!(),
+    u8 => IntoSample::<i8>::into_sample(s).into_sample(),
+    u16 => IntoSample::<i16>::into_sample(s).into_sample(),
+    u32 => IntoSample::<i32>::into_sample(s).into_sample(),
+    u64 => IntoSample::<i64>::into_sample(s).into_sample(),
+
     // float
     f32 => s,
     f64 => s as f64
@@ -323,16 +335,19 @@ impl_convert!(
 
 impl_convert!(
     f64 as s,
+
     // signed
-    i8 => todo!(),
-    i16 => todo!(),
-    i32 => todo!(),
-    i64 => todo!(),
+    i8 => (s * i8::MAX as f64) as i8,
+    i16 => (s * i16::MAX as f64) as i16,
+    i32 => (s * i32::MAX as f64) as i32,
+    i64 => (s * i64::MAX as f64) as i64,
+
     // unsigned
-    u8 => todo!(),
-    u16 => todo!(),
-    u32 => todo!(),
-    u64 => todo!(),
+    u8 => IntoSample::<i8>::into_sample(s).into_sample(),
+    u16 => IntoSample::<i16>::into_sample(s).into_sample(),
+    u32 => IntoSample::<i32>::into_sample(s).into_sample(),
+    u64 => IntoSample::<i64>::into_sample(s).into_sample(),
+
     // float
     f32 => s as f32,
     f64 => s
