@@ -7,6 +7,7 @@ edition = "2021"
 phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
 phonic_io = { version = "0.1.0", path = "../phonic_io", optional = true }
 phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
+num-traits = "0.2.19"
 
 [features]
 io = ["dep:phonic_io"]

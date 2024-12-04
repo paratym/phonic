@@ -1,7 +1,6 @@
 use crate::types::SpmcRingBuf;
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
-    SignalReader, SignalSpec,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSpec,
 };
 use std::{
     cell::RefCell,

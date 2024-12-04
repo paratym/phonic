@@ -1,4 +1,5 @@
 use crate::ops::ComplementSample;
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
 };
@@ -24,9 +25,10 @@ impl<T: Signal> Limit<T> {
         T::Sample: ComplementSample + PartialOrd,
     {
         let complement = limit.complement();
-        let range = match limit < complement {
-            true => (limit, complement),
-            false => (complement, limit),
+        let range = if limit >= complement {
+            (complement, limit)
+        } else {
+            (limit, complement)
         };
 
         Self { inner, range }
@@ -58,23 +60,12 @@ impl<T: Signal> Limit<T> {
     }
 }
 
-impl<T: Signal> Signal for Limit<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !SignalReader + !SignalWriter for Limit<T> {
+        type Target = T;
 
-    fn spec(&self) -> &phonic_signal::SignalSpec {
-        self.inner.spec()
-    }
-}
-
-impl<T: IndexedSignal> IndexedSignal for Limit<T> {
-    fn pos(&self) -> u64 {
-        self.inner.pos()
-    }
-}
-
-impl<T: FiniteSignal> FiniteSignal for Limit<T> {
-    fn len(&self) -> u64 {
-        self.inner.len()
+        &self -> &self.inner;
+        &mut self -> &mut self.inner;
     }
 }
 
@@ -90,12 +81,6 @@ where
             .for_each(|s| *s = s.limit(&self.range.0, &self.range.1));
 
         Ok(n)
-    }
-}
-
-impl<T: SignalSeeker> SignalSeeker for Limit<T> {
-    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        self.inner.seek(offset)
     }
 }
 

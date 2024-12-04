@@ -1,7 +1,5 @@
-use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
-    SignalSpec,
-};
+use phonic_macro::impl_deref_signal;
+use phonic_signal::{PhonicResult, Sample, SignalReader};
 use std::ops::Neg;
 
 pub trait ComplementSample: Sample {
@@ -26,23 +24,12 @@ impl<T> Complement<T> {
     }
 }
 
-impl<T: Signal> Signal for Complement<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !SignalReader + !SignalWriter for Complement<T> {
+        type Target = T;
 
-    fn spec(&self) -> &SignalSpec {
-        self.inner.spec()
-    }
-}
-
-impl<T: IndexedSignal> IndexedSignal for Complement<T> {
-    fn pos(&self) -> u64 {
-        self.inner.pos()
-    }
-}
-
-impl<T: FiniteSignal> FiniteSignal for Complement<T> {
-    fn len(&self) -> u64 {
-        self.inner.len()
+        &self -> &self.inner;
+        &mut self -> &mut self.inner;
     }
 }
 
@@ -58,18 +45,11 @@ where
     }
 }
 
-impl<T: SignalSeeker> SignalSeeker for Complement<T> {
-    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        self.inner.seek(offset)
-    }
-}
-
 macro_rules! impl_complement {
-    ($sample:ident, $name:ident, $func:expr) => {
+    ($sample:ident, $self:ident, $func:expr) => {
         impl ComplementSample for $sample {
             #[inline]
-            fn complement(self) -> Self {
-                let $name = self;
+            fn complement($self) -> Self {
                 $func
             }
         }
@@ -77,27 +57,26 @@ macro_rules! impl_complement {
 }
 
 macro_rules! impl_unsigned_complement {
-    ($sample:ident, $name:ident) => {
-        impl_complement!($sample, $name, {
-            let amp = $name.abs_diff($sample::ORIGIN);
-            if $name >= $sample::ORIGIN {
-                $sample::ORIGIN - amp
+    ($sample:ident, $self:ident) => {
+        impl_complement!($sample, $self, {
+            if $self >= $sample::ORIGIN {
+                $sample::ORIGIN - ($self - $sample::ORIGIN)
             } else {
-                $sample::ORIGIN.saturating_add(amp)
+                $sample::ORIGIN.saturating_add($sample::ORIGIN - $self)
             }
         });
     };
 }
 
-impl_complement!(i8, s, s.saturating_neg());
-impl_complement!(i16, s, s.saturating_neg());
-impl_complement!(i32, s, s.saturating_neg());
-impl_complement!(i64, s, s.saturating_neg());
+impl_complement!(i8, self, self.saturating_neg());
+impl_complement!(i16, self, self.saturating_neg());
+impl_complement!(i32, self, self.saturating_neg());
+impl_complement!(i64, self, self.saturating_neg());
 
-impl_unsigned_complement!(u8, s);
-impl_unsigned_complement!(u16, s);
-impl_unsigned_complement!(u32, s);
-impl_unsigned_complement!(u64, s);
+impl_unsigned_complement!(u8, self);
+impl_unsigned_complement!(u16, self);
+impl_unsigned_complement!(u32, self);
+impl_unsigned_complement!(u64, self);
 
-impl_complement!(f32, s, s.neg());
-impl_complement!(f64, s, s.neg());
+impl_complement!(f32, self, self.neg());
+impl_complement!(f64, self, self.neg());

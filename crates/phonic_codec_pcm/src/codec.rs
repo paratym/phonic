@@ -173,14 +173,21 @@ where
         let aligned_buf = &mut buf[start_i..start_i + aligned_len];
         let sample_buf = aligned_buf.as_mut_slice_of::<S>().unwrap();
 
-        let n_samples = self.inner.read(sample_buf)?;
-        let n_bytes = n_samples * size_of::<S>();
+        let mut n_samples = 0;
+        loop {
+            match self.inner.read(sample_buf)? {
+                0 if n_samples == 0 => break,
+                0 => return Err(PhonicError::InvalidData),
+                n => n_samples += n,
+            }
 
-        // TODO: block alignment considerations
-        debug_assert_eq!(n_bytes % self.stream_spec().block_align, 0);
+            if n_samples % self.spec.block_align == 0 {
+                break;
+            }
+        }
 
         buf.rotate_left(start_i);
-        Ok(n_bytes)
+        Ok(n_samples * size_of::<S>())
     }
 }
 

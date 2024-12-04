@@ -197,7 +197,7 @@ pub fn generate_deref_signal_impl(input: DerefSignalInput) -> TokenStream {
                 type Sample = <#target as #path>::Sample;
 
                 #[inline]
-                fn spec(#deref_self) -> &SignalSpec {
+                fn spec(#deref_self) -> &#crate_root::SignalSpec {
                     <#target as #path>::spec(#deref)
                 }
             },
@@ -215,24 +215,24 @@ pub fn generate_deref_signal_impl(input: DerefSignalInput) -> TokenStream {
             },
             "SignalReader" => quote! {
                 #[inline]
-                fn read(#deref_mut_self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+                fn read(#deref_mut_self, buf: &mut [Self::Sample]) -> #crate_root::PhonicResult<usize> {
                     <#target as #path>::read(#deref_mut, buf)
                 }
             },
             "SignalWriter" => quote! {
                 #[inline]
-                fn write(#deref_mut_self, buf: &[Self::Sample]) -> PhonicResult<usize> {
+                fn write(#deref_mut_self, buf: &[Self::Sample]) -> #crate_root::PhonicResult<usize> {
                     <#target as #path>::write(#deref_mut, buf)
                 }
 
                 #[inline]
-                fn flush(#deref_mut_self) -> PhonicResult<()> {
+                fn flush(#deref_mut_self) -> #crate_root::PhonicResult<()> {
                     <#target as #path>::flush(#deref_mut)
                 }
             },
             "SignalSeeker" => quote! {
                 #[inline]
-                fn seek(#deref_mut_self, offset: i64) -> PhonicResult<()> {
+                fn seek(#deref_mut_self, offset: i64) -> #crate_root::PhonicResult<()> {
                     <#target as #path>::seek(#deref_mut, offset)
                 }
             },

@@ -1,4 +1,7 @@
-use crate::ops::{ClipSample, Complement, ComplementSample, Convert, Gain, Limit, Mix};
+use crate::ops::{
+    ClipSample, Complement, ComplementSample, Convert, DbRatio, Gain, GainSample, Limit, Mix,
+};
+use num_traits::Inv;
 use phonic_signal::{IndexedSignal, PhonicResult, Sample, Signal};
 
 pub trait OpSignalExt: Sized + Signal {
@@ -14,19 +17,47 @@ pub trait OpSignalExt: Sized + Signal {
         Convert::new_buffered(self, buf)
     }
 
-    fn gain_amp(self, amp: f32) -> Gain<Self> {
-        Gain::new(self, amp)
+    fn gain_amp(
+        self,
+        ratio: <Self::Sample as GainSample>::Ratio,
+    ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
+    where
+        Self::Sample: GainSample,
+    {
+        Gain::new(self, ratio)
     }
 
-    fn gain_db(self, db: f32) -> Gain<Self> {
+    fn gain_db(
+        self,
+        db: <Self::Sample as GainSample>::Ratio,
+    ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
+    where
+        Self::Sample: GainSample,
+        <Self::Sample as GainSample>::Ratio: DbRatio,
+    {
         Gain::new_db(self, db)
     }
 
-    fn attenuate(self, amp: f32) -> Gain<Self> {
-        Gain::attenuate(self, amp)
+    fn attenuate(
+        self,
+        ratio: <Self::Sample as GainSample>::Ratio,
+    ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
+    where
+        Self::Sample: GainSample,
+        <Self::Sample as GainSample>::Ratio: Inv<Output = <Self::Sample as GainSample>::Ratio>,
+    {
+        Gain::attenuate(self, ratio)
     }
 
-    fn attenuate_db(self, db: f32) -> Gain<Self> {
+    fn attenuate_db(
+        self,
+        db: <Self::Sample as GainSample>::Ratio,
+    ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
+    where
+        Self::Sample: GainSample,
+        <Self::Sample as GainSample>::Ratio:
+            DbRatio + Inv<Output = <Self::Sample as GainSample>::Ratio>,
+    {
         Gain::attenuate_db(self, db)
     }
 

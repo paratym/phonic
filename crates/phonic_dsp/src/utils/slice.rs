@@ -1,7 +1,7 @@
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
-    SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    SignalReader, SignalSeeker, SignalWriter,
 };
 use std::time::Duration;
 
@@ -159,7 +159,7 @@ impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
 
 impl<T: IndexedSignal + SignalWriter> Slice<T> {
     fn write_padding(&mut self) -> PhonicResult<()> {
-        let buf = DefaultBuf::default();
+        let buf = <DefaultBuf<_>>::default();
 
         let buf_len = buf.len();
         let n_channels = self.spec().channels.count() as usize;

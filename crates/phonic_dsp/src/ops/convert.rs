@@ -1,6 +1,8 @@
+use crate::ops::ClipSample;
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
-    SignalSeeker, SignalSpec, SignalWriter,
+    utils::DefaultBuf, PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
 };
 use std::{marker::PhantomData, ops::DerefMut};
 
@@ -51,35 +53,19 @@ where
     }
 }
 
-impl<T, S, B> Signal for Convert<T, S, B>
-where
-    T: Signal,
-    S: Sample,
-{
+impl_deref_signal! {
+    impl<T, S: Sample, B> _ + !Signal for Convert<T, S, B> {
+        type Target = T;
+
+        &self -> &self.inner;
+   }
+}
+
+impl<T: Signal, S: Sample, B> Signal for Convert<T, S, B> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
         self.inner.spec()
-    }
-}
-
-impl<T, S, B> IndexedSignal for Convert<T, S, B>
-where
-    T: IndexedSignal,
-    S: Sample,
-{
-    fn pos(&self) -> u64 {
-        self.inner.pos()
-    }
-}
-
-impl<T, S, B> FiniteSignal for Convert<T, S, B>
-where
-    T: FiniteSignal,
-    S: Sample,
-{
-    fn len(&self) -> u64 {
-        self.inner.len()
     }
 }
 
@@ -145,7 +131,7 @@ impl<T: Sample, S: Sample + FromSample<T>> IntoSample<S> for T {
 macro_rules! impl_convert {
     ($sample:ty as $name:ident, $($into:ty => $func:expr),+) => {
         $(impl FromSample<$sample> for $into {
-            #[inline]
+            #[inline(always)]
             fn from_sample($name: $sample) -> Self {
                 $func
             }
@@ -163,14 +149,14 @@ impl_convert!(
     i64 => (s as i64) << 56,
 
     // unsigned
-    u8 => (s as u8).wrapping_add(1 << 7),
-    u16 => IntoSample::<u8>::into_sample(s).into_sample(),
-    u32 => IntoSample::<u8>::into_sample(s).into_sample(),
-    u64 => IntoSample::<u8>::into_sample(s).into_sample(),
+    u8 => (s as u8).wrapping_add(const { 1 << 7 }),
+    u16 => u8::from_sample(s).into_sample(),
+    u32 => u8::from_sample(s).into_sample(),
+    u64 => u8::from_sample(s).into_sample(),
 
     // float
-    f32 => s as f32 / (i8::MAX as f32 + 1.0),
-    f64 => s as f64 / (i8::MAX as f64 + 1.0)
+    f32 => s as f32 / const { i8::MAX as f32 + 1.0 },
+    f64 => s as f64 / const { i8::MAX as f64 + 1.0 }
 );
 
 impl_convert!(
@@ -183,14 +169,14 @@ impl_convert!(
     i64 => (s as i64) << 48,
 
     // unsigned
-    u8 => IntoSample::<u16>::into_sample(s).into_sample(),
-    u16 => (s as u16).wrapping_add(1 << 15),
-    u32 => IntoSample::<u16>::into_sample(s).into_sample(),
-    u64 => IntoSample::<u16>::into_sample(s).into_sample(),
+    u8 => u16::from_sample(s).into_sample(),
+    u16 => (s as u16).wrapping_add(const { 1 << 15 }),
+    u32 => u16::from_sample(s).into_sample(),
+    u64 => u16::from_sample(s).into_sample(),
 
     // float
-    f32 => s as f32 / (i16::MAX as f32 + 1.0),
-    f64 => s as f64 / (i16::MAX as f64 + 1.0)
+    f32 => s as f32 / const { i16::MAX as f32 + 1.0 },
+    f64 => s as f64 / const { i16::MAX as f64 + 1.0 }
 );
 
 impl_convert!(
@@ -203,14 +189,14 @@ impl_convert!(
     i64 => (s as i64) << 32,
 
     // unsigned
-    u8 => IntoSample::<u32>::into_sample(s).into_sample(),
-    u16 => IntoSample::<u32>::into_sample(s).into_sample(),
-    u32 => (s as u32).wrapping_add(1 << 31),
-    u64 => IntoSample::<u32>::into_sample(s).into_sample(),
+    u8 => u32::from_sample(s).into_sample(),
+    u16 => u32::from_sample(s).into_sample(),
+    u32 => (s as u32).wrapping_add(const { 1 << 31 }),
+    u64 => u32::from_sample(s).into_sample(),
 
     // float
     f32 => IntoSample::<f64>::into_sample(s).into_sample(),
-    f64 => s as f64 / (i32::MAX as f64 + 1.0)
+    f64 => s as f64 / const { i32::MAX as f64 + 1.0 }
 );
 
 impl_convert!(
@@ -223,24 +209,24 @@ impl_convert!(
     i64 => s,
 
     // unsigned
-    u8 => IntoSample::<u64>::into_sample(s).into_sample(),
-    u16 => IntoSample::<u64>::into_sample(s).into_sample(),
-    u32 => IntoSample::<u64>::into_sample(s).into_sample(),
-    u64 => (s as u64).wrapping_add(1 << 63),
+    u8 => u64::from_sample(s).into_sample(),
+    u16 => u64::from_sample(s).into_sample(),
+    u32 => u64::from_sample(s).into_sample(),
+    u64 => (s as u64).wrapping_add(const { 1 << 63 }),
 
     // float
-    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
-    f64 => s as f64 / (i64::MAX as f64 + 1.0)
+    f32 => f64::from_sample(s).into_sample(),
+    f64 => s as f64 / const { i64::MAX as f64 + 1.0 }
 );
 
 impl_convert!(
     u8 as s,
 
     // signed
-    i8 => s.wrapping_sub(1 << 7) as i8,
-    i16 => IntoSample::<i8>::into_sample(s).into_sample(),
-    i32 => IntoSample::<i8>::into_sample(s).into_sample(),
-    i64 => IntoSample::<i8>::into_sample(s).into_sample(),
+    i8 => s.wrapping_sub(const { 1 << 7 }) as i8,
+    i16 => i8::from_sample(s).into_sample(),
+    i32 => i8::from_sample(s).into_sample(),
+    i64 => i8::from_sample(s).into_sample(),
 
     // unsigned
     u8 => s,
@@ -249,18 +235,18 @@ impl_convert!(
     u64 => (s as u64) << 56,
 
     // float
-    f32 => ((s as f32) / (u8::ORIGIN as f32 + 1.0)) - 1.0,
-    f64 => ((s as f64) / (u8::ORIGIN as f64 + 1.0)) - 1.0
+    f32 => ((s as f32) / const { u8::ORIGIN as f32 }) - 1.0,
+    f64 => ((s as f64) / const { u8::ORIGIN as f64 }) - 1.0
 );
 
 impl_convert!(
     u16 as s,
 
     // signed
-    i8 => IntoSample::<i16>::into_sample(s).into_sample(),
-    i16 => s.wrapping_sub(1 << 15) as i16,
-    i32 => IntoSample::<i16>::into_sample(s).into_sample(),
-    i64 => IntoSample::<i16>::into_sample(s).into_sample(),
+    i8 => i16::from_sample(s).into_sample(),
+    i16 => s.wrapping_sub(const { 1 << 15 }) as i16,
+    i32 => i16::from_sample(s).into_sample(),
+    i64 => i16::from_sample(s).into_sample(),
 
     // unsigned
     u8 => (s >> 8) as u8,
@@ -269,18 +255,18 @@ impl_convert!(
     u64 => (s as u64) << 48,
 
     // float
-    f32 => ((s as f32) / (u16::ORIGIN as f32 + 1.0)) - 1.0,
-    f64 => ((s as f64) / (u16::ORIGIN as f64 + 1.0)) - 1.0
+    f32 => ((s as f32) / const { u16::ORIGIN as f32 }) - 1.0,
+    f64 => ((s as f64) / const { u16::ORIGIN as f64 }) - 1.0
 );
 
 impl_convert!(
     u32 as s,
 
     // signed
-    i8 => IntoSample::<i32>::into_sample(s).into_sample(),
-    i16 => IntoSample::<i32>::into_sample(s).into_sample(),
-    i32 => s.wrapping_sub(1 << 31) as i32,
-    i64 => IntoSample::<i32>::into_sample(s).into_sample(),
+    i8 => i32::from_sample(s).into_sample(),
+    i16 => i32::from_sample(s).into_sample(),
+    i32 => s.wrapping_sub(const { 1 << 31 }) as i32,
+    i64 => i32::from_sample(s).into_sample(),
 
     // unsigned
     u8 => (s >> 24) as u8,
@@ -289,18 +275,18 @@ impl_convert!(
     u64 => (s as u64) << 32,
 
     // float
-    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
-    f64 => ((s as f64) / (u32::ORIGIN as f64 + 1.0)) - 1.0
+    f32 => f64::from_sample(s).into_sample(),
+    f64 => ((s as f64) / const { u32::ORIGIN as f64 }) - 1.0
 );
 
 impl_convert!(
     u64 as s,
 
     // signed
-    i8 => IntoSample::<i64>::into_sample(s).into_sample(),
-    i16 => IntoSample::<i64>::into_sample(s).into_sample(),
-    i32 => IntoSample::<i64>::into_sample(s).into_sample(),
-    i64 => s.wrapping_sub(1 << 63) as i64,
+    i8 => i64::from_sample(s).into_sample(),
+    i16 => i64::from_sample(s).into_sample(),
+    i32 => i64::from_sample(s).into_sample(),
+    i64 => s.wrapping_sub(const { 1 << 63 }) as i64,
 
     // unsigned
     u8 => (s >> 56) as u8,
@@ -309,24 +295,24 @@ impl_convert!(
     u64 => s,
 
     // float
-    f32 => IntoSample::<f64>::into_sample(s).into_sample(),
-    f64 => ((s as f64) / (u64::ORIGIN as f64 + 1.0)) - 1.0
+    f32 => f64::from_sample(s).into_sample(),
+    f64 => ((s as f64) / const { u64::ORIGIN as f64 }) - 1.0
 );
 
 impl_convert!(
     f32 as s,
 
     // signed
-    i8 => (s * i8::MAX as f32) as i8,
-    i16 => (s * i16::MAX as f32) as i16,
-    i32 => IntoSample::<f64>::into_sample(s).into_sample(),
-    i64 => IntoSample::<f64>::into_sample(s).into_sample(),
+    i8 => (s.clip() * const { i8::MAX as f32 + 1.0 }) as i8,
+    i16 => (s.clip() * const { i16::MAX as f32 + 1.0 }) as i16,
+    i32 => f64::from_sample(s).into_sample(),
+    i64 => f64::from_sample(s).into_sample(),
 
     // unsigned
-    u8 => IntoSample::<i8>::into_sample(s).into_sample(),
-    u16 => IntoSample::<i16>::into_sample(s).into_sample(),
-    u32 => IntoSample::<i32>::into_sample(s).into_sample(),
-    u64 => IntoSample::<i64>::into_sample(s).into_sample(),
+    u8 => ((s.clip() + 1.0) * const { u8::ORIGIN as f32 }) as u8,
+    u16 => ((s.clip() + 1.0) * const { u16::ORIGIN  as f32 }) as u16,
+    u32 => f64::from_sample(s).into_sample(),
+    u64 => f64::from_sample(s).into_sample(),
 
     // float
     f32 => s,
@@ -337,18 +323,89 @@ impl_convert!(
     f64 as s,
 
     // signed
-    i8 => (s * i8::MAX as f64) as i8,
-    i16 => (s * i16::MAX as f64) as i16,
-    i32 => (s * i32::MAX as f64) as i32,
-    i64 => (s * i64::MAX as f64) as i64,
+    i8 => (s.clip() * const { i8::MAX as f64 + 1.0 }) as i8,
+    i16 => (s.clip() * const { i16::MAX as f64 + 1.0 }) as i16,
+    i32 => (s.clip() * const { i32::MAX as f64 + 1.0 }) as i32,
+    i64 => (s.clip() * const { i64::MAX as f64 + 1.0 }) as i64,
 
     // unsigned
-    u8 => IntoSample::<i8>::into_sample(s).into_sample(),
-    u16 => IntoSample::<i16>::into_sample(s).into_sample(),
-    u32 => IntoSample::<i32>::into_sample(s).into_sample(),
-    u64 => IntoSample::<i64>::into_sample(s).into_sample(),
+    u8 => ((s.clip() + 1.0) * const { u8::ORIGIN as f64 }) as u8,
+    u16 => ((s.clip() + 1.0) * const { u16::ORIGIN as f64 }) as u16,
+    u32 => ((s.clip() + 1.0) * const { u32::ORIGIN as f64 }) as u32,
+    u64 => ((s.clip() + 1.0) * const { u64::ORIGIN as f64 }) as u64,
 
     // float
     f32 => s as f32,
     f64 => s
 );
+
+#[cfg(test)]
+mod tests {
+    macro_rules! impl_test {
+        ($name:ident, $from:ty, $into:ty) => {
+            #[test]
+            fn $name() {
+                assert_eq!(
+                    <$into as FromSample::<_>>::from_sample(<$from>::ORIGIN),
+                    <$into as Sample>::ORIGIN,
+                    "origin"
+                );
+
+                assert_eq!(
+                    <$into as FromSample::<_>>::from_sample(<$from>::RANGE.0),
+                    <$into as ClipSample>::RANGE.0,
+                    "lower limit"
+                );
+
+                let mut tolerance = 0 as $into;
+                if size_of::<$from>() < size_of::<$into>() {
+                    let from_range = <$from as ClipSample>::RANGE.1 - <$from>::ORIGIN;
+                    let into_range = <$into as ClipSample>::RANGE.1 - <$into>::ORIGIN;
+                    tolerance = into_range / from_range as $into;
+                }
+
+                let upper_result = <$into as FromSample<_>>::from_sample(<$from>::RANGE.1);
+
+                const UPPER_LIMIT: $into = <$into as ClipSample>::RANGE.1;
+                let upper_diff = UPPER_LIMIT - upper_result;
+
+                assert!(
+                    upper_diff <= tolerance,
+                    "limit: {UPPER_LIMIT}, result: {upper_result}, tolerance: {tolerance}, diff: {upper_diff}"
+                )
+            }
+        };
+        ($name:ident, $from:ident) => {
+            mod $name {
+                use crate::ops::{ClipSample, FromSample};
+                use phonic_signal::Sample;
+
+                impl_test!(into_i8, $from, i8);
+                impl_test!(into_i16, $from, i16);
+                impl_test!(into_i32, $from, i32);
+                impl_test!(into_i64, $from, i64);
+
+                impl_test!(into_u8, $from, u8);
+                impl_test!(into_u16, $from, u16);
+                impl_test!(into_u32, $from, u32);
+                impl_test!(into_u64, $from, u64);
+
+                impl_test!(into_f32, $from, f32);
+                impl_test!(into_f64, $from, f64);
+            }
+        };
+    }
+
+    impl_test!(from_i8, i8);
+    impl_test!(from_i16, i16);
+    impl_test!(from_i32, i32);
+    impl_test!(from_i64, i64);
+
+    impl_test!(from_u8, u8);
+    impl_test!(from_u16, u16);
+    impl_test!(from_u32, u32);
+    impl_test!(from_u64, u64);
+
+    impl_test!(from_f32, f32);
+    impl_test!(from_f64, f64);
+}

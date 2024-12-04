@@ -1,6 +1,6 @@
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, SignalReader, SignalSeeker, SignalSpec,
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, SignalReader, SignalSeeker,
 };
 
 pub struct Repeat<T> {
@@ -37,13 +37,13 @@ impl_deref_signal! {
 
 impl<T: IndexedSignal + FiniteSignal> IndexedSignal for Repeat<T> {
     fn pos(&self) -> u64 {
-        self.current as u64 + self.inner.len() + self.inner.pos()
+        self.inner.len() * self.current as u64 + self.inner.pos()
     }
 }
 
 impl<T: FiniteSignal> FiniteSignal for Repeat<T> {
     fn len(&self) -> u64 {
-        self.inner.len().saturating_mul(self.reps as u64)
+        self.inner.len() * self.reps as u64
     }
 }
 
@@ -51,12 +51,13 @@ impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> 
     fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         while self.current < self.reps {
             let result = self.inner.read(buf);
-            if !result.as_ref().is_ok_and(|n| *n == 0) {
-                return result;
+            if result.as_ref().is_ok_and(|n| *n == 0) {
+                self.inner.seek(0)?;
+                self.current += 1;
+                continue;
             }
 
-            self.inner.seek_start()?;
-            self.current += 1;
+            return result;
         }
 
         Ok(0)

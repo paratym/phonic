@@ -6,7 +6,7 @@ use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
     SignalSpec,
 };
-use std::ops::DerefMut;
+use std::ops::{Add, DerefMut};
 
 pub struct Mix<T: SignalList, B = DefaultBuf<<T as SignalList>::Sample>> {
     inner: T,
@@ -201,11 +201,10 @@ where
 }
 
 macro_rules! impl_mix {
-    ($sample:ident, $name:ident, $other:ident, $func:expr) => {
+    ($sample:ident, $self:ident, $other:ident, $func:expr) => {
         impl MixSample for $sample {
             #[inline]
-            fn mix(self, $other: Self) -> Self {
-                let $name = self;
+            fn mix($self, $other: Self) -> Self {
                 $func
             }
         }
@@ -213,27 +212,26 @@ macro_rules! impl_mix {
 }
 
 macro_rules! impl_unsigned_mix {
-    ($sample:ident, $name:ident, $other:ident) => {
-        impl_mix!($sample, $name, $other, {
-            let amp = $other.abs_diff($sample::ORIGIN);
+    ($sample:ident, $self:ident, $other:ident) => {
+        impl_mix!($sample, $self, $other, {
             if $other >= $sample::ORIGIN {
-                $name.saturating_add(amp)
+                $self.saturating_add($other - $sample::ORIGIN)
             } else {
-                $name.saturating_sub(amp)
+                $self.saturating_sub($sample::ORIGIN - $other)
             }
         });
     };
 }
 
-impl_mix!(i8, a, b, a.saturating_add(b));
-impl_mix!(i16, a, b, a.saturating_add(b));
-impl_mix!(i32, a, b, a.saturating_add(b));
-impl_mix!(i64, a, b, a.saturating_add(b));
+impl_mix!(i8, self, s, self.saturating_add(s));
+impl_mix!(i16, self, s, self.saturating_add(s));
+impl_mix!(i32, self, s, self.saturating_add(s));
+impl_mix!(i64, self, s, self.saturating_add(s));
 
-impl_unsigned_mix!(u8, a, b);
-impl_unsigned_mix!(u16, a, b);
-impl_unsigned_mix!(u32, a, b);
-impl_unsigned_mix!(u64, a, b);
+impl_unsigned_mix!(u8, self, s);
+impl_unsigned_mix!(u16, self, s);
+impl_unsigned_mix!(u32, self, s);
+impl_unsigned_mix!(u64, self, s);
 
-impl_mix!(f32, a, b, a + b);
-impl_mix!(f64, a, b, a + b);
+impl_mix!(f32, self, s, self.add(s));
+impl_mix!(f64, self, s, self.add(s));

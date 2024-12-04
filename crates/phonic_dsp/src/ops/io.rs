@@ -1,11 +1,6 @@
-use std::ops::Deref;
-
 use crate::ops::{Convert, FromSample, IntoSample};
 use phonic_io::{match_tagged_signal, DynSignal, TaggedSignal};
-use phonic_signal::{
-    utils::{DefaultBuf, PollSignalCopy},
-    PhonicResult, Sample,
-};
+use phonic_signal::Sample;
 
 pub trait FromKnownSample:
     Sample

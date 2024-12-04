@@ -13,7 +13,7 @@ macro_rules! impl_int_sample {
 macro_rules! impl_uint_sample {
     ($s:ty) => {
         impl Sample for $s {
-            const ORIGIN: Self = Self::MAX / 2;
+            const ORIGIN: Self = Self::MAX / 2 + 1;
         }
     };
 }

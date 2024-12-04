@@ -120,7 +120,7 @@ where
     }
 
     fn copy_n_poll(&mut self, reader: &mut R, n_bytes: usize) -> PhonicResult<()> {
-        let mut buf = DefaultBuf::default();
+        let mut buf = <DefaultBuf<_>>::default();
         self.copy_n_buffered_poll(reader, n_bytes, &mut buf)
     }
 
@@ -149,7 +149,7 @@ where
     }
 
     fn copy_all_poll(&mut self, reader: &mut R) -> PhonicResult<()> {
-        let mut buf = DefaultBuf::default();
+        let mut buf = <DefaultBuf<_>>::default();
         self.copy_all_buffered_poll(reader, &mut buf)
     }
 }
