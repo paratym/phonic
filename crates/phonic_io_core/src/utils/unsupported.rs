@@ -2,6 +2,7 @@ use crate::{
     FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter, IndexedStream,
     Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
     SignalWriter,
@@ -11,26 +12,6 @@ pub struct Infinite<T>(pub T);
 pub struct UnReadable<T>(pub T);
 pub struct UnWriteable<T>(pub T);
 pub struct UnSeekable<T>(pub T);
-
-pub trait Unsupported: Sized {
-    fn infinite(self) -> Infinite<Self> {
-        Infinite(self)
-    }
-
-    fn un_readable(self) -> UnReadable<Self> {
-        UnReadable(self)
-    }
-
-    fn un_writeable(self) -> UnWriteable<Self> {
-        UnWriteable(self)
-    }
-
-    fn un_seekable(self) -> UnSeekable<Self> {
-        UnSeekable(self)
-    }
-}
-
-impl<T> Unsupported for T {}
 
 macro_rules! impl_format {
     ($name:ident) => {
@@ -240,82 +221,14 @@ impl<T: Stream> StreamSeeker for UnSeekable<T> {
     }
 }
 
-macro_rules! impl_signal {
-    ($name:ident) => {
-        impl<T: Signal> Signal for $name<T> {
-            type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !FiniteSignal for Infinite<T> {
+        type Target = T;
 
-            fn spec(&self) -> &SignalSpec {
-                self.0.spec()
-            }
-        }
-    };
+        &self -> &self.0;
+        &mut self -> &mut self.0;
+    }
 }
-
-macro_rules! impl_finite_signal {
-    ($name:ident) => {
-        impl<T: FiniteSignal> FiniteSignal for $name<T> {
-            fn len(&self) -> u64 {
-                self.0.len()
-            }
-        }
-    };
-}
-
-macro_rules! impl_signal_read {
-    ($name:ident) => {
-        impl<T: SignalReader> SignalReader for $name<T> {
-            fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-                self.0.read(buf)
-            }
-        }
-    };
-}
-
-macro_rules! impl_signal_write {
-    ($name:ident) => {
-        impl<T: SignalWriter> SignalWriter for $name<T> {
-            fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-                self.0.write(buf)
-            }
-
-            fn flush(&mut self) -> PhonicResult<()> {
-                self.0.flush()
-            }
-        }
-    };
-}
-
-macro_rules! impl_signal_seek {
-    ($name:ident) => {
-        impl<T: SignalSeeker> SignalSeeker for $name<T> {
-            fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-                self.0.seek(offset)
-            }
-        }
-    };
-}
-
-impl_signal!(Infinite);
-impl_signal!(UnReadable);
-impl_signal!(UnWriteable);
-impl_signal!(UnSeekable);
-
-impl_finite_signal!(UnReadable);
-impl_finite_signal!(UnWriteable);
-impl_finite_signal!(UnSeekable);
-
-impl_signal_read!(Infinite);
-impl_signal_read!(UnWriteable);
-impl_signal_read!(UnSeekable);
-
-impl_signal_write!(Infinite);
-impl_signal_write!(UnReadable);
-impl_signal_write!(UnSeekable);
-
-impl_signal_seek!(Infinite);
-impl_signal_seek!(UnReadable);
-impl_signal_seek!(UnWriteable);
 
 impl<T: Signal> FiniteSignal for Infinite<T> {
     fn len(&self) -> u64 {
@@ -323,9 +236,27 @@ impl<T: Signal> FiniteSignal for Infinite<T> {
     }
 }
 
+impl_deref_signal! {
+    impl<T> _ + !SignalReader for UnReadable<T> {
+        type Target = T;
+
+        &self -> &self.0;
+        &mut self -> &mut self.0;
+    }
+}
+
 impl<T: Signal> SignalReader for UnReadable<T> {
     fn read(&mut self, _buf: &mut [Self::Sample]) -> PhonicResult<usize> {
         Err(PhonicError::Unsupported)
+    }
+}
+
+impl_deref_signal! {
+    impl<T> _ + !SignalWriter for UnWriteable<T> {
+        type Target = T;
+
+        &self -> &self.0;
+        &mut self -> &mut self.0;
     }
 }
 
@@ -336,6 +267,15 @@ impl<T: Signal> SignalWriter for UnWriteable<T> {
 
     fn flush(&mut self) -> PhonicResult<()> {
         Err(PhonicError::Unsupported)
+    }
+}
+
+impl_deref_signal! {
+    impl<T> _ + !SignalSeeker for UnSeekable<T> {
+        type Target = T;
+
+        &self -> &self.0;
+        &mut self -> &mut self.0;
     }
 }
 

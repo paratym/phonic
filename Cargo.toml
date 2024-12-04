@@ -10,6 +10,7 @@ path = "lib.rs"
 resolver = "2"
 members = [
 	"crates/phonic_signal",
+	"crates/phonic_macro",
 	"crates/phonic_dsp",
 	"crates/phonic_io",
 	"crates/phonic_io_core",

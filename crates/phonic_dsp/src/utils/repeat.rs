@@ -1,3 +1,4 @@
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, SignalReader, SignalSeeker, SignalSpec,
 };
@@ -26,11 +27,11 @@ impl<T> Repeat<T> {
     }
 }
 
-impl<T: Signal> Signal for Repeat<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !IndexedSignal + !FiniteSignal for Repeat<T> {
+        type Target = T;
 
-    fn spec(&self) -> &SignalSpec {
-        self.inner.spec()
+        &self -> &self.inner;
     }
 }
 

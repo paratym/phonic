@@ -5,3 +5,6 @@ edition = "2021"
 
 [features]
 io = []
+
+[dependencies]
+phonic_macro = { version = "0.1.0", path = "../phonic_macro" }

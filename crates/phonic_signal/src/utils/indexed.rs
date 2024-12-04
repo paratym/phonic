@@ -1,7 +1,8 @@
 use crate::{
-    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
-    SignalSpec, SignalWriter,
+    IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
 };
+use phonic_macro::impl_deref_signal;
 
 pub struct Indexed<T> {
     inner: T,
@@ -14,23 +15,17 @@ impl<T> Indexed<T> {
     }
 }
 
-impl<T: Signal> Signal for Indexed<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !IndexedSignal for Indexed<T> {
+        type Target = T;
 
-    fn spec(&self) -> &SignalSpec {
-        self.inner.spec()
+        &self -> &self.inner;
     }
 }
 
 impl<T: Signal> IndexedSignal for Indexed<T> {
     fn pos(&self) -> u64 {
         self.pos
-    }
-}
-
-impl<T: FiniteSignal> FiniteSignal for Indexed<T> {
-    fn len(&self) -> u64 {
-        self.inner.len()
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::{PhonicResult, Sample, SignalSpec};
+use phonic_macro::impl_deref_signal;
 use std::{
     ops::{Deref, DerefMut, Neg},
     time::Duration,
@@ -127,71 +128,14 @@ pub trait SignalSeeker: Signal {
     }
 }
 
-impl<T> Signal for T
-where
-    T: Deref,
-    T::Target: Signal,
-{
-    type Sample = <T::Target as Signal>::Sample;
+impl_deref_signal! {
+    impl<T: Deref> _ for T {
+        type Target = T::Target;
 
-    fn spec(&self) -> &SignalSpec {
-        self.deref().spec()
-    }
-}
+        &self -> self.deref();
 
-impl<T> IndexedSignal for T
-where
-    T: Deref,
-    T::Target: IndexedSignal,
-{
-    fn pos(&self) -> u64 {
-        self.deref().pos()
-    }
-}
-
-impl<T> FiniteSignal for T
-where
-    T: Deref,
-    T::Target: FiniteSignal,
-{
-    fn len(&self) -> u64 {
-        self.deref().len()
-    }
-}
-
-impl<S, T> SignalReader for T
-where
-    S: Sample,
-    T: DerefMut,
-    T::Target: SignalReader<Sample = S>,
-{
-    fn read(&mut self, buffer: &mut [S]) -> PhonicResult<usize> {
-        self.deref_mut().read(buffer)
-    }
-}
-
-impl<S, T> SignalWriter for T
-where
-    S: Sample,
-    T: DerefMut,
-    T::Target: SignalWriter<Sample = S>,
-{
-    fn write(&mut self, buffer: &[S]) -> PhonicResult<usize> {
-        self.deref_mut().write(buffer)
-    }
-
-    fn flush(&mut self) -> PhonicResult<()> {
-        self.deref_mut().flush()
-    }
-}
-
-impl<S, T> SignalSeeker for T
-where
-    S: Sample,
-    T: DerefMut,
-    T::Target: SignalSeeker<Sample = S>,
-{
-    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        self.deref_mut().seek(offset)
+        &mut self -> self.deref_mut()
+        where
+            T: DerefMut;
     }
 }

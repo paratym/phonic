@@ -1,3 +1,4 @@
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
     SignalReader, SignalSeeker, SignalSpec, SignalWriter,
@@ -109,11 +110,11 @@ impl<T> Slice<T> {
     }
 }
 
-impl<T: Signal> Signal for Slice<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ + !IndexedSignal + !FiniteSignal for Slice<T> {
+        type Target = T;
 
-    fn spec(&self) -> &SignalSpec {
-        self.inner.spec()
+        &self -> &self.inner;
     }
 }
 

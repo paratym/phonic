@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
 phonic_io = { version = "0.1.0", path = "../phonic_io", optional = true }
+phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
 
 [features]
 io = ["dep:phonic_io"]

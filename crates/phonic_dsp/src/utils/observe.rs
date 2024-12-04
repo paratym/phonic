@@ -1,3 +1,4 @@
+use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
     SignalWriter,
@@ -64,23 +65,11 @@ impl<T: Signal> Observer<T> {
     }
 }
 
-impl<T: Signal> Signal for Observer<T> {
-    type Sample = T::Sample;
+impl_deref_signal! {
+    impl<T> _ for Observer<T> {
+        type Target = T;
 
-    fn spec(&self) -> &SignalSpec {
-        self.inner.spec()
-    }
-}
-
-impl<T: IndexedSignal> IndexedSignal for Observer<T> {
-    fn pos(&self) -> u64 {
-        self.inner.pos()
-    }
-}
-
-impl<T: FiniteSignal> FiniteSignal for Observer<T> {
-    fn len(&self) -> u64 {
-        self.inner.len()
+        &self -> &self.inner;
     }
 }
 
