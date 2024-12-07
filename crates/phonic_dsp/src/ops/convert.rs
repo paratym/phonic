@@ -4,9 +4,13 @@ use phonic_signal::{
     utils::DefaultBuf, PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
     SignalWriter,
 };
-use std::{marker::PhantomData, ops::DerefMut};
+use std::{
+    marker::PhantomData,
+    mem::{transmute, MaybeUninit},
+    ops::DerefMut,
+};
 
-pub struct Convert<T: Signal, S: Sample, B = DefaultBuf<<T as Signal>::Sample>> {
+pub struct Convert<T: Signal, S: Sample, B = DefaultBuf<MaybeUninit<<T as Signal>::Sample>>> {
     inner: T,
     buf: B,
     _sample: PhantomData<S>,
@@ -74,18 +78,19 @@ where
     T: SignalReader,
     T::Sample: IntoSample<S>,
     S: Sample,
-    B: DerefMut<Target = [T::Sample]>,
+    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let buf_len = buf.len().min(self.buf.len());
-        let n = self.inner.read(&mut self.buf[..buf_len])?;
+        let samples = self.inner.read_init(&mut self.buf[..buf_len])?;
 
-        self.buf
-            .iter()
-            .zip(buf[..n].iter_mut())
-            .for_each(|(inner, outer)| *outer = inner.into_sample());
+        buf.iter_mut()
+            .zip(samples.iter())
+            .for_each(|(outer, inner)| {
+                outer.write(inner.into_sample());
+            });
 
-        Ok(n)
+        Ok(samples.len())
     }
 }
 
@@ -93,17 +98,23 @@ impl<T, S, B> SignalWriter for Convert<T, S, B>
 where
     T: SignalWriter,
     S: Sample + IntoSample<T::Sample>,
-    B: DerefMut<Target = [T::Sample]>,
+    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        let buf_len = buf.len().min(self.buf.len());
+        let iter = buf.iter().zip(self.buf.iter_mut());
+        let len = iter.len();
 
-        self.buf
-            .iter_mut()
-            .zip(buf[..buf_len].iter())
-            .for_each(|(inner, outer)| *inner = outer.into_sample());
+        buf.iter()
+            .zip(self.buf.iter_mut())
+            .for_each(|(outer, inner)| {
+                inner.write(outer.into_sample());
+            });
 
-        self.inner.write(&self.buf[..buf_len])
+        let uninit_slice = &self.buf[..len];
+        let init_slice =
+            unsafe { transmute::<&[MaybeUninit<T::Sample>], &[T::Sample]>(uninit_slice) };
+
+        self.inner.write(init_slice)
     }
 
     fn flush(&mut self) -> PhonicResult<()> {

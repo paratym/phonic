@@ -6,6 +6,7 @@ use phonic_signal::{
 use std::{
     f64::{self, consts::PI},
     marker::PhantomData,
+    mem::MaybeUninit,
     ops::Neg,
 };
 
@@ -113,7 +114,7 @@ impl<S: Sample> SignalReader for Osc<S>
 where
     f64: IntoSample<S>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let n_channels = self.spec.channels.count() as usize;
         let frames = buf.chunks_exact_mut(n_channels);
         let n_frames = frames.len();
@@ -127,7 +128,8 @@ where
         };
 
         for frame in frames {
-            frame.fill(sample_fn(self).into_sample());
+            let sample = sample_fn(self).into_sample();
+            frame.fill(MaybeUninit::new(sample));
             self.pos += 1;
         }
 

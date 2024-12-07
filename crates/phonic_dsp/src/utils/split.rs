@@ -4,6 +4,7 @@ use phonic_signal::{
 };
 use std::{
     cell::RefCell,
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
@@ -102,7 +103,7 @@ where
     T: SignalReader,
     B: DerefMut<Target = [T::Sample]>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         // self.read_inner(buf)?;
         //
         // let mut inner = self.inner_ref.as_ref().borrow_mut();

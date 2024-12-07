@@ -1,5 +1,5 @@
 use phonic_signal::{PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, mem::MaybeUninit};
 
 pub struct NullSignal<S> {
     spec: SignalSpec,
@@ -24,11 +24,11 @@ impl<S: Sample> Signal for NullSignal<S> {
 }
 
 impl<S: Sample> SignalReader for NullSignal<S> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.spec().channels.count() as usize;
 
-        buf[..len].fill(Self::Sample::ORIGIN);
+        buf[..len].fill(MaybeUninit::new(Self::Sample::ORIGIN));
         Ok(len)
     }
 }

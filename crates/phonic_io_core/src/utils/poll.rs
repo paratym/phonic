@@ -1,5 +1,6 @@
 use crate::{Stream, StreamReader, StreamWriter};
 use phonic_signal::{utils::DefaultBuf, PhonicError, PhonicResult};
+use std::mem::{transmute, MaybeUninit};
 
 pub trait PollStream: Stream {
     fn poll_interval() {
@@ -8,7 +9,7 @@ pub trait PollStream: Stream {
 }
 
 pub trait PollStreamReader: PollStream + StreamReader {
-    fn read_poll(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
+    fn read_poll(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
         loop {
             match self.read(buf) {
                 Err(PhonicError::Interrupted) => continue,
@@ -18,7 +19,7 @@ pub trait PollStreamReader: PollStream + StreamReader {
         }
     }
 
-    fn read_exact_poll(&mut self, mut buf: &mut [u8]) -> PhonicResult<()> {
+    fn read_exact_poll(&mut self, mut buf: &mut [MaybeUninit<u8>]) -> PhonicResult<()> {
         let buf_len = buf.len();
         if buf_len % self.stream_spec().block_align != 0 {
             return Err(PhonicError::InvalidInput);
@@ -88,7 +89,7 @@ where
         &mut self,
         reader: &mut R,
         n_bytes: usize,
-        buf: &mut [u8],
+        buf: &mut [MaybeUninit<u8>],
     ) -> PhonicResult<()> {
         let spec = self.stream_spec().merged(reader.stream_spec())?;
         let buf_len = buf.len();
@@ -112,7 +113,10 @@ where
                 Ok(n) => n,
             };
 
-            self.write_exact_poll(&buf[..n_read])?;
+            let uninit_slice = &buf[..n_read];
+            let init_slice = unsafe { transmute::<&[MaybeUninit<u8>], &[u8]>(uninit_slice) };
+
+            self.write_exact_poll(init_slice)?;
             n += n_read;
         }
 
@@ -124,7 +128,11 @@ where
         self.copy_n_buffered_poll(reader, n_bytes, &mut buf)
     }
 
-    fn copy_all_buffered_poll(&mut self, reader: &mut R, buf: &mut [u8]) -> PhonicResult<()> {
+    fn copy_all_buffered_poll(
+        &mut self,
+        reader: &mut R,
+        buf: &mut [MaybeUninit<u8>],
+    ) -> PhonicResult<()> {
         let _ = self.stream_spec().merged(reader.stream_spec())?;
 
         loop {
@@ -140,7 +148,10 @@ where
                 Ok(n) => n,
             };
 
-            match self.write_exact_poll(&buf[..n_read]) {
+            let uninit_slice = &buf[..n_read];
+            let init_slice = unsafe { transmute::<&[MaybeUninit<u8>], &[u8]>(uninit_slice) };
+
+            match self.write_exact_poll(init_slice) {
                 Ok(()) => continue,
                 Err(PhonicError::OutOfBounds) => return Ok(()),
                 Err(e) => return Err(e),

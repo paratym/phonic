@@ -1,6 +1,7 @@
-use crate::{PhonicResult, Sample, SignalSpec};
+use crate::{utils::slice_as_init_mut, PhonicResult, Sample, SignalSpec};
 use phonic_macro::impl_deref_signal;
 use std::{
+    mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut, Neg},
     time::Duration,
 };
@@ -70,20 +71,31 @@ pub trait FiniteSignal: Signal {
 pub trait SignalReader: Signal {
     /// reads samples from this signal into the given buffer.
     /// returns the number of interleaved samples read.
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize>;
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize>;
+
+    fn read_init<'a>(
+        &mut self,
+        buf: &'a mut [MaybeUninit<Self::Sample>],
+    ) -> PhonicResult<&'a mut [Self::Sample]> {
+        let n_samples = self.read(buf)?;
+        let uninit_slice = &mut buf[..n_samples];
+        let init_slice = unsafe { slice_as_init_mut(uninit_slice) };
+
+        Ok(init_slice)
+    }
 
     fn read_frames<'a>(
         &mut self,
-        buf: &'a mut [Self::Sample],
+        buf: &'a mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<impl Iterator<Item = &'a [Self::Sample]>>
     where
         Self: Sized,
     {
-        let n = self.read(buf)?;
+        let samples = self.read_init(buf)?;
         let n_channels = self.spec().channels.count() as usize;
-        debug_assert_eq!(n % n_channels, 0);
+        debug_assert_eq!(samples.len() % n_channels, 0);
 
-        Ok(buf[..n].chunks_exact(n_channels))
+        Ok(samples.chunks_exact(n_channels))
     }
 }
 

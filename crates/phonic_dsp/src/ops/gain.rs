@@ -2,7 +2,10 @@ use crate::ops::{FromSample, IntoSample};
 use num_traits::Inv;
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{PhonicResult, Sample, SignalReader};
-use std::ops::{Mul, Neg};
+use std::{
+    mem::MaybeUninit,
+    ops::{Mul, Neg},
+};
 
 pub struct Gain<T, R> {
     inner: T,
@@ -69,11 +72,11 @@ where
     T::Sample: GainSample<Ratio = R>,
     R: Copy,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.read(buf)?;
-        buf[..n].iter_mut().for_each(|s| *s = s.gain(self.ratio));
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let samples = self.inner.read_init(buf)?;
+        samples.iter_mut().for_each(|s| *s = s.gain(self.ratio));
 
-        Ok(n)
+        Ok(samples.len())
     }
 }
 

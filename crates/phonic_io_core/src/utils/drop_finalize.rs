@@ -3,6 +3,7 @@ use crate::{
     StreamSpec,
 };
 use phonic_signal::PhonicResult;
+use std::mem::MaybeUninit;
 
 pub struct DropFinalize<T: FormatWriter>(pub T);
 
@@ -43,7 +44,7 @@ impl<T: FormatWriter + FiniteFormat> FiniteFormat for DropFinalize<T> {
 }
 
 impl<T: FormatWriter + FormatReader> FormatReader for DropFinalize<T> {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
         self.0.read(buf)
     }
 }

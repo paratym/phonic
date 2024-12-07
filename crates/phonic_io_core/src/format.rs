@@ -4,6 +4,7 @@ use std::{
     fmt::Debug,
     hash::Hash,
     io::{Read, Write},
+    mem::MaybeUninit,
     ops::{Deref, DerefMut, Neg},
 };
 
@@ -112,7 +113,7 @@ pub trait FiniteFormat: Format {
 }
 
 pub trait FormatReader: Format {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)>;
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)>;
 }
 
 pub trait FormatWriter: Format {
@@ -196,7 +197,7 @@ where
     T: DerefMut,
     T::Target: FormatReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
         self.deref_mut().read(buf)
     }
 }

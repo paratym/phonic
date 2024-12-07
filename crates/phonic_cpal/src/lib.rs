@@ -4,7 +4,7 @@ use cpal::{
 };
 use phonic_io_core::{KnownSample, KnownSampleType};
 use phonic_signal::{
-    utils::{PollSignalReader, PollSignalWriter},
+    utils::{slice_as_uninit_mut, PollSignalReader, PollSignalWriter},
     PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
 use std::time::Duration;
@@ -129,7 +129,9 @@ pub trait DeviceExt: DeviceTrait {
     {
         self.build_output_stream(
             &signal.spec().into_cpal_config(buffer_size),
-            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| match signal.read_exact_poll(buf) {
+            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| match signal
+                .read_exact_poll(slice_as_uninit_mut(buf))
+            {
                 Ok(()) => (),
                 // TODO: read remainder
                 Err(PhonicError::OutOfBounds) => buf.fill(S::Sample::ORIGIN),

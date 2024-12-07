@@ -215,7 +215,7 @@ pub fn generate_deref_signal_impl(input: DerefSignalInput) -> TokenStream {
             },
             "SignalReader" => quote! {
                 #[inline]
-                fn read(#deref_mut_self, buf: &mut [Self::Sample]) -> #crate_root::PhonicResult<usize> {
+                fn read(#deref_mut_self, buf: &mut [std::mem::MaybeUninit<Self::Sample>]) -> #crate_root::PhonicResult<usize> {
                     <#target as #path>::read(#deref_mut, buf)
                 }
             },

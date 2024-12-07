@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicError, PhonicResult, SignalReader, SignalSeeker,
@@ -48,7 +50,7 @@ impl<T: FiniteSignal> FiniteSignal for Repeat<T> {
 }
 
 impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         while self.current < self.reps {
             let result = self.inner.read(buf);
             if result.as_ref().is_ok_and(|n| *n == 0) {

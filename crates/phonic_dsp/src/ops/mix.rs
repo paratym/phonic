@@ -3,12 +3,15 @@ use crate::{
     types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList},
 };
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader,
-    SignalSpec,
+    utils::{slice_as_init_mut, DefaultBuf},
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSpec,
 };
-use std::ops::{Add, DerefMut};
+use std::{
+    mem::MaybeUninit,
+    ops::{Add, DerefMut},
+};
 
-pub struct Mix<T: SignalList, B = DefaultBuf<<T as SignalList>::Sample>> {
+pub struct Mix<T: SignalList, B = DefaultBuf<MaybeUninit<<T as SignalList>::Sample>>> {
     inner: T,
     spec: SignalSpec,
     queue: PosQueue,
@@ -73,9 +76,9 @@ where
 impl<T, B> Mix<T, B>
 where
     T: SignalList,
-    B: DerefMut<Target = [T::Sample]>,
+    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
 {
-    fn take_partial_samples(&mut self, buf: &mut [T::Sample]) -> usize {
+    fn take_partial_samples(&mut self, buf: &mut [MaybeUninit<T::Sample>]) -> usize {
         let partial_len = self.partial_end - self.partial_start;
         let buf_len = buf.len().min(partial_len);
         let partial_buf = &self.buf[self.partial_start..self.partial_start + buf_len];
@@ -91,7 +94,7 @@ where
         buf_len
     }
 
-    fn put_partial_samples(&mut self, buf: &[T::Sample]) {
+    fn put_partial_samples(&mut self, buf: &[MaybeUninit<T::Sample>]) {
         let buf_len = buf.len();
         let start_i = if self.partial_start < self.partial_end {
             self.partial_start as isize - buf_len as isize
@@ -132,9 +135,9 @@ impl<T, B> SignalReader for Mix<T, B>
 where
     T: IndexedSignalList + SignalReaderList,
     T::Sample: MixSample,
-    B: DerefMut<Target = [T::Sample]>,
+    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
             return Ok(0);
         };
@@ -144,7 +147,8 @@ where
         buf_len -= buf_len % n_channels;
 
         let partial_len = self.take_partial_samples(&mut buf[..buf_len]);
-        buf[partial_len..buf_len].fill(T::Sample::ORIGIN);
+        buf[partial_len..buf_len].fill(MaybeUninit::new(T::Sample::ORIGIN));
+        let init_buf = unsafe { slice_as_init_mut(&mut buf[..buf_len]) };
 
         let mut max_read = partial_len;
         let mut min_read = 0;
@@ -161,27 +165,29 @@ where
             }
 
             let inner_buf = &mut self.buf[start_i..buf_len];
-            let result = self.inner.read(cursor.id, inner_buf);
+            let result = self.inner.read_init(cursor.id, inner_buf);
 
             match result {
-                Ok(0) => {
+                Ok([]) => {
                     self.queue.pop_front();
                 }
-                Ok(n) => {
-                    let end_i = start_i + n;
+                Ok(samples) => {
+                    let n_samples = samples.len();
+                    let end_i = start_i + n_samples;
                     max_read = max_read.max(end_i);
                     min_read = match min_read {
-                        0 => n,
+                        0 => n_samples,
                         _ => min_read.min(end_i),
                     };
 
-                    inner_buf[..n]
+                    samples
                         .iter()
-                        .zip(&mut buf[start_i..end_i])
+                        .zip(&mut init_buf[start_i..end_i])
                         .for_each(|(s, mix)| *mix = mix.mix(*s));
 
-                    debug_assert_eq!(n % n_channels, 0);
-                    self.queue.commit_front(n as u64 / n_channels as u64);
+                    debug_assert_eq!(n_samples % n_channels, 0);
+                    self.queue
+                        .commit_front(n_samples as u64 / n_channels as u64);
                 }
                 Err(e) => {
                     min_read = min_read.min(start_i);

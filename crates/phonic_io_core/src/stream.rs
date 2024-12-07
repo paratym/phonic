@@ -1,6 +1,7 @@
 use crate::{CodecTag, StreamSpec};
 use phonic_signal::PhonicResult;
 use std::{
+    mem::MaybeUninit,
     ops::{Deref, DerefMut, Neg},
     time::Duration,
 };
@@ -66,7 +67,7 @@ pub trait FiniteStream: Stream {
 }
 
 pub trait StreamReader: Stream {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize>;
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize>;
 }
 
 pub trait StreamWriter: Stream {
@@ -143,7 +144,7 @@ where
     T: DerefMut,
     T::Target: StreamReader,
 {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
         self.deref_mut().read(buf)
     }
 }

@@ -1,6 +1,6 @@
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{PhonicResult, Sample, SignalReader};
-use std::ops::Neg;
+use std::{mem::MaybeUninit, ops::Neg};
 
 pub trait ComplementSample: Sample {
     fn complement(self) -> Self;
@@ -38,10 +38,11 @@ where
     T: SignalReader,
     T::Sample: ComplementSample,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.read(buf)?;
-        buf[..n].iter_mut().for_each(|s| *s = s.complement());
-        Ok(n)
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let samples = self.inner.read_init(buf)?;
+        samples.iter_mut().for_each(|s| *s = s.complement());
+
+        Ok(samples.len())
     }
 }
 

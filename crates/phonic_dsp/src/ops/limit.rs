@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::ops::ComplementSample;
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
@@ -73,14 +75,14 @@ impl<T: SignalReader> SignalReader for Limit<T>
 where
     Self::Sample: LimitSample,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.read(buf)?;
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let samples = self.inner.read_init(buf)?;
 
-        buf[..n]
+        samples
             .iter_mut()
             .for_each(|s| *s = s.limit(&self.range.0, &self.range.1));
 
-        Ok(n)
+        Ok(samples.len())
     }
 }
 

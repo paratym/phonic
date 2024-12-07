@@ -1,7 +1,4 @@
 use crate::{infer_pcm_spec, PcmCodecTag};
-use byte_slice_cast::{
-    AsByteSlice, AsMutByteSlice, AsMutSliceOf, FromByteSlice, ToByteSlice, ToMutByteSlice,
-};
 use phonic_io_core::{
     CodecConstructor, CodecTag, FiniteStream, IndexedStream, Stream, StreamReader, StreamSeeker,
     StreamSpec, StreamSpecBuilder, StreamWriter,
@@ -12,7 +9,7 @@ use phonic_signal::{
 };
 use std::{
     marker::PhantomData,
-    mem::{align_of, size_of},
+    mem::{size_of, MaybeUninit},
 };
 
 pub struct PcmCodec<T, S: Sample, C: CodecTag = PcmCodecTag> {
@@ -92,13 +89,16 @@ impl<T: FiniteStream, S: Sample, C: CodecTag> FiniteSignal for PcmCodec<T, S, C>
 impl<T, S, C> SignalReader for PcmCodec<T, S, C>
 where
     T: StreamReader,
-    S: Sample + ToMutByteSlice,
+    S: Sample,
     C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let byte_buf = buf.as_mut_byte_slice();
-        let n_bytes = self.inner.read(byte_buf)?;
-        debug_assert_eq!(n_bytes % self.stream_spec().block_align, 0);
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let (leading, aligned, _) = unsafe { buf.align_to_mut::<MaybeUninit<u8>>() };
+        assert!(leading.is_empty());
+
+        let n_bytes = self.inner.read(aligned)?;
+        assert_eq!(n_bytes % self.stream_spec().block_align, 0);
+        assert_eq!(n_bytes % size_of::<S>(), 0);
 
         Ok(n_bytes / size_of::<S>())
     }
@@ -107,12 +107,14 @@ where
 impl<T, S, C> SignalWriter for PcmCodec<T, S, C>
 where
     T: StreamWriter,
-    S: Sample + ToByteSlice,
+    S: Sample,
     C: CodecTag,
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        let byte_buf = buf.as_byte_slice();
-        let n_bytes = self.inner.write(byte_buf)?;
+        let (leading, aligned, _) = unsafe { buf.align_to::<u8>() };
+        assert!(leading.is_empty());
+
+        let n_bytes = self.inner.write(aligned)?;
         debug_assert_eq!(n_bytes % self.stream_spec().block_align, 0);
 
         Ok(n_bytes / size_of::<S>())
@@ -162,20 +164,15 @@ where
 impl<T, S, C> StreamReader for PcmCodec<T, S, C>
 where
     T: SignalReader<Sample = S>,
-    S: Sample + FromByteSlice,
+    S: Sample,
     C: CodecTag,
 {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
-        let start_i = buf.as_ptr() as usize % align_of::<S>();
-        let front_aligned_len = buf.len() - start_i;
-        let aligned_len = front_aligned_len - (front_aligned_len % size_of::<S>());
-
-        let aligned_buf = &mut buf[start_i..start_i + aligned_len];
-        let sample_buf = aligned_buf.as_mut_slice_of::<S>().unwrap();
-
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
+        let (leading, aligned, _) = unsafe { buf.align_to_mut::<MaybeUninit<S>>() };
         let mut n_samples = 0;
+
         loop {
-            match self.inner.read(sample_buf)? {
+            match self.inner.read(aligned)? {
                 0 if n_samples == 0 => break,
                 0 => return Err(PhonicError::InvalidData),
                 n => n_samples += n,
@@ -186,7 +183,9 @@ where
             }
         }
 
-        buf.rotate_left(start_i);
+        let offset = leading.len();
+        buf.rotate_left(offset);
+
         Ok(n_samples * size_of::<S>())
     }
 }
@@ -194,7 +193,7 @@ where
 impl<T, S, C> StreamWriter for PcmCodec<T, S, C>
 where
     T: SignalWriter<Sample = S>,
-    S: Sample + FromByteSlice,
+    S: Sample,
     C: CodecTag,
 {
     fn write(&mut self, buf: &[u8]) -> PhonicResult<usize> {

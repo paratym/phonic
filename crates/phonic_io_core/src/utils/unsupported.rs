@@ -4,9 +4,9 @@ use crate::{
 };
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
+    FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
 };
+use std::mem::MaybeUninit;
 
 pub struct Infinite<T>(pub T);
 pub struct UnReadable<T>(pub T);
@@ -36,7 +36,7 @@ macro_rules! impl_format {
 macro_rules! impl_format_read {
     ($name:ident) => {
         impl<T: FormatReader> FormatReader for $name<T> {
-            fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
+            fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
                 self.0.read(buf)
             }
         }
@@ -85,7 +85,7 @@ impl_format_seek!(UnReadable);
 impl_format_seek!(UnWriteable);
 
 impl<T: Format> FormatReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
+    fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
         Err(PhonicError::Unsupported)
     }
 }
@@ -141,7 +141,7 @@ macro_rules! impl_finite_stream {
 macro_rules! impl_stream_read {
     ($name:ident) => {
         impl<T: StreamReader> StreamReader for $name<T> {
-            fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
+            fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
                 self.0.read(buf)
             }
         }
@@ -200,7 +200,7 @@ impl<T: Stream> FiniteStream for Infinite<T> {
 }
 
 impl<T: Stream> StreamReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [u8]) -> PhonicResult<usize> {
+    fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
         Err(PhonicError::Unsupported)
     }
 }
@@ -246,7 +246,7 @@ impl_deref_signal! {
 }
 
 impl<T: Signal> SignalReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, _buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         Err(PhonicError::Unsupported)
     }
 }

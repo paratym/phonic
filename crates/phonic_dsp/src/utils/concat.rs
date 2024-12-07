@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::types::{
     FiniteSignalList, IndexedSignalList, SignalList, SignalReaderList, SignalSeekerList,
     SignalWriterList,
@@ -54,7 +56,7 @@ impl<T: FiniteSignalList> FiniteSignal for Concat<T> {
 }
 
 impl<T: SignalReaderList> SignalReader for Concat<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         while self.current_i < self.inner.count() {
             let n = self.inner.read(self.current_i, buf)?;
             if n == 0 {

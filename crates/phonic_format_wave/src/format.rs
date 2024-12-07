@@ -4,8 +4,11 @@ use phonic_io_core::{
     FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
     StreamWriter,
 };
-use phonic_signal::{PhonicError, PhonicResult};
-use std::io::{Read, Seek, Write};
+use phonic_signal::{utils::slice_as_init_mut, PhonicError, PhonicResult};
+use std::{
+    io::{Read, Seek, Write},
+    mem::{transmute, MaybeUninit},
+};
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
     inner: T,
@@ -130,7 +133,7 @@ where
     F: FormatTag,
     Self: Format<Tag = F> + StreamReader<Tag = F::Codec>,
 {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<(usize, usize)> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
         let n = StreamReader::read(self, buf)?;
         Ok((0, n))
     }
@@ -190,25 +193,28 @@ impl<T, F: FormatTag> FiniteStream for WaveFormat<T, F> {
 }
 
 impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
-    fn read(&mut self, buf: &mut [u8]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.stream_spec().block_align;
 
-        let mut n = 0;
+        let uninit_buf = &mut buf[..len];
+        let init_buf = unsafe { slice_as_init_mut(uninit_buf) };
+
+        let mut n_samples = 0;
         loop {
-            match self.inner.read(&mut buf[n..len])? {
-                0 if n == 0 => break,
+            match self.inner.read(&mut init_buf[n_samples..])? {
+                0 if n_samples == 0 => break,
                 0 => return Err(PhonicError::InvalidState),
-                n_read => n += n_read,
+                n_read => n_samples += n_read,
             }
 
-            if n % self.spec.block_align == 0 {
+            if n_samples % self.spec.block_align == 0 {
                 break;
             }
         }
 
-        self.pos += n as u64;
-        Ok(n)
+        self.pos += n_samples as u64;
+        Ok(n_samples)
     }
 }
 

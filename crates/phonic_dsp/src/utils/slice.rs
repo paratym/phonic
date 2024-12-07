@@ -3,7 +3,7 @@ use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
     SignalReader, SignalSeeker, SignalWriter,
 };
-use std::time::Duration;
+use std::{mem::MaybeUninit, time::Duration};
 
 pub struct Slice<T> {
     inner: T,
@@ -131,7 +131,7 @@ impl<T: Signal> FiniteSignal for Slice<T> {
 }
 
 impl<T: IndexedSignal + SignalReader> Slice<T> {
-    fn read_padding(&mut self, buf: &mut [<Self as Signal>::Sample]) -> PhonicResult<()> {
+    fn read_padding(&mut self, buf: &mut [MaybeUninit<T::Sample>]) -> PhonicResult<()> {
         let buf_len = buf.len();
         let n_channels = self.spec().channels.count() as usize;
 
@@ -149,7 +149,7 @@ impl<T: IndexedSignal + SignalReader> Slice<T> {
 }
 
 impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         self.read_padding(buf)?;
 
         let len = buf.len().min(self.rem_interleaved() as usize);

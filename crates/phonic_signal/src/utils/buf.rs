@@ -1,13 +1,8 @@
-use crate::{
-    utils::PollSignalReader, BlockingSignalReader, BufferedSignal, BufferedSignalReader,
-    BufferedSignalWriter, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal,
-    SignalReader, SignalSeeker, SignalSpec, SignalWriter,
-};
+use crate::{utils::PollSignalReader, BlockingSignalReader, PhonicResult, Sample, Signal};
 use std::{
     mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut},
     rc::Rc,
-    slice,
     sync::Arc,
     time::Duration,
 };
@@ -44,9 +39,7 @@ pub trait StaticBuf<S: Sized>: OwnedBuf<S> {
         R: PollSignalReader<Sample = S>,
     {
         let mut buf = Self::new_uninit();
-        let uninit_slice = buf._as_mut_slice();
-        let sample_slice = unsafe { transmute::<&mut [MaybeUninit<S>], &mut [S]>(uninit_slice) };
-        reader.read_exact_poll(sample_slice)?;
+        reader.read_exact_poll(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
@@ -56,9 +49,7 @@ pub trait StaticBuf<S: Sized>: OwnedBuf<S> {
         R: BlockingSignalReader<Sample = S>,
     {
         let mut buf = Self::new_uninit();
-        let uninit_slice = buf._as_mut_slice();
-        let sample_slice = unsafe { transmute::<&mut [MaybeUninit<S>], &mut [S]>(uninit_slice) };
-        reader.read_exact_blocking(sample_slice)?;
+        reader.read_exact_blocking(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
@@ -77,10 +68,7 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
         Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
     {
         let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
-        let uninit_slice = buf._as_mut_slice();
-        let sample_slice = unsafe { transmute::<&mut [MaybeUninit<S>], &mut [S]>(uninit_slice) };
-
-        let n_samples = reader.read_poll(sample_slice)?;
+        let n_samples = reader.read_poll(buf._as_mut_slice())?;
         unsafe { buf._resize(n_samples) }
 
         Ok(unsafe { Self::from_uninit(buf) })
@@ -98,10 +86,10 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
     where
         R: PollSignalReader<Sample = S>,
     {
-        let mut buf = unsafe { Self::from_uninit(Self::new_uninit(n_samples)) };
+        let mut buf = Self::new_uninit(n_samples);
         reader.read_exact_poll(buf._as_mut_slice())?;
 
-        Ok(buf)
+        Ok(unsafe { Self::from_uninit(buf) })
     }
 
     fn read_exact_duration_poll<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
@@ -121,16 +109,15 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
         let mut n_samples = 0;
 
         loop {
-            let uninit_slice = buf._as_mut_slice();
-            let sample_slice =
-                unsafe { transmute::<&mut [MaybeUninit<S>], &mut [S]>(uninit_slice) };
-
-            match reader.read_poll(sample_slice) {
+            let uninit_slice = &mut buf._as_mut_slice()[n_samples..];
+            match reader.read_poll(uninit_slice) {
                 Ok(0) => break,
                 Ok(n) => n_samples += n,
                 Err(e) if n_samples == 0 => return Err(e),
                 Err(e) => todo!(),
             }
+
+            // TODO: extend buf
         }
 
         unsafe { buf._resize(n_samples) }
@@ -143,10 +130,7 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
         Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
     {
         let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
-        let uninit_slice = buf._as_mut_slice();
-        let sample_slice = unsafe { transmute::<&mut [MaybeUninit<S>], &mut [S]>(uninit_slice) };
-
-        let n_samples = reader.read_blocking(sample_slice)?;
+        let n_samples = reader.read_blocking(buf._as_mut_slice())?;
         unsafe { buf._resize(n_samples) }
 
         Ok(unsafe { Self::from_uninit(buf) })
@@ -164,9 +148,10 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
     where
         R: BlockingSignalReader<Sample = S>,
     {
-        let mut buf = unsafe { Self::from_uninit(Self::new_uninit(n_samples)) };
+        let mut buf = Self::new_uninit(n_samples);
         reader.read_exact_blocking(buf._as_mut_slice())?;
-        Ok(buf)
+
+        Ok(unsafe { Self::from_uninit(buf) })
     }
 
     fn read_exact_duration_blocking<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
@@ -185,6 +170,22 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
     }
 }
 
+pub fn slice_as_uninit<T>(init: &[T]) -> &[MaybeUninit<T>] {
+    unsafe { transmute::<&[T], &[MaybeUninit<T>]>(init) }
+}
+
+pub fn slice_as_uninit_mut<T>(init: &mut [T]) -> &mut [MaybeUninit<T>] {
+    unsafe { transmute::<&mut [T], &mut [MaybeUninit<T>]>(init) }
+}
+
+pub unsafe fn slice_as_init<T>(uninit: &[MaybeUninit<T>]) -> &[T] {
+    transmute::<&[MaybeUninit<T>], &[T]>(uninit)
+}
+
+pub unsafe fn slice_as_init_mut<T>(uninit: &mut [MaybeUninit<T>]) -> &mut [T] {
+    transmute::<&mut [MaybeUninit<T>], &mut [T]>(uninit)
+}
+
 impl<S: Sample, const N: usize> Default for DefaultBuf<S, N> {
     fn default() -> Self {
         let buf = <[S; N]>::silence();
@@ -192,7 +193,14 @@ impl<S: Sample, const N: usize> Default for DefaultBuf<S, N> {
     }
 }
 
-impl<S: Sample, const N: usize> Deref for DefaultBuf<S, N> {
+impl<S, const N: usize> Default for DefaultBuf<MaybeUninit<S>, N> {
+    fn default() -> Self {
+        let buf = <[S; N]>::new_uninit();
+        Self { buf }
+    }
+}
+
+impl<S, const N: usize> Deref for DefaultBuf<S, N> {
     type Target = [S];
 
     fn deref(&self) -> &Self::Target {
@@ -200,7 +208,7 @@ impl<S: Sample, const N: usize> Deref for DefaultBuf<S, N> {
     }
 }
 
-impl<S: Sample, const N: usize> DerefMut for DefaultBuf<S, N> {
+impl<S, const N: usize> DerefMut for DefaultBuf<S, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.buf
     }

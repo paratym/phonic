@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
@@ -74,16 +76,16 @@ impl_deref_signal! {
 }
 
 impl<T: SignalReader> SignalReader for Observer<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.read(buf)?;
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let samples = self.inner.read_init(buf)?;
 
         match &self.callback {
-            Callback::Read(callback) => callback(&self.inner, &buf[..n]),
-            Callback::Event(callback) => callback(&self.inner, SignalEvent::Read(&buf[..n])),
+            Callback::Read(callback) => callback(&self.inner, samples),
+            Callback::Event(callback) => callback(&self.inner, SignalEvent::Read(samples)),
             _ => {}
         }
 
-        Ok(n)
+        Ok(samples.len())
     }
 }
 

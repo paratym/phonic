@@ -3,10 +3,7 @@ use phonic_signal::{
     Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
 use rtrb::{Consumer, CopyToUninit, Producer, RingBuffer};
-use std::{
-    sync::{Arc, Condvar, Mutex},
-    time::Duration,
-};
+use std::{mem::MaybeUninit, time::Duration};
 
 pub struct SignalBuffer;
 
@@ -65,7 +62,7 @@ impl<S: Sample> Signal for SignalConsumer<S> {
 impl<S: Sample> SignalConsumer<S> {
     fn _read(
         &mut self,
-        buf: &mut [<Self as Signal>::Sample],
+        buf: &mut [MaybeUninit<<Self as Signal>::Sample>],
         blocking: bool,
     ) -> PhonicResult<usize> {
         let n_slots = self.inner.slots();
@@ -82,21 +79,22 @@ impl<S: Sample> SignalConsumer<S> {
 
         let head_len = head.len();
         let tail_end = head_len + tail.len();
-        buf[..head_len].copy_from_slice(head);
-        buf[head_len..tail_end].copy_from_slice(tail);
+
+        head.copy_to_uninit(&mut buf[..head_len]);
+        tail.copy_to_uninit(&mut buf[head_len..tail_end]);
 
         Ok(buf_len)
     }
 }
 
 impl<S: Sample> SignalReader for SignalConsumer<S> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         self._read(buf, false)
     }
 }
 
 impl<S: Sample> BlockingSignalReader for SignalConsumer<S> {
-    fn read_blocking(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         self._read(buf, true)
     }
 }

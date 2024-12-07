@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::{
     FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
     IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
@@ -43,7 +45,7 @@ impl<F: FiniteFormat> FiniteStream for StreamSelector<F> {
 }
 
 impl<T: FormatReader> StreamReader for StreamSelector<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, PhonicError> {
+    fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> Result<usize, PhonicError> {
         loop {
             match self.inner.read(buf) {
                 Err(e) => return Err(e),

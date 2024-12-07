@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::{utils::DefaultBuf, PhonicError, PhonicResult, Signal, SignalReader, SignalWriter};
 
 pub trait PollSignal: Signal {
@@ -9,7 +11,7 @@ pub trait PollSignal: Signal {
 }
 
 pub trait PollSignalReader: PollSignal + SignalReader {
-    fn read_poll(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read_poll(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         loop {
             match self.read(buf) {
                 Err(PhonicError::Interrupted) => continue,
@@ -19,7 +21,7 @@ pub trait PollSignalReader: PollSignal + SignalReader {
         }
     }
 
-    fn read_exact_poll(&mut self, mut buf: &mut [Self::Sample]) -> PhonicResult<()> {
+    fn read_exact_poll(&mut self, mut buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<()> {
         if buf.len() % self.spec().channels.count() as usize != 0 {
             return Err(PhonicError::InvalidInput);
         }
@@ -87,7 +89,7 @@ where
         &mut self,
         reader: &mut R,
         n_frames: u64,
-        buf: &mut [Self::Sample],
+        buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()> {
         let spec = self.spec().merged(reader.spec())?;
         let n_samples = n_frames * spec.channels.count() as u64;
@@ -95,7 +97,7 @@ where
 
         while n < n_samples {
             let len = buf.len().min((n_samples - n) as usize);
-            let n_read = match reader.read(&mut buf[..len]) {
+            let samples = match reader.read_init(&mut buf[..len]) {
                 Err(PhonicError::Interrupted) => continue,
                 Err(PhonicError::NotReady) => {
                     Self::poll_interval();
@@ -103,12 +105,12 @@ where
                 }
 
                 Err(e) => return Err(e),
-                Ok(0) => return Err(PhonicError::OutOfBounds),
+                Ok([]) => return Err(PhonicError::OutOfBounds),
                 Ok(n) => n,
             };
 
-            self.write_exact_poll(&buf[..n_read])?;
-            n += n_read as u64;
+            self.write_exact_poll(samples)?;
+            n += samples.len() as u64;
         }
 
         Ok(())
@@ -122,12 +124,12 @@ where
     fn copy_all_buffered_poll(
         &mut self,
         reader: &mut R,
-        buf: &mut [Self::Sample],
+        buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()> {
         let _ = self.spec().merged(reader.spec())?;
 
         loop {
-            let n_read = match reader.read(buf) {
+            let samples = match reader.read_init(buf) {
                 Err(PhonicError::Interrupted) => continue,
                 Err(PhonicError::NotReady) => {
                     Self::poll_interval();
@@ -135,11 +137,11 @@ where
                 }
 
                 Err(e) => return Err(e),
-                Ok(0) => break,
-                Ok(n) => n,
+                Ok([]) => break,
+                Ok(samples) => samples,
             };
 
-            match self.write_exact_poll(&buf[..n_read]) {
+            match self.write_exact_poll(samples) {
                 Ok(()) => continue,
                 Err(PhonicError::OutOfBounds) => break,
                 Err(e) => return Err(e),

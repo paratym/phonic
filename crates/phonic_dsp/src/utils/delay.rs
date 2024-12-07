@@ -2,7 +2,7 @@ use phonic_signal::{
     utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal,
     SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
-use std::time::Duration;
+use std::{mem::MaybeUninit, time::Duration};
 
 pub struct Delay<T> {
     inner: T,
@@ -102,7 +102,7 @@ impl<T: FiniteSignal> FiniteSignal for Delay<T> {
 }
 
 impl<T: SignalReader> Delay<T> {
-    fn read_padding(&mut self, buf: &mut [<Self as Signal>::Sample]) -> usize {
+    fn read_padding(&mut self, buf: &mut [MaybeUninit<T::Sample>]) -> usize {
         let rem_padding = self.delay - self.n_delayed;
         if rem_padding == 0 {
             return 0;
@@ -113,7 +113,7 @@ impl<T: SignalReader> Delay<T> {
         buf_len -= buf_len % n_channels;
 
         let n_padding = buf_len.min(rem_padding as usize * n_channels);
-        buf[..n_padding].fill(T::Sample::ORIGIN);
+        buf[..n_padding].fill(MaybeUninit::new(T::Sample::ORIGIN));
         self.n_delayed += n_padding as u64 / n_channels as u64;
 
         n_padding
@@ -121,7 +121,7 @@ impl<T: SignalReader> Delay<T> {
 }
 
 impl<T: SignalReader> SignalReader for Delay<T> {
-    fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let n_padding = self.read_padding(buf);
         if buf.len() - n_padding < self.spec().channels.count() as usize {
             return Ok(n_padding);

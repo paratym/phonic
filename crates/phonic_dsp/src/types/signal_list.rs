@@ -2,6 +2,7 @@ use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader,
     SignalSeeker, SignalSpec, SignalWriter,
 };
+use std::mem::{transmute, MaybeUninit};
 
 pub trait SignalList {
     type Sample: Sample;
@@ -39,7 +40,21 @@ pub trait FiniteSignalList: SignalList {
 }
 
 pub trait SignalReaderList: SignalList {
-    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize>;
+    fn read(&mut self, i: usize, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize>;
+
+    fn read_init<'a>(
+        &mut self,
+        i: usize,
+        buf: &'a mut [MaybeUninit<Self::Sample>],
+    ) -> PhonicResult<&'a [Self::Sample]> {
+        let n_samples = self.read(i, buf)?;
+        let uninit_slice = &mut buf[..n_samples];
+        let init_slice = unsafe {
+            transmute::<&'a mut [MaybeUninit<Self::Sample>], &'a mut [Self::Sample]>(uninit_slice)
+        };
+
+        Ok(init_slice)
+    }
 }
 
 pub trait SignalWriterList: SignalList {
@@ -82,7 +97,7 @@ impl<T: FiniteSignal, const N: usize> FiniteSignalList for [T; N] {
 }
 
 impl<T: SignalReader, const N: usize> SignalReaderList for [T; N] {
-    fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+    fn read(&mut self, i: usize, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         self[i].read(buf)
     }
 }
@@ -136,7 +151,11 @@ macro_rules! impl_slice_list {
         }
 
         impl<$signal: SignalReader> SignalReaderList for $typ {
-            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+            fn read(
+                &mut self,
+                i: usize,
+                buf: &mut [MaybeUninit<Self::Sample>],
+            ) -> PhonicResult<usize> {
                 self[i].read(buf)
             }
         }
@@ -218,7 +237,7 @@ macro_rules! impl_tuple_list {
             $first: SignalReader,
             $($rest: SignalReader<Sample = $first::Sample>),+
         > SignalReaderList for ($first, $($rest),+) {
-            fn read(&mut self, i: usize, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
+            fn read(&mut self, i: usize, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
                 match i {
                     $first_i => self.$first_i.read(buf),
                     $($rest_i => self.$rest_i.read(buf)),+,
