@@ -1,5 +1,5 @@
 use crate::{utils::StreamSelector, CodecTag, StreamSpec};
-use phonic_signal::{PhonicError, PhonicResult};
+use phonic_signal::{utils::slice_as_init_mut, PhonicError, PhonicResult};
 use std::{
     fmt::Debug,
     hash::Hash,
@@ -114,6 +114,17 @@ pub trait FiniteFormat: Format {
 
 pub trait FormatReader: Format {
     fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)>;
+
+    fn read_init<'a>(
+        &mut self,
+        buf: &'a mut [MaybeUninit<u8>],
+    ) -> PhonicResult<(usize, &'a mut [u8])> {
+        let (stream_i, n_bytes) = self.read(buf)?;
+        let uninit_slice = &mut buf[..n_bytes];
+        let init_slice = unsafe { slice_as_init_mut(uninit_slice) };
+
+        Ok((stream_i, init_slice))
+    }
 }
 
 pub trait FormatWriter: Format {

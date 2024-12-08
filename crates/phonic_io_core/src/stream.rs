@@ -1,5 +1,5 @@
 use crate::{CodecTag, StreamSpec};
-use phonic_signal::PhonicResult;
+use phonic_signal::{utils::slice_as_init_mut, PhonicResult};
 use std::{
     mem::MaybeUninit,
     ops::{Deref, DerefMut, Neg},
@@ -68,6 +68,14 @@ pub trait FiniteStream: Stream {
 
 pub trait StreamReader: Stream {
     fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize>;
+
+    fn read_init<'a>(&mut self, buf: &'a mut [MaybeUninit<u8>]) -> PhonicResult<&'a mut [u8]> {
+        let n_bytes = self.read(buf)?;
+        let uninit_slice = &mut buf[..n_bytes];
+        let init_slice = unsafe { slice_as_init_mut(uninit_slice) };
+
+        Ok(init_slice)
+    }
 }
 
 pub trait StreamWriter: Stream {

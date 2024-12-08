@@ -73,6 +73,7 @@ impl TaggedSignalExt for TaggedSignal {
     where
         S: FromKnownSample + IntoKnownSample,
     {
-        match_tagged_signal!(self, signal => Box::new(<Convert<_, _>>::new(signal)))
+        // match_tagged_signal!(self, signal => Box::new(<Convert<_, _>>::new(signal)))
+        todo!()
     }
 }

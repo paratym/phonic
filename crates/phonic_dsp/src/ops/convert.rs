@@ -1,8 +1,8 @@
 use crate::ops::ClipSample;
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    utils::DefaultBuf, PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
+    utils::{slice_as_init, DefaultBuf},
+    PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::{
     marker::PhantomData,
@@ -111,8 +111,7 @@ where
             });
 
         let uninit_slice = &self.buf[..len];
-        let init_slice =
-            unsafe { transmute::<&[MaybeUninit<T::Sample>], &[T::Sample]>(uninit_slice) };
+        let init_slice = unsafe { slice_as_init(uninit_slice) };
 
         self.inner.write(init_slice)
     }

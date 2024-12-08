@@ -1,8 +1,8 @@
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader,
-    SignalSeeker, SignalSpec, SignalWriter,
+    utils::slice_as_init_mut, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample,
+    Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
-use std::mem::{transmute, MaybeUninit};
+use std::mem::MaybeUninit;
 
 pub trait SignalList {
     type Sample: Sample;
@@ -49,9 +49,7 @@ pub trait SignalReaderList: SignalList {
     ) -> PhonicResult<&'a [Self::Sample]> {
         let n_samples = self.read(i, buf)?;
         let uninit_slice = &mut buf[..n_samples];
-        let init_slice = unsafe {
-            transmute::<&'a mut [MaybeUninit<Self::Sample>], &'a mut [Self::Sample]>(uninit_slice)
-        };
+        let init_slice = unsafe { slice_as_init_mut(uninit_slice) };
 
         Ok(init_slice)
     }

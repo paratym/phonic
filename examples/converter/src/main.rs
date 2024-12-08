@@ -3,7 +3,7 @@ use phonic::{
     io::{
         utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, KnownFormat, StreamSpec,
     },
-    signal::{utils::PollSignalCopy, PhonicError, PhonicResult},
+    signal::{BlockingSignalCopy, PhonicError, PhonicResult},
 };
 use std::{
     fs::{create_dir_all, File},
@@ -39,5 +39,5 @@ fn main() -> PhonicResult<()> {
         .unwrap_i16()
         .unwrap();
 
-    encoder.copy_all_poll(&mut decoder)
+    encoder.copy_all(&mut decoder)
 }

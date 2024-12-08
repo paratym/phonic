@@ -4,14 +4,10 @@ use crate::{
 };
 use phonic_macro::impl_deref_signal;
 use phonic_signal::{
+    utils::{UnReadable, UnSeekable, UnWriteable},
     FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
-
-pub struct Infinite<T>(pub T);
-pub struct UnReadable<T>(pub T);
-pub struct UnWriteable<T>(pub T);
-pub struct UnSeekable<T>(pub T);
 
 macro_rules! impl_format {
     ($name:ident) => {
@@ -71,44 +67,44 @@ macro_rules! impl_format_seek {
     };
 }
 
-impl_format!(UnReadable);
-impl_format!(UnWriteable);
-impl_format!(UnSeekable);
+// impl_format!(UnReadable);
+// impl_format!(UnWriteable);
+// impl_format!(UnSeekable);
+//
+// impl_format_read!(UnWriteable);
+// impl_format_read!(UnSeekable);
+//
+// impl_format_write!(UnReadable);
+// impl_format_write!(UnSeekable);
+//
+// impl_format_seek!(UnReadable);
+// impl_format_seek!(UnWriteable);
 
-impl_format_read!(UnWriteable);
-impl_format_read!(UnSeekable);
-
-impl_format_write!(UnReadable);
-impl_format_write!(UnSeekable);
-
-impl_format_seek!(UnReadable);
-impl_format_seek!(UnWriteable);
-
-impl<T: Format> FormatReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl<T: Format> FormatWriter for UnWriteable<T> {
-    fn write(&mut self, _stream: usize, _buf: &[u8]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
-    }
-
-    fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-
-    fn finalize(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl<T: Format> FormatSeeker for UnSeekable<T> {
-    fn seek(&mut self, _stream: usize, _offset: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
+// impl<T: Format> FormatReader for UnReadable<T> {
+//     fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }
+//
+// impl<T: Format> FormatWriter for UnWriteable<T> {
+//     fn write(&mut self, _stream: usize, _buf: &[u8]) -> PhonicResult<usize> {
+//         Err(PhonicError::Unsupported)
+//     }
+//
+//     fn flush(&mut self) -> PhonicResult<()> {
+//         Err(PhonicError::Unsupported)
+//     }
+//
+//     fn finalize(&mut self) -> PhonicResult<()> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }
+//
+// impl<T: Format> FormatSeeker for UnSeekable<T> {
+//     fn seek(&mut self, _stream: usize, _offset: i64) -> PhonicResult<()> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }
 
 macro_rules! impl_stream {
     ($name:ident) => {
@@ -172,115 +168,51 @@ macro_rules! impl_stream_seek {
     };
 }
 
-impl_stream!(Infinite);
-impl_stream!(UnReadable);
-impl_stream!(UnWriteable);
-impl_stream!(UnSeekable);
+// impl_stream!(Infinite);
+// impl_stream!(UnReadable);
+// impl_stream!(UnWriteable);
+// impl_stream!(UnSeekable);
+//
+// impl_finite_stream!(UnReadable);
+// impl_finite_stream!(UnWriteable);
+// impl_finite_stream!(UnSeekable);
+//
+// impl_stream_read!(Infinite);
+// impl_stream_read!(UnWriteable);
+// impl_stream_read!(UnSeekable);
+//
+// impl_stream_write!(Infinite);
+// impl_stream_write!(UnReadable);
+// impl_stream_write!(UnSeekable);
+//
+// impl_stream_seek!(Infinite);
+// impl_stream_seek!(UnReadable);
+// impl_stream_seek!(UnWriteable);
 
-impl_finite_stream!(UnReadable);
-impl_finite_stream!(UnWriteable);
-impl_finite_stream!(UnSeekable);
-
-impl_stream_read!(Infinite);
-impl_stream_read!(UnWriteable);
-impl_stream_read!(UnSeekable);
-
-impl_stream_write!(Infinite);
-impl_stream_write!(UnReadable);
-impl_stream_write!(UnSeekable);
-
-impl_stream_seek!(Infinite);
-impl_stream_seek!(UnReadable);
-impl_stream_seek!(UnWriteable);
-
-impl<T: Stream> FiniteStream for Infinite<T> {
-    fn len(&self) -> u64 {
-        u64::MAX
-    }
-}
-
-impl<T: Stream> StreamReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl<T: Stream> StreamWriter for UnWriteable<T> {
-    fn write(&mut self, _buf: &[u8]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
-    }
-
-    fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl<T: Stream> StreamSeeker for UnSeekable<T> {
-    fn seek(&mut self, _offset: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl_deref_signal! {
-    impl<T> _ + !FiniteSignal for Infinite<T> {
-        type Target = T;
-
-        &self -> &self.0;
-        &mut self -> &mut self.0;
-    }
-}
-
-impl<T: Signal> FiniteSignal for Infinite<T> {
-    fn len(&self) -> u64 {
-        u64::MAX
-    }
-}
-
-impl_deref_signal! {
-    impl<T> _ + !SignalReader for UnReadable<T> {
-        type Target = T;
-
-        &self -> &self.0;
-        &mut self -> &mut self.0;
-    }
-}
-
-impl<T: Signal> SignalReader for UnReadable<T> {
-    fn read(&mut self, _buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl_deref_signal! {
-    impl<T> _ + !SignalWriter for UnWriteable<T> {
-        type Target = T;
-
-        &self -> &self.0;
-        &mut self -> &mut self.0;
-    }
-}
-
-impl<T: Signal> SignalWriter for UnWriteable<T> {
-    fn write(&mut self, _buf: &[Self::Sample]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
-    }
-
-    fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
-
-impl_deref_signal! {
-    impl<T> _ + !SignalSeeker for UnSeekable<T> {
-        type Target = T;
-
-        &self -> &self.0;
-        &mut self -> &mut self.0;
-    }
-}
-
-impl<T: Signal> SignalSeeker for UnSeekable<T> {
-    fn seek(&mut self, _offset: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
-    }
-}
+// impl<T: Stream> FiniteStream for Infinite<T> {
+//     fn len(&self) -> u64 {
+//         u64::MAX
+//     }
+// }
+//
+// impl<T: Stream> StreamReader for UnReadable<T> {
+//     fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }
+//
+// impl<T: Stream> StreamWriter for UnWriteable<T> {
+//     fn write(&mut self, _buf: &[u8]) -> PhonicResult<usize> {
+//         Err(PhonicError::Unsupported)
+//     }
+//
+//     fn flush(&mut self) -> PhonicResult<()> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }
+//
+// impl<T: Stream> StreamSeeker for UnSeekable<T> {
+//     fn seek(&mut self, _offset: i64) -> PhonicResult<()> {
+//         Err(PhonicError::Unsupported)
+//     }
+// }

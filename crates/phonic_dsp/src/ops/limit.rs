@@ -1,10 +1,7 @@
-use std::mem::MaybeUninit;
-
 use crate::ops::ComplementSample;
 use phonic_macro::impl_deref_signal;
-use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
-};
+use phonic_signal::{PhonicResult, Sample, Signal, SignalReader};
+use std::mem::MaybeUninit;
 
 pub struct Limit<T: Signal> {
     inner: T,

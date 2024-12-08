@@ -4,8 +4,8 @@ use cpal::{
 };
 use phonic_io_core::{KnownSample, KnownSampleType};
 use phonic_signal::{
-    utils::{slice_as_uninit_mut, PollSignalReader, PollSignalWriter},
-    PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+    utils::slice_as_uninit_mut, BufferedSignalReader, BufferedSignalWriter, PhonicError,
+    PhonicResult, Sample, Signal, SignalSpec,
 };
 use std::time::Duration;
 
@@ -100,15 +100,15 @@ pub trait DeviceExt: DeviceTrait {
         timeout: Option<Duration>,
     ) -> Result<Self::Stream, BuildStreamError>
     where
-        S: SignalWriter + Send + 'static,
+        S: BufferedSignalWriter + Send + 'static,
         S::Sample: SizedSample + KnownSample,
         E: FnMut(StreamError) + Send + 'static,
     {
         self.build_input_stream(
             &signal.spec().into_cpal_config(buffer_size),
-            move |buf: &[S::Sample], _: &InputCallbackInfo| match signal.write_exact_poll(buf) {
-                Ok(_) | Err(PhonicError::OutOfBounds) => {}
-                Err(e) => panic!("error writing to signal: {e}"),
+            move |buf: &[S::Sample], _: &InputCallbackInfo| {
+                let n_samples = signal.write_available(buf);
+                debug_assert!(buf.len() == n_samples);
             },
             error_callback,
             timeout,
@@ -123,19 +123,16 @@ pub trait DeviceExt: DeviceTrait {
         timeout: Option<Duration>,
     ) -> Result<Self::Stream, BuildStreamError>
     where
-        S: SignalReader + Send + 'static,
+        S: BufferedSignalReader + Send + 'static,
         S::Sample: SizedSample + KnownSample,
         E: FnMut(StreamError) + Send + 'static,
     {
         self.build_output_stream(
             &signal.spec().into_cpal_config(buffer_size),
-            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| match signal
-                .read_exact_poll(slice_as_uninit_mut(buf))
-            {
-                Ok(()) => (),
-                // TODO: read remainder
-                Err(PhonicError::OutOfBounds) => buf.fill(S::Sample::ORIGIN),
-                Err(e) => panic!("error reading from signal: {e}"),
+            move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
+                let uninit_slice = slice_as_uninit_mut(buf);
+                let n_samples = signal.read_available(uninit_slice);
+                buf[n_samples..].fill(S::Sample::ORIGIN);
             },
             error_callback,
             timeout,

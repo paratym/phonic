@@ -1,10 +1,6 @@
-use std::mem::MaybeUninit;
-
 use phonic_macro::impl_deref_signal;
-use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter,
-};
+use phonic_signal::{PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter};
+use std::mem::MaybeUninit;
 
 pub enum SignalEvent<'b, T: Signal> {
     Read(&'b [T::Sample]),

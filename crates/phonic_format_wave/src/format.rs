@@ -7,7 +7,7 @@ use phonic_io_core::{
 use phonic_signal::{utils::slice_as_init_mut, PhonicError, PhonicResult};
 use std::{
     io::{Read, Seek, Write},
-    mem::{transmute, MaybeUninit},
+    mem::MaybeUninit,
 };
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {

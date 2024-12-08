@@ -10,7 +10,8 @@ use phonic::{
     },
     rtrb::SignalBuffer,
     signal::{
-        utils::PollSignalCopy, BlockingSignalWriter, PhonicError, PhonicResult, SignalReader,
+        BlockingSignalCopy, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
+        SignalReader,
     },
 };
 use std::{env, fs::File, path::Path, time::Duration};
@@ -31,7 +32,7 @@ fn main() -> PhonicResult<()> {
 
 fn play<S>(mut signal: S) -> PhonicResult<()>
 where
-    S: SignalReader + Send + Sync,
+    S: BlockingSignalReader + Send + Sync,
     S::Sample: KnownSample + SizedSample,
 {
     let spec = signal.spec();
@@ -49,6 +50,6 @@ where
         );
 
     output.unwrap().play().unwrap();
-    producer.copy_all_poll(&mut signal)?;
+    producer.copy_all(&mut signal)?;
     producer.flush_blocking()
 }

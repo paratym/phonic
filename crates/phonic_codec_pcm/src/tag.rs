@@ -3,7 +3,7 @@ use phonic_io_core::{
     match_tagged_signal, CodecConstructor, CodecTag, DynStream, KnownSampleType, StreamSpecBuilder,
     TaggedSignal,
 };
-use phonic_signal::{PhonicError, PhonicResult};
+use phonic_signal::{utils::Poll, PhonicError, PhonicResult};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct PcmCodecTag;
@@ -57,6 +57,14 @@ where
     Ok(())
 }
 
+macro_rules! dyn_construct_branch {
+    ($sample:ident, $inner:ident) => {{
+        // TODO: figure out why CodecConstructor needs explicit generics here
+        let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder($inner)?;
+        TaggedSignal::$sample(Box::new(Poll(codec)))
+    }};
+}
+
 pub fn pcm_codec_from_dyn_stream<S>(stream: S) -> PhonicResult<TaggedSignal>
 where
     S: DynStream + 'static,
@@ -64,49 +72,19 @@ where
     PhonicError: From<<PcmCodecTag as TryInto<S::Tag>>::Error>,
 {
     let sample_type = KnownSampleType::try_from(stream.stream_spec().sample_type)?;
-
-    // TODO: figure out why CodecConstructor needs explicit generics here
     let signal = match sample_type {
-        KnownSampleType::I8 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::I8(Box::new(codec))
-        }
-        KnownSampleType::I16 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::I16(Box::new(codec))
-        }
-        KnownSampleType::I32 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::I32(Box::new(codec))
-        }
-        KnownSampleType::I64 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::I64(Box::new(codec))
-        }
-        KnownSampleType::U8 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::U8(Box::new(codec))
-        }
-        KnownSampleType::U16 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::U16(Box::new(codec))
-        }
-        KnownSampleType::U32 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::U32(Box::new(codec))
-        }
-        KnownSampleType::U64 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::U64(Box::new(codec))
-        }
-        KnownSampleType::F32 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::F32(Box::new(codec))
-        }
-        KnownSampleType::F64 => {
-            let codec = <PcmCodec<_, _, _> as CodecConstructor<S, S::Tag>>::decoder(stream)?;
-            TaggedSignal::F64(Box::new(codec))
-        }
+        KnownSampleType::I8 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::I16 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::I32 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::I64 => dyn_construct_branch!(I8, stream),
+
+        KnownSampleType::U8 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::U16 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::U32 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::U64 => dyn_construct_branch!(I8, stream),
+
+        KnownSampleType::F32 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::F64 => dyn_construct_branch!(I8, stream),
     };
 
     Ok(signal)
@@ -120,5 +98,6 @@ where
     PcmCodecTag: TryInto<C>,
     PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
 {
-    match_tagged_signal!(signal, inner => Ok(Box::new(PcmCodec::encoder(inner)?)))
+    // match_tagged_signal!(signal, inner => Ok(Box::new(PcmCodec::encoder(inner)?)))
+    todo!()
 }

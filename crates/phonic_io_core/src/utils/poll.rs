@@ -1,6 +1,9 @@
 use crate::{Stream, StreamReader, StreamWriter};
-use phonic_signal::{utils::DefaultBuf, PhonicError, PhonicResult};
-use std::mem::{transmute, MaybeUninit};
+use phonic_signal::{
+    utils::{slice_as_init, DefaultBuf},
+    PhonicError, PhonicResult,
+};
+use std::mem::MaybeUninit;
 
 pub trait PollStream: Stream {
     fn poll_interval() {
@@ -114,7 +117,7 @@ where
             };
 
             let uninit_slice = &buf[..n_read];
-            let init_slice = unsafe { transmute::<&[MaybeUninit<u8>], &[u8]>(uninit_slice) };
+            let init_slice = unsafe { slice_as_init(uninit_slice) };
 
             self.write_exact_poll(init_slice)?;
             n += n_read;
@@ -149,7 +152,7 @@ where
             };
 
             let uninit_slice = &buf[..n_read];
-            let init_slice = unsafe { transmute::<&[MaybeUninit<u8>], &[u8]>(uninit_slice) };
+            let init_slice = unsafe { slice_as_init(uninit_slice) };
 
             match self.write_exact_poll(init_slice) {
                 Ok(()) => continue,

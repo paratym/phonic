@@ -1,5 +1,4 @@
 use std::mem::MaybeUninit;
-
 use crate::{
     FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
     IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,

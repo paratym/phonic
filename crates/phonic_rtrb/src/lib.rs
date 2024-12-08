@@ -1,6 +1,7 @@
 use phonic_signal::{
-    utils::DEFAULT_BUF_LEN, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
-    Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+    utils::DEFAULT_BUF_LEN, BlockingSignalReader, BlockingSignalWriter, BufferedSignal,
+    BufferedSignalReader, BufferedSignalWriter, PhonicError, PhonicResult, Sample, Signal,
+    SignalReader, SignalSpec, SignalWriter,
 };
 use rtrb::{Consumer, CopyToUninit, Producer, RingBuffer};
 use std::{mem::MaybeUninit, time::Duration};
@@ -59,6 +60,12 @@ impl<S: Sample> Signal for SignalConsumer<S> {
     }
 }
 
+impl<S: Sample> BufferedSignal for SignalConsumer<S> {
+    fn commit_samples(&mut self, n_samples: usize) {
+        todo!()
+    }
+}
+
 impl<S: Sample> SignalConsumer<S> {
     fn _read(
         &mut self,
@@ -99,11 +106,23 @@ impl<S: Sample> BlockingSignalReader for SignalConsumer<S> {
     }
 }
 
+impl<S: Sample> BufferedSignalReader for SignalConsumer<S> {
+    fn available_samples(&self) -> &[MaybeUninit<Self::Sample>] {
+        todo!()
+    }
+}
+
 impl<S: Sample> Signal for SignalProducer<S> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
         &self.spec
+    }
+}
+
+impl<S: Sample> BufferedSignal for SignalProducer<S> {
+    fn commit_samples(&mut self, n_samples: usize) {
+        todo!()
     }
 }
 
@@ -149,6 +168,12 @@ impl<S: Sample> BlockingSignalWriter for SignalProducer<S> {
     }
 
     fn flush_blocking(&mut self) -> PhonicResult<()> {
+        todo!()
+    }
+}
+
+impl<S: Sample> BufferedSignalWriter for SignalProducer<S> {
+    fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
         todo!()
     }
 }

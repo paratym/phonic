@@ -1,4 +1,4 @@
-use crate::{utils::PollSignalReader, BlockingSignalReader, PhonicResult, Sample, Signal};
+use crate::{BlockingSignalReader, PhonicResult, Sample, Signal};
 use std::{
     mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -34,22 +34,12 @@ pub trait StaticBuf<S: Sized>: OwnedBuf<S> {
         unsafe { Self::from_uninit(buf) }
     }
 
-    fn read_exact_poll<R>(reader: &mut R) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-    {
-        let mut buf = Self::new_uninit();
-        reader.read_exact_poll(buf._as_mut_slice())?;
-
-        Ok(unsafe { Self::from_uninit(buf) })
-    }
-
-    fn read_exact_blocking<R>(reader: &mut R) -> PhonicResult<Self>
+    fn read_exact<R>(reader: &mut R) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
     {
         let mut buf = Self::new_uninit();
-        reader.read_exact_blocking(buf._as_mut_slice())?;
+        reader.read_exact(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
@@ -62,69 +52,7 @@ pub trait ResizeBuf<S>: DynamicBuf<S> {
 pub trait DynamicBuf<S>: OwnedBuf<S> {
     fn new_uninit(capacity: usize) -> Self::Uninitialized;
 
-    fn read_poll<R>(reader: &mut R) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-        Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
-    {
-        let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
-        let n_samples = reader.read_poll(buf._as_mut_slice())?;
-        unsafe { buf._resize(n_samples) }
-
-        Ok(unsafe { Self::from_uninit(buf) })
-    }
-
-    fn read_exact_poll<R>(reader: &mut R, n_frames: usize) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-    {
-        let n_samples = n_frames * reader.spec().channels.count() as usize;
-        Self::read_exact_interleaved_poll(reader, n_samples)
-    }
-
-    fn read_exact_interleaved_poll<R>(reader: &mut R, n_samples: usize) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-    {
-        let mut buf = Self::new_uninit(n_samples);
-        reader.read_exact_poll(buf._as_mut_slice())?;
-
-        Ok(unsafe { Self::from_uninit(buf) })
-    }
-
-    fn read_exact_duration_poll<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-    {
-        let n_frames = duration.as_secs_f64() * reader.spec().sample_rate as f64;
-        Self::read_exact_poll(reader, n_frames as usize)
-    }
-
-    fn read_all_poll<R>(reader: &mut R) -> PhonicResult<Self>
-    where
-        R: PollSignalReader<Sample = S>,
-        Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
-    {
-        let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
-        let mut n_samples = 0;
-
-        loop {
-            let uninit_slice = &mut buf._as_mut_slice()[n_samples..];
-            match reader.read_poll(uninit_slice) {
-                Ok(0) => break,
-                Ok(n) => n_samples += n,
-                Err(e) if n_samples == 0 => return Err(e),
-                Err(e) => todo!(),
-            }
-
-            // TODO: extend buf
-        }
-
-        unsafe { buf._resize(n_samples) }
-        Ok(unsafe { Self::from_uninit(buf) })
-    }
-
-    fn read_blocking<R>(reader: &mut R) -> PhonicResult<Self>
+    fn read<R>(reader: &mut R) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
         Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
@@ -136,33 +64,33 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
         Ok(unsafe { Self::from_uninit(buf) })
     }
 
-    fn read_exact_blocking<R>(reader: &mut R, n_frames: usize) -> PhonicResult<Self>
+    fn read_exact<R>(reader: &mut R, n_frames: usize) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
     {
         let n_samples = n_frames * reader.spec().channels.count() as usize;
-        Self::read_exact_interleaved_blocking(reader, n_samples)
+        Self::read_exact_interleaved(reader, n_samples)
     }
 
-    fn read_exact_interleaved_blocking<R>(reader: &mut R, n_samples: usize) -> PhonicResult<Self>
+    fn read_exact_interleaved<R>(reader: &mut R, n_samples: usize) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
     {
         let mut buf = Self::new_uninit(n_samples);
-        reader.read_exact_blocking(buf._as_mut_slice())?;
+        reader.read_exact(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
 
-    fn read_exact_duration_blocking<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
+    fn read_exact_duration<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
     {
         let n_frames = duration.as_secs_f64() * reader.spec().sample_rate as f64;
-        Self::read_exact_blocking(reader, n_frames as usize)
+        Self::read_exact(reader, n_frames as usize)
     }
 
-    fn read_all_blocking<R>(reader: &mut R) -> PhonicResult<Self>
+    fn read_all<R>(reader: &mut R) -> PhonicResult<Self>
     where
         R: BlockingSignalReader<Sample = S>,
     {

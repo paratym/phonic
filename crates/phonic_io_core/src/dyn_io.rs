@@ -1,10 +1,12 @@
 use crate::{
+    BlockingFormatReader, BlockingFormatWriter, BlockingStreamReader, BlockingStreamWriter,
     CodecTag, FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag,
     FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
     StreamWriter, TaggedSignal,
 };
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
+    BlockingSignalReader, BlockingSignalWriter, FiniteSignal, IndexedSignal, PhonicResult, Signal,
+    SignalReader, SignalSeeker, SignalWriter,
 };
 use std::io::{Read, Seek, Write};
 
@@ -12,7 +14,16 @@ pub trait StdIoSource: Read + Write + Seek + Send + Sync {}
 impl<T> StdIoSource for T where T: Read + Write + Seek + Send + Sync {}
 
 pub trait DynFormat:
-    Format + IndexedFormat + FiniteFormat + FormatReader + FormatWriter + FormatSeeker + Send + Sync
+    Format
+    + IndexedFormat
+    + FiniteFormat
+    + FormatReader
+    + BlockingFormatReader
+    + FormatWriter
+    + BlockingFormatWriter
+    + FormatSeeker
+    + Send
+    + Sync
 {
 }
 
@@ -21,7 +32,9 @@ impl<T> DynFormat for T where
         + IndexedFormat
         + FiniteFormat
         + FormatReader
+        + BlockingFormatReader
         + FormatWriter
+        + BlockingFormatWriter
         + FormatSeeker
         + Send
         + Sync
@@ -29,7 +42,16 @@ impl<T> DynFormat for T where
 }
 
 pub trait DynStream:
-    Stream + IndexedStream + FiniteStream + StreamReader + StreamWriter + StreamSeeker + Send + Sync
+    Stream
+    + IndexedStream
+    + FiniteStream
+    + StreamReader
+    + BlockingStreamReader
+    + StreamWriter
+    + BlockingStreamWriter
+    + StreamSeeker
+    + Send
+    + Sync
 {
     fn into_decoder(self) -> PhonicResult<TaggedSignal>
     where
@@ -45,7 +67,9 @@ impl<T> DynStream for T where
         + IndexedStream
         + FiniteStream
         + StreamReader
+        + BlockingStreamReader
         + StreamWriter
+        + BlockingStreamWriter
         + StreamSeeker
         + Send
         + Sync
@@ -53,7 +77,16 @@ impl<T> DynStream for T where
 }
 
 pub trait DynSignal:
-    Signal + IndexedSignal + FiniteSignal + SignalReader + SignalWriter + SignalSeeker + Send + Sync
+    Signal
+    + IndexedSignal
+    + FiniteSignal
+    + SignalReader
+    + BlockingSignalReader
+    + SignalWriter
+    + BlockingSignalWriter
+    + SignalSeeker
+    + Send
+    + Sync
 {
     fn into_encoder<C>(self, codec: C) -> PhonicResult<Box<dyn DynStream<Tag = C>>>
     where
@@ -71,7 +104,9 @@ impl<T> DynSignal for T where
         + IndexedSignal
         + FiniteSignal
         + SignalReader
+        + BlockingSignalReader
         + SignalWriter
+        + BlockingSignalWriter
         + SignalSeeker
         + Send
         + Sync

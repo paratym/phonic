@@ -1,10 +1,10 @@
 use crate::{
     utils::{slice_as_init_mut, DefaultBuf},
-    PhonicError, PhonicResult, Signal,
+    PhonicError, PhonicResult, Signal, SignalReader, SignalWriter,
 };
-use std::mem::MaybeUninit;
+use std::{mem::MaybeUninit, ops::DerefMut};
 
-pub trait BlockingSignalReader: Signal {
+pub trait BlockingSignalReader: SignalReader {
     fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize>;
 
     fn read_init_blocking<'a>(
@@ -18,7 +18,7 @@ pub trait BlockingSignalReader: Signal {
         Ok(init_slice)
     }
 
-    fn read_exact_blocking<'a>(
+    fn read_exact<'a>(
         &mut self,
         buf: &'a mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<&'a mut [Self::Sample]> {
@@ -42,11 +42,11 @@ pub trait BlockingSignalReader: Signal {
     }
 }
 
-pub trait BlockingSignalWriter: Signal {
+pub trait BlockingSignalWriter: SignalWriter {
     fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize>;
     fn flush_blocking(&mut self) -> PhonicResult<()>;
 
-    fn write_exact_blocking(&mut self, mut buf: &[Self::Sample]) -> PhonicResult<()> {
+    fn write_exact(&mut self, mut buf: &[Self::Sample]) -> PhonicResult<()> {
         if buf.len() % self.spec().channels.count() as usize != 0 {
             return Err(PhonicError::InvalidInput);
         }
@@ -69,7 +69,7 @@ where
     Self: Sized + BlockingSignalWriter,
     R: BlockingSignalReader<Sample = Self::Sample>,
 {
-    fn copy_n_buffered_blocking(
+    fn copy_n_buffered(
         &mut self,
         reader: &mut R,
         n_frames: u64,
@@ -88,24 +88,24 @@ where
                 Ok(samples) => samples,
             };
 
-            self.write_exact_blocking(samples)?;
+            self.write_exact(samples)?;
             n += samples.len() as u64;
         }
 
         Ok(())
     }
 
-    fn copy_n_blocking(&mut self, reader: &mut R, n_frames: u64) -> PhonicResult<()> {
+    fn copy_n(&mut self, reader: &mut R, n_frames: u64) -> PhonicResult<()> {
         let mut buf = <DefaultBuf<_>>::default();
-        self.copy_n_buffered_blocking(reader, n_frames, &mut buf)
+        self.copy_n_buffered(reader, n_frames, &mut buf)
     }
 
-    fn copy_all_buffered_blocking(
+    fn copy_all_buffered(
         &mut self,
         reader: &mut R,
         buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()> {
-        let _ = self.spec().merged(reader.spec())?;
+        let _spec = self.spec().merged(reader.spec())?;
 
         loop {
             let samples = match reader.read_init_blocking(buf) {
@@ -115,7 +115,7 @@ where
                 Ok(samples) => samples,
             };
 
-            match self.write_exact_blocking(samples) {
+            match self.write_exact(samples) {
                 Ok(()) => continue,
                 Err(PhonicError::OutOfBounds) => break,
                 Err(e) => return Err(e),
@@ -125,9 +125,33 @@ where
         Ok(())
     }
 
-    fn copy_all_blocking(&mut self, reader: &mut R) -> PhonicResult<()> {
+    fn copy_all(&mut self, reader: &mut R) -> PhonicResult<()> {
         let mut buf = <DefaultBuf<_>>::default();
-        self.copy_all_buffered_blocking(reader, &mut buf)
+        self.copy_all_buffered(reader, &mut buf)
+    }
+}
+
+impl<T> BlockingSignalReader for T
+where
+    T: DerefMut,
+    T::Target: BlockingSignalReader,
+{
+    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        self.deref_mut().read_blocking(buf)
+    }
+}
+
+impl<T> BlockingSignalWriter for T
+where
+    T: DerefMut,
+    T::Target: BlockingSignalWriter,
+{
+    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
+        self.deref_mut().write_blocking(buf)
+    }
+
+    fn flush_blocking(&mut self) -> PhonicResult<()> {
+        self.deref_mut().flush_blocking()
     }
 }
 

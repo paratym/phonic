@@ -1,14 +1,14 @@
-use crate::{Signal, SignalReader, SignalWriter};
-use std::mem::MaybeUninit;
+use crate::{utils::slice_as_init_mut, Signal, SignalReader, SignalWriter};
+use std::{mem::MaybeUninit, ops::DerefMut};
 
 pub trait BufferedSignal: Signal {
     fn commit_samples(&mut self, n_samples: usize);
 }
 
 pub trait BufferedSignalReader: BufferedSignal + SignalReader {
-    fn available_samples(&self) -> &[Self::Sample];
+    fn available_samples(&self) -> &[MaybeUninit<Self::Sample>];
 
-    fn read_available(&mut self, buf: &mut [Self::Sample]) -> usize {
+    fn read_available(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> usize {
         let mut n_samples = 0;
         let buf_len = buf.len();
 
@@ -26,6 +26,15 @@ pub trait BufferedSignalReader: BufferedSignal + SignalReader {
         }
 
         n_samples
+    }
+
+    fn read_init_available<'a>(
+        &mut self,
+        buf: &'a mut [MaybeUninit<Self::Sample>],
+    ) -> &'a mut [Self::Sample] {
+        let n_samples = self.read_available(buf);
+        let uninit_slice = &mut buf[..n_samples];
+        unsafe { slice_as_init_mut(uninit_slice) }
     }
 }
 
@@ -94,4 +103,41 @@ where
 
         n_samples
     }
+}
+
+impl<T> BufferedSignal for T
+where
+    T: DerefMut,
+    T::Target: BufferedSignal,
+{
+    fn commit_samples(&mut self, n_samples: usize) {
+        self.deref_mut().commit_samples(n_samples);
+    }
+}
+
+impl<T> BufferedSignalReader for T
+where
+    T: DerefMut,
+    T::Target: BufferedSignalReader,
+{
+    fn available_samples(&self) -> &[MaybeUninit<Self::Sample>] {
+        self.deref().available_samples()
+    }
+}
+
+impl<T> BufferedSignalWriter for T
+where
+    T: DerefMut,
+    T::Target: BufferedSignalWriter,
+{
+    fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
+        self.deref_mut().available_slots()
+    }
+}
+
+impl<T, R> BufferedSignalCopy<R> for T
+where
+    T: Sized + BufferedSignalWriter,
+    R: BufferedSignalReader<Sample = T::Sample>,
+{
 }

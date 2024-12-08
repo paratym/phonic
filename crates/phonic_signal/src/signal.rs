@@ -1,7 +1,7 @@
 use crate::{utils::slice_as_init_mut, PhonicResult, Sample, SignalSpec};
 use phonic_macro::impl_deref_signal;
 use std::{
-    mem::{transmute, MaybeUninit},
+    mem::MaybeUninit,
     ops::{Deref, DerefMut, Neg},
     time::Duration,
 };
