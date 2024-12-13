@@ -2,7 +2,6 @@ use crate::{
     FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter, IndexedStream,
     Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
-use phonic_macro::impl_deref_signal;
 use phonic_signal::{
     utils::{UnReadable, UnSeekable, UnWriteable},
     FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,

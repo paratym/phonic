@@ -1,7 +1,7 @@
 use crate::{
-    IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalWriter,
 };
-use phonic_macro::impl_deref_signal;
 use std::mem::MaybeUninit;
 
 pub struct Indexed<T> {
@@ -15,11 +15,11 @@ impl<T> Indexed<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !IndexedSignal for Indexed<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !IndexedSignal + !Mut for Indexed<T> {
+        Self as T;
 
-        &self -> &self.inner;
+        &self => &self.inner;
     }
 }
 

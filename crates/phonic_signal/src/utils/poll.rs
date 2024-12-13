@@ -1,8 +1,7 @@
 use crate::{
-    BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult, SignalReader,
-    SignalWriter,
+    delegate_signal, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
+    SignalReader, SignalWriter,
 };
-use phonic_macro::impl_deref_signal;
 use std::{mem::MaybeUninit, time::Duration};
 
 pub struct Poll<T>(pub T);
@@ -17,12 +16,12 @@ impl<T> Poll<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ for Poll<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * for Poll<T> {
+        Self as T;
 
-        &self -> &self.0;
-        &mut self -> &mut self.0;
+        &self => &self.0;
+        &mut self => &mut self.0;
     }
 }
 

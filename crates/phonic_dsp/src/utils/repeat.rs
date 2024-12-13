@@ -1,9 +1,8 @@
-use std::mem::MaybeUninit;
-
-use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, SignalReader, SignalSeeker,
+    delegate_signal, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, SignalReader,
+    SignalSeeker,
 };
+use std::mem::MaybeUninit;
 
 pub struct Repeat<T> {
     inner: T,
@@ -29,11 +28,11 @@ impl<T> Repeat<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !IndexedSignal + !FiniteSignal for Repeat<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> Signal for Repeat<T> {
+        Self as T;
 
-        &self -> &self.inner;
+        &self => &self.inner;
     }
 }
 

@@ -1,5 +1,6 @@
-use phonic_macro::impl_deref_signal;
-use phonic_signal::{PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter};
+use phonic_signal::{
+    delegate_signal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
+};
 use std::mem::MaybeUninit;
 
 pub enum SignalEvent<'b, T: Signal> {
@@ -63,11 +64,11 @@ impl<T: Signal> Observer<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ for Observer<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !Mut for Observer<T> {
+        Self as T;
 
-        &self -> &self.inner;
+        &self => &self.inner;
     }
 }
 

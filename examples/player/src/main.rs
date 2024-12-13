@@ -11,7 +11,6 @@ use phonic::{
     rtrb::SignalBuffer,
     signal::{
         BlockingSignalCopy, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
-        SignalReader,
     },
 };
 use std::{env, fs::File, path::Path, time::Duration};
@@ -22,12 +21,13 @@ fn main() -> PhonicResult<()> {
     let file = File::open(path)?;
 
     let format = KnownFormat::try_from(FormatIdentifier::try_from(path)?)?;
-    let signal = format
-        .read_index(file)?
-        .into_primary_stream()?
-        .into_decoder()?;
-
-    match_tagged_signal!(signal, inner => play(inner))
+    todo!()
+    // let signal = format
+    //     .read_index(file)?
+    //     .into_primary_stream()?
+    //     .into_decoder()?;
+    //
+    // match_tagged_signal!(signal, inner => play(inner))
 }
 
 fn play<S>(mut signal: S) -> PhonicResult<()>

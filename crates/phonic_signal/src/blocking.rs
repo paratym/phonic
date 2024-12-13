@@ -131,29 +131,29 @@ where
     }
 }
 
-impl<T> BlockingSignalReader for T
-where
-    T: DerefMut,
-    T::Target: BlockingSignalReader,
-{
-    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        self.deref_mut().read_blocking(buf)
-    }
-}
-
-impl<T> BlockingSignalWriter for T
-where
-    T: DerefMut,
-    T::Target: BlockingSignalWriter,
-{
-    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        self.deref_mut().write_blocking(buf)
-    }
-
-    fn flush_blocking(&mut self) -> PhonicResult<()> {
-        self.deref_mut().flush_blocking()
-    }
-}
+// impl<T> BlockingSignalReader for T
+// where
+//     T: DerefMut,
+//     T::Target: BlockingSignalReader,
+// {
+//     fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+//         self.deref_mut().read_blocking(buf)
+//     }
+// }
+//
+// impl<T> BlockingSignalWriter for T
+// where
+//     T: DerefMut,
+//     T::Target: BlockingSignalWriter,
+// {
+//     fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
+//         self.deref_mut().write_blocking(buf)
+//     }
+//
+//     fn flush_blocking(&mut self) -> PhonicResult<()> {
+//         self.deref_mut().flush_blocking()
+//     }
+// }
 
 impl<T, R> BlockingSignalCopy<R> for T
 where

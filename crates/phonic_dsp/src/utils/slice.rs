@@ -1,7 +1,6 @@
-use phonic_macro::impl_deref_signal;
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal,
-    SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal, utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult,
+    Signal, SignalReader, SignalSeeker, SignalWriter,
 };
 use std::{mem::MaybeUninit, time::Duration};
 
@@ -110,11 +109,11 @@ impl<T> Slice<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !IndexedSignal + !FiniteSignal for Slice<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> Signal for Slice<T> {
+        Self as T;
 
-        &self -> &self.inner;
+        &self => &self.inner;
     }
 }
 

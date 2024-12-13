@@ -1,5 +1,4 @@
-use phonic_macro::impl_deref_signal;
-use phonic_signal::{PhonicResult, Sample, SignalReader};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalReader};
 use std::{mem::MaybeUninit, ops::Neg};
 
 pub trait ComplementSample: Sample {
@@ -24,12 +23,12 @@ impl<T> Complement<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !SignalReader + !SignalWriter for Complement<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !Read + !Write for Complement<T> {
+        Self as T;
 
-        &self -> &self.inner;
-        &mut self -> &mut self.inner;
+        &self => &self.inner;
+        &mut self => &mut self.inner;
     }
 }
 

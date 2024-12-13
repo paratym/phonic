@@ -105,35 +105,35 @@ where
     }
 }
 
-impl<T> BufferedSignal for T
-where
-    T: DerefMut,
-    T::Target: BufferedSignal,
-{
-    fn commit_samples(&mut self, n_samples: usize) {
-        self.deref_mut().commit_samples(n_samples);
-    }
-}
-
-impl<T> BufferedSignalReader for T
-where
-    T: DerefMut,
-    T::Target: BufferedSignalReader,
-{
-    fn available_samples(&self) -> &[MaybeUninit<Self::Sample>] {
-        self.deref().available_samples()
-    }
-}
-
-impl<T> BufferedSignalWriter for T
-where
-    T: DerefMut,
-    T::Target: BufferedSignalWriter,
-{
-    fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
-        self.deref_mut().available_slots()
-    }
-}
+// impl<T> BufferedSignal for T
+// where
+//     T: DerefMut,
+//     T::Target: BufferedSignal,
+// {
+//     fn commit_samples(&mut self, n_samples: usize) {
+//         self.deref_mut().commit_samples(n_samples);
+//     }
+// }
+//
+// impl<T> BufferedSignalReader for T
+// where
+//     T: DerefMut,
+//     T::Target: BufferedSignalReader,
+// {
+//     fn available_samples(&self) -> &[MaybeUninit<Self::Sample>] {
+//         self.deref().available_samples()
+//     }
+// }
+//
+// impl<T> BufferedSignalWriter for T
+// where
+//     T: DerefMut,
+//     T::Target: BufferedSignalWriter,
+// {
+//     fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
+//         self.deref_mut().available_slots()
+//     }
+// }
 
 impl<T, R> BufferedSignalCopy<R> for T
 where

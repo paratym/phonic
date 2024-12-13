@@ -1,11 +1,7 @@
 use crate::ops::{FromSample, IntoSample};
 use num_traits::Inv;
-use phonic_macro::impl_deref_signal;
-use phonic_signal::{PhonicResult, Sample, SignalReader};
-use std::{
-    mem::MaybeUninit,
-    ops::{Mul, Neg},
-};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalReader};
+use std::{mem::MaybeUninit, ops::Mul};
 
 pub struct Gain<T, R> {
     inner: T,
@@ -57,12 +53,12 @@ impl<T, R> Gain<T, R> {
     }
 }
 
-impl_deref_signal! {
-    impl<T, R> _ + !SignalReader + !SignalWriter for Gain<T, R> {
-        type Target = T;
+delegate_signal! {
+    delegate<T, R> * + !Read + !Write for Gain<T, R> {
+        Self as T;
 
-        &self -> &self.inner;
-        &mut self -> &mut self.inner;
+        &self => &self.inner;
+        &mut self => &mut self.inner;
     }
 }
 

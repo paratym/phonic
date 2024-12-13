@@ -1,7 +1,7 @@
 use crate::{
-    FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal, FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalWriter,
 };
-use phonic_macro::impl_deref_signal;
 use std::mem::MaybeUninit;
 
 pub struct Infinite<T>(pub T);
@@ -9,12 +9,12 @@ pub struct UnReadable<T>(pub T);
 pub struct UnWriteable<T>(pub T);
 pub struct UnSeekable<T>(pub T);
 
-impl_deref_signal! {
-    impl<T> _ + !FiniteSignal for Infinite<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !FiniteSignal for Infinite<T> {
+        Self as T;
 
-        &self -> &self.0;
-        &mut self -> &mut self.0;
+        &self => &self.0;
+        &mut self => &mut self.0;
     }
 }
 
@@ -24,12 +24,12 @@ impl<T: Signal> FiniteSignal for Infinite<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !SignalReader for UnReadable<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !SignalReader for UnReadable<T> {
+        Self as T;
 
-        &self -> &self.0;
-        &mut self -> &mut self.0;
+        &self => &self.0;
+        &mut self => &mut self.0;
     }
 }
 
@@ -39,12 +39,12 @@ impl<T: Signal> SignalReader for UnReadable<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !SignalWriter for UnWriteable<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !SignalWriter for UnWriteable<T> {
+        Self as T;
 
-        &self -> &self.0;
-        &mut self -> &mut self.0;
+        &self => &self.0;
+        &mut self => &mut self.0;
     }
 }
 
@@ -58,12 +58,12 @@ impl<T: Signal> SignalWriter for UnWriteable<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !SignalSeeker for UnSeekable<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !SignalSeeker for UnSeekable<T> {
+        Self as T;
 
-        &self -> &self.0;
-        &mut self -> &mut self.0;
+        &self => &self.0;
+        &mut self => &mut self.0;
     }
 }
 

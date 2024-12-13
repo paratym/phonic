@@ -1,14 +1,10 @@
 use crate::ops::ClipSample;
-use phonic_macro::impl_deref_signal;
 use phonic_signal::{
+    delegate_signal,
     utils::{slice_as_init, DefaultBuf},
-    PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
-use std::{
-    marker::PhantomData,
-    mem::{transmute, MaybeUninit},
-    ops::DerefMut,
-};
+use std::{marker::PhantomData, mem::MaybeUninit, ops::DerefMut};
 
 pub struct Convert<T: Signal, S: Sample, B = DefaultBuf<MaybeUninit<<T as Signal>::Sample>>> {
     inner: T,
@@ -57,11 +53,12 @@ where
     }
 }
 
-impl_deref_signal! {
-    impl<T, S: Sample, B> _ + !Signal for Convert<T, S, B> {
-        type Target = T;
+delegate_signal! {
+    delegate<T, S: Sample, B> * + !Signal + !Read + !Write for Convert<T, S, B> {
+        Self as T;
 
-        &self -> &self.inner;
+        &self => &self.inner;
+        &mut self => &mut self.inner;
    }
 }
 
@@ -118,16 +115,6 @@ where
 
     fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
-    }
-}
-
-impl<T, S, B> SignalSeeker for Convert<T, S, B>
-where
-    T: SignalSeeker,
-    S: Sample,
-{
-    fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        self.inner.seek(offset)
     }
 }
 

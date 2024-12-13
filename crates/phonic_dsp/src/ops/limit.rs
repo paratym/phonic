@@ -1,6 +1,5 @@
 use crate::ops::ComplementSample;
-use phonic_macro::impl_deref_signal;
-use phonic_signal::{PhonicResult, Sample, Signal, SignalReader};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, Signal, SignalReader};
 use std::mem::MaybeUninit;
 
 pub struct Limit<T: Signal> {
@@ -59,12 +58,12 @@ impl<T: Signal> Limit<T> {
     }
 }
 
-impl_deref_signal! {
-    impl<T> _ + !SignalReader + !SignalWriter for Limit<T> {
-        type Target = T;
+delegate_signal! {
+    delegate<T> * + !Read + !Write for Limit<T> {
+        Self as T;
 
-        &self -> &self.inner;
-        &mut self -> &mut self.inner;
+        &self => &self.inner;
+        &mut self => &mut self.inner;
     }
 }
 

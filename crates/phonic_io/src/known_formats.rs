@@ -57,9 +57,8 @@ impl DynFormatConstructor for KnownFormat {
         use crate::formats::*;
 
         Ok(match self {
-            #[cfg(feature = "wave")]
-            Self::Wave => Box::new(DropFinalize(wave::WaveFormat::read_index(inner)?)),
-
+            // #[cfg(feature = "wave")]
+            // Self::Wave => Box::new(DropFinalize(wave::WaveFormat::read_index(inner)?)),
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
         })
@@ -73,9 +72,8 @@ impl DynFormatConstructor for KnownFormat {
         use crate::formats::*;
 
         Ok(match self {
-            #[cfg(feature = "wave")]
-            Self::Wave => Box::new(DropFinalize(wave::WaveFormat::write_index(inner, index)?)),
-
+            // #[cfg(feature = "wave")]
+            // Self::Wave => Box::new(DropFinalize(wave::WaveFormat::write_index(inner, index)?)),
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
         })
