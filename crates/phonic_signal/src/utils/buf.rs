@@ -13,30 +13,33 @@ pub struct DefaultBuf<S, const N: usize = DEFAULT_BUF_LEN> {
     pub buf: [S; N],
 }
 
-pub trait OwnedBuf<S>: Sized {
-    type Uninitialized: OwnedBuf<MaybeUninit<S>>;
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self;
+pub trait OwnedBuf: Sized {
+    type Item;
 
-    fn _as_slice(&self) -> &[S];
-    fn _as_mut_slice(&mut self) -> &mut [S];
+    type Uninit: OwnedBuf<Item = MaybeUninit<Self::Item>>;
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self;
+
+    fn _as_slice(&self) -> &[Self::Item];
+    fn _as_mut_slice(&mut self) -> &mut [Self::Item];
 }
 
-pub trait StaticBuf<S: Sized>: OwnedBuf<S> {
-    fn new_uninit() -> Self::Uninitialized;
+pub trait SizedBuf: OwnedBuf {
+    fn new_uninit() -> Self::Uninit;
 
     fn silence() -> Self
     where
-        S: Sample,
+        Self::Item: Sample,
     {
         let mut buf = Self::new_uninit();
-        buf._as_mut_slice().fill(MaybeUninit::new(S::ORIGIN));
+        buf._as_mut_slice()
+            .fill(MaybeUninit::new(Self::Item::ORIGIN));
 
         unsafe { Self::from_uninit(buf) }
     }
 
-    fn read_exact<R>(reader: &mut R) -> PhonicResult<Self>
+    fn read<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
+        R: BlockingSignalReader<Sample = Self::Item>,
     {
         let mut buf = Self::new_uninit();
         reader.read_exact(buf._as_mut_slice())?;
@@ -45,17 +48,24 @@ pub trait StaticBuf<S: Sized>: OwnedBuf<S> {
     }
 }
 
-pub trait ResizeBuf<S>: DynamicBuf<S> {
-    unsafe fn _resize(&mut self, len: usize);
-}
+pub trait DynamicBuf: OwnedBuf {
+    fn new_uninit(len: usize) -> Self::Uninit;
 
-pub trait DynamicBuf<S>: OwnedBuf<S> {
-    fn new_uninit(capacity: usize) -> Self::Uninitialized;
+    fn silence(len: usize) -> Self
+    where
+        Self::Item: Sample,
+    {
+        let mut buf = Self::new_uninit(len);
+        buf._as_mut_slice()
+            .fill(MaybeUninit::new(Self::Item::ORIGIN));
+
+        unsafe { Self::from_uninit(buf) }
+    }
 
     fn read<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
-        Self::Uninitialized: ResizeBuf<MaybeUninit<S>>,
+        R: BlockingSignalReader<Sample = Self::Item>,
+        Self::Uninit: ResizeBuf,
     {
         let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
         let n_samples = reader.read_blocking(buf._as_mut_slice())?;
@@ -66,7 +76,7 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
 
     fn read_exact<R>(reader: &mut R, n_frames: usize) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
+        R: BlockingSignalReader<Sample = Self::Item>,
     {
         let n_samples = n_frames * reader.spec().channels.count() as usize;
         Self::read_exact_interleaved(reader, n_samples)
@@ -74,8 +84,9 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
 
     fn read_exact_interleaved<R>(reader: &mut R, n_samples: usize) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
+        R: BlockingSignalReader<Sample = Self::Item>,
     {
+        debug_assert_eq!(n_samples % reader.spec().channels.count() as usize, 0);
         let mut buf = Self::new_uninit(n_samples);
         reader.read_exact(buf._as_mut_slice())?;
 
@@ -84,7 +95,7 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
 
     fn read_exact_duration<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
+        R: BlockingSignalReader<Sample = Self::Item>,
     {
         let n_frames = duration.as_secs_f64() * reader.spec().sample_rate as f64;
         Self::read_exact(reader, n_frames as usize)
@@ -92,10 +103,15 @@ pub trait DynamicBuf<S>: OwnedBuf<S> {
 
     fn read_all<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: BlockingSignalReader<Sample = S>,
+        R: BlockingSignalReader<Sample = Self::Item>,
+        Self::Uninit: ResizeBuf,
     {
         todo!()
     }
+}
+
+pub trait ResizeBuf {
+    unsafe fn _resize(&mut self, len: usize);
 }
 
 pub fn slice_as_uninit<T>(init: &[T]) -> &[MaybeUninit<T>] {
@@ -114,146 +130,162 @@ pub unsafe fn slice_as_init_mut<T>(uninit: &mut [MaybeUninit<T>]) -> &mut [T] {
     transmute::<&mut [MaybeUninit<T>], &mut [T]>(uninit)
 }
 
-impl<S: Sample, const N: usize> Default for DefaultBuf<S, N> {
+pub fn copy_to_uninit_slice<T>(src: &[T], dst: &mut [MaybeUninit<T>]) {
+    let len = src.len();
+    assert_eq!(len, dst.len(), "buffer lengths do not match");
+
+    let dst_ptr = dst.as_mut_ptr().cast();
+    unsafe {
+        src.as_ptr().copy_to_nonoverlapping(dst_ptr, len);
+    }
+}
+
+impl<T: Sample, const N: usize> Default for DefaultBuf<T, N> {
     fn default() -> Self {
-        let buf = <[S; N]>::silence();
+        let buf = <[T; N]>::silence();
         Self { buf }
     }
 }
 
-impl<S, const N: usize> Default for DefaultBuf<MaybeUninit<S>, N> {
+impl<T, const N: usize> Default for DefaultBuf<MaybeUninit<T>, N> {
     fn default() -> Self {
-        let buf = <[S; N]>::new_uninit();
+        let buf = <[T; N]>::new_uninit();
         Self { buf }
     }
 }
 
-impl<S, const N: usize> Deref for DefaultBuf<S, N> {
-    type Target = [S];
+impl<T, const N: usize> Deref for DefaultBuf<T, N> {
+    type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         &self.buf
     }
 }
 
-impl<S, const N: usize> DerefMut for DefaultBuf<S, N> {
+impl<T, const N: usize> DerefMut for DefaultBuf<T, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.buf
     }
 }
 
-impl<S: Sized, const N: usize> OwnedBuf<S> for [S; N] {
-    type Uninitialized = [MaybeUninit<S>; N];
+impl<T, const N: usize> OwnedBuf for [T; N] {
+    type Item = T;
+    type Uninit = [MaybeUninit<T>; N];
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
         let init_ptr = uninit.as_ptr().cast();
         unsafe { std::ptr::read(init_ptr) }
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         self.as_ref()
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         self.as_mut()
     }
 }
 
-impl<S: Sized, const N: usize> OwnedBuf<S> for DefaultBuf<S, N> {
-    type Uninitialized = [MaybeUninit<S>; N];
+impl<T, const N: usize> OwnedBuf for DefaultBuf<T, N> {
+    type Item = T;
+    type Uninit = [MaybeUninit<T>; N];
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
-        let buf = <_ as OwnedBuf<S>>::from_uninit(uninit);
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
+        let buf = <_ as OwnedBuf>::from_uninit(uninit);
         Self { buf }
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         &self.buf
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         &mut self.buf
     }
 }
 
-impl<S: Sized> OwnedBuf<S> for Vec<S> {
-    type Uninitialized = Vec<MaybeUninit<S>>;
+impl<T> OwnedBuf for Vec<T> {
+    type Item = T;
+    type Uninit = Vec<MaybeUninit<T>>;
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
         transmute(uninit)
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         self.deref()
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         self.deref_mut()
     }
 }
 
-impl<S: Sized> OwnedBuf<S> for Box<[S]> {
-    type Uninitialized = Box<[MaybeUninit<S>]>;
+impl<T> OwnedBuf for Box<[T]> {
+    type Item = T;
+    type Uninit = Vec<MaybeUninit<T>>;
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
-        transmute(uninit)
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
+        transmute(uninit.into_boxed_slice())
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         self.deref()
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         self.deref_mut()
     }
 }
 
-impl<S: Sized> OwnedBuf<S> for Rc<[S]> {
-    type Uninitialized = Rc<[MaybeUninit<S>]>;
+impl<T> OwnedBuf for Rc<[T]> {
+    type Item = T;
+    type Uninit = Rc<[MaybeUninit<T>]>;
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
         transmute(uninit)
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         self.deref()
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         Rc::get_mut(self).unwrap_or(&mut [])
     }
 }
 
-impl<S: Sized> OwnedBuf<S> for Arc<[S]> {
-    type Uninitialized = Arc<[MaybeUninit<S>]>;
+impl<T> OwnedBuf for Arc<[T]> {
+    type Item = T;
+    type Uninit = Arc<[MaybeUninit<T>]>;
 
-    unsafe fn from_uninit(uninit: Self::Uninitialized) -> Self {
+    unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
         transmute(uninit)
     }
 
-    fn _as_slice(&self) -> &[S] {
+    fn _as_slice(&self) -> &[T] {
         self.deref()
     }
 
-    fn _as_mut_slice(&mut self) -> &mut [S] {
+    fn _as_mut_slice(&mut self) -> &mut [T] {
         Arc::get_mut(self).unwrap_or(&mut [])
     }
 }
 
-impl<S: Sized, const N: usize> StaticBuf<S> for [S; N] {
-    fn new_uninit() -> Self::Uninitialized {
+impl<S: Sized, const N: usize> SizedBuf for [S; N] {
+    fn new_uninit() -> Self::Uninit {
         unsafe { MaybeUninit::uninit().assume_init() }
     }
 }
 
-impl<S: Sample, const N: usize> StaticBuf<S> for DefaultBuf<S, N> {
-    fn new_uninit() -> Self::Uninitialized {
+impl<S: Sample, const N: usize> SizedBuf for DefaultBuf<S, N> {
+    fn new_uninit() -> Self::Uninit {
         <[S; N]>::new_uninit()
     }
 }
 
-impl<S: Sample> DynamicBuf<S> for Vec<S> {
-    fn new_uninit(capacity: usize) -> Self::Uninitialized {
+impl<S: Sample> DynamicBuf for Vec<S> {
+    fn new_uninit(capacity: usize) -> Self::Uninit {
         let mut buf = Vec::with_capacity(capacity);
         unsafe { buf.set_len(capacity) }
 
@@ -261,142 +293,20 @@ impl<S: Sample> DynamicBuf<S> for Vec<S> {
     }
 }
 
-impl<S: Sample> DynamicBuf<S> for Box<[S]> {
-    fn new_uninit(capacity: usize) -> Self::Uninitialized {
-        Vec::new_uninit(capacity).into_boxed_slice()
+impl<S: Sample> DynamicBuf for Box<[S]> {
+    fn new_uninit(capacity: usize) -> Self::Uninit {
+        Vec::new_uninit(capacity)
     }
 }
 
-impl<S: Sample> DynamicBuf<S> for Rc<[S]> {
-    fn new_uninit(capacity: usize) -> Self::Uninitialized {
-        Rc::new_uninit_slice(capacity)
+impl<S: Sample> DynamicBuf for Rc<[S]> {
+    fn new_uninit(len: usize) -> Self::Uninit {
+        Rc::new_uninit_slice(len)
     }
 }
 
-impl<S: Sample> DynamicBuf<S> for Arc<[S]> {
-    fn new_uninit(capacity: usize) -> Self::Uninitialized {
-        Arc::new_uninit_slice(capacity)
+impl<S: Sample> DynamicBuf for Arc<[S]> {
+    fn new_uninit(len: usize) -> Self::Uninit {
+        Arc::new_uninit_slice(len)
     }
 }
-
-// pub struct BufSignal<B> {
-//     spec: SignalSpec,
-//     buf: B,
-//     pos_interleaved: usize,
-// }
-//
-// impl<B, S> Signal for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     type Sample = S;
-//
-//     fn spec(&self) -> &SignalSpec {
-//         &self.spec
-//     }
-// }
-//
-// impl<B, S> IndexedSignal for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn pos(&self) -> u64 {
-//         self.pos_interleaved as u64 / self.spec.channels.count() as u64
-//     }
-// }
-//
-// impl<B, S> FiniteSignal for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn len(&self) -> u64 {
-//         self.buf.len() as u64 / self.spec.channels.count() as u64
-//     }
-// }
-//
-// impl<B, S> SignalReader for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn read(&mut self, buf: &mut [Self::Sample]) -> PhonicResult<usize> {
-//         let n_samples = buf.len().min(self.buf.len() - self.pos_interleaved);
-//         let inner_slice = &self.buf[self.pos_interleaved..self.pos_interleaved + n_samples];
-//         buf[..n_samples].copy_from_slice(inner_slice);
-//
-//         self.pos_interleaved += n_samples;
-//         Ok(n_samples)
-//     }
-// }
-//
-// impl<B, S> SignalWriter for BufSignal<B>
-// where
-//     B: DerefMut<Target = [S]>,
-//     S: Sample,
-// {
-//     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-//         let n_samples = buf.len().min(self.buf.len() - self.pos_interleaved);
-//         let inner_slice = &mut self.buf[self.pos_interleaved..self.pos_interleaved + n_samples];
-//         inner_slice.copy_from_slice(&buf[..n_samples]);
-//
-//         self.pos_interleaved += n_samples;
-//         Ok(n_samples)
-//     }
-//
-//     fn flush(&mut self) -> PhonicResult<()> {
-//         Ok(())
-//     }
-// }
-//
-// impl<B, S> SignalSeeker for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-//         let pos = match self.pos().checked_add_signed(offset) {
-//             None => return Err(PhonicError::OutOfBounds),
-//             Some(pos) if pos > self.len() => return Err(PhonicError::OutOfBounds),
-//             Some(pos) => pos,
-//         };
-//
-//         let pos_interleaved = pos * self.spec.channels.count() as u64;
-//         self.pos_interleaved = pos_interleaved as usize;
-//
-//         Ok(())
-//     }
-// }
-//
-// impl<B, S> BufferedSignal for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn commit_samples(&mut self, n_samples: usize) {
-//         debug_assert_eq!(n_samples % self.spec.channels.count() as usize, 0);
-//         self.pos_interleaved += n_samples
-//     }
-// }
-//
-// impl<B, S> BufferedSignalReader for BufSignal<B>
-// where
-//     B: Deref<Target = [S]>,
-//     S: Sample,
-// {
-//     fn available_samples(&self) -> &[Self::Sample] {
-//         &self.buf[self.pos_interleaved..]
-//     }
-// }
-//
-// impl<B, S> BufferedSignalWriter for BufSignal<B>
-// where
-//     B: DerefMut<Target = [S]>,
-//     S: Sample,
-// {
-//     fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
-//         todo!()
-//     }
-// }

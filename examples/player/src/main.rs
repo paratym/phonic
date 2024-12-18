@@ -10,7 +10,7 @@ use phonic::{
     },
     rtrb::SignalBuffer,
     signal::{
-        BlockingSignalCopy, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
+        utils::UtilSignalExt, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
     },
 };
 use std::{env, fs::File, path::Path, time::Duration};

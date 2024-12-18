@@ -1,6 +1,7 @@
 use crate::{
-    delegate_signal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
-    SignalWriter,
+    delegate_signal, BlockingSignalReader, BlockingSignalWriter, BufferedSignal,
+    BufferedSignalReader, BufferedSignalWriter, IndexedSignal, PhonicError, PhonicResult, Signal,
+    SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -23,6 +24,15 @@ delegate_signal! {
     }
 }
 
+impl<T: BufferedSignal> BufferedSignal for Indexed<T> {
+    fn commit_samples(&mut self, n_samples: usize) {
+        self.inner.commit_samples(n_samples);
+
+        let n_frames = n_samples as u64 / self.spec().channels.count() as u64;
+        self.pos += n_frames;
+    }
+}
+
 impl<T: Signal> IndexedSignal for Indexed<T> {
     fn pos(&self) -> u64 {
         self.pos
@@ -31,21 +41,61 @@ impl<T: Signal> IndexedSignal for Indexed<T> {
 
 impl<T: SignalReader> SignalReader for Indexed<T> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        let n = self.inner.read(buf)?;
-        self.pos += n as u64;
-        Ok(n)
+        let n_samples = self.inner.read(buf)?;
+        let n_frames = n_samples as u64 / self.spec().channels.count() as u64;
+        self.pos += n_frames;
+
+        Ok(n_samples)
+    }
+}
+
+impl<T: BufferedSignalReader> BufferedSignalReader for Indexed<T> {
+    fn available_samples(&self) -> &[Self::Sample] {
+        self.inner.available_samples()
+    }
+}
+
+impl<T: BlockingSignalReader> BlockingSignalReader for Indexed<T> {
+    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
+        let n_samples = self.inner.read_blocking(buf)?;
+        let n_frames = n_samples as u64 / self.spec().channels.count() as u64;
+        self.pos += n_frames;
+
+        Ok(n_samples)
     }
 }
 
 impl<T: SignalWriter> SignalWriter for Indexed<T> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.write(buf)?;
-        self.pos += n as u64;
-        Ok(n)
+        let n_samples = self.inner.write(buf)?;
+        let n_frames = n_samples as u64 / self.spec().channels.count() as u64;
+        self.pos += n_frames;
+
+        Ok(n_samples)
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
+    }
+}
+
+impl<T: BufferedSignalWriter> BufferedSignalWriter for Indexed<T> {
+    fn available_slots(&mut self) -> &mut [MaybeUninit<Self::Sample>] {
+        self.inner.available_slots()
+    }
+}
+
+impl<T: BlockingSignalWriter> BlockingSignalWriter for Indexed<T> {
+    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
+        let n_samples = self.inner.write_blocking(buf)?;
+        let n_frames = n_samples as u64 / self.spec().channels.count() as u64;
+        self.pos += n_frames;
+
+        Ok(n_samples)
+    }
+
+    fn flush_blocking(&mut self) -> PhonicResult<()> {
+        self.inner.flush_blocking()
     }
 }
 

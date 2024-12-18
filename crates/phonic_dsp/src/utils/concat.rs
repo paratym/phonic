@@ -1,5 +1,3 @@
-use std::mem::MaybeUninit;
-
 use crate::types::{
     FiniteSignalList, IndexedSignalList, SignalList, SignalReaderList, SignalSeekerList,
     SignalWriterList,
@@ -8,6 +6,7 @@ use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
     SignalWriter,
 };
+use std::mem::MaybeUninit;
 
 pub struct Concat<T> {
     inner: T,

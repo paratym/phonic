@@ -1,4 +1,4 @@
-use crate::utils::{Concat, Delay, Observer, Repeat, SignalEvent, Slice, Split};
+use crate::utils::{Concat, Delay, Repeat, Slice, Split};
 use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal};
 use std::time::Duration;
 
@@ -41,34 +41,6 @@ pub trait UtilSignalExt: Sized + Signal {
 
     fn delay_duration_seeked(self, duration: Duration) -> Delay<Self> {
         Delay::new_duration_seeked(self, duration)
-    }
-
-    fn observe<F>(self, callback: F) -> Observer<Self>
-    where
-        F: for<'s, 'b> Fn(&Self, SignalEvent<'b, Self>) + 'static,
-    {
-        Observer::new(self, callback)
-    }
-
-    fn on_read<F>(self, callback: F) -> Observer<Self>
-    where
-        F: for<'s, 'b> Fn(&'s Self, &'b [Self::Sample]) + 'static,
-    {
-        Observer::on_read(self, callback)
-    }
-
-    fn on_write<F>(self, callback: F) -> Observer<Self>
-    where
-        F: for<'s, 'b> Fn(&'s Self, &'b [Self::Sample]) + 'static,
-    {
-        Observer::on_write(self, callback)
-    }
-
-    fn on_seek<F>(self, callback: F) -> Observer<Self>
-    where
-        F: for<'s> Fn(&'s Self, i64) + 'static,
-    {
-        Observer::on_seek(self, callback)
     }
 
     fn repeat_n(self, reps: u32) -> Repeat<Self> {

@@ -91,6 +91,7 @@ delegate_group! {
         }
     }
 
+    #[subgroup(Mut, Read)]
     pub trait FormatReader: Format {
         fn read(&mut self, buf: &mut [std::mem::MaybeUninit<u8>]) -> phonic_signal::PhonicResult<(usize, usize)>;
 
@@ -106,10 +107,23 @@ delegate_group! {
         }
     }
 
+    #[subgroup(Mut, Read, Blocking)]
+    pub trait BlockingFormatReader: FormatReader {
+        fn read_blocking(&mut self, buf: &mut [std::mem::MaybeUninit<u8>]) -> phonic_signal::PhonicResult<(usize, usize)>;
+    }
+
+    #[subgroup(Mut, Write)]
     pub trait FormatWriter: Format {
         fn write(&mut self, stream: usize, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
         fn flush(&mut self) -> phonic_signal::PhonicResult<()>;
         fn finalize(&mut self) -> phonic_signal::PhonicResult<()>;
+    }
+
+    #[subgroup(Mut, Write, Blocking)]
+    pub trait BlockingFormatWriter: FormatWriter {
+        fn write_blocking(&mut self, stream: usize, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
+        fn flush_blocking(&mut self) -> phonic_signal::PhonicResult<()>;
+        fn finalize_blocking(&mut self) -> phonic_signal::PhonicResult<()>;
     }
 
     pub trait FormatSeeker: Format {

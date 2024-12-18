@@ -17,7 +17,7 @@ impl<T> Poll<T> {
 }
 
 delegate_signal! {
-    delegate<T> * for Poll<T> {
+    delegate<T> * + !Blocking for Poll<T> {
         Self as T;
 
         &self => &self.0;

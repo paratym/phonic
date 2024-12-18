@@ -107,7 +107,7 @@ impl<S: Sample> BlockingSignalReader for SignalConsumer<S> {
 }
 
 impl<S: Sample> BufferedSignalReader for SignalConsumer<S> {
-    fn available_samples(&self) -> &[MaybeUninit<Self::Sample>] {
+    fn available_samples(&self) -> &[Self::Sample] {
         todo!()
     }
 }

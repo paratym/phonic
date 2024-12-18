@@ -1,8 +1,8 @@
 use phonic::{
     dsp::{gen::Osc, utils::UtilSignalExt},
     io::{
-        codecs::pcm::PcmCodec, formats::wave::WaveFormat, utils::PollStreamCopy, CodecConstructor,
-        Format, FormatConstructor, FormatWriter, Stream,
+        codecs::pcm::PcmCodec, formats::wave::WaveFormat, CodecConstructor, Format,
+        FormatConstructor, FormatWriter, Stream,
     },
     signal::{PhonicResult, SignalReader, SignalSpec},
 };
@@ -31,9 +31,10 @@ fn export(
     signal: &mut impl SignalReader<Sample = f32>,
     writer: &mut impl std::io::Write,
 ) -> PhonicResult<()> {
-    let mut codec = PcmCodec::encoder(signal)?;
-    let mut format = <WaveFormat<_>>::write_index(writer, [*codec.stream_spec()])?;
-
-    format.as_primary_stream()?.copy_all_poll(&mut codec)?;
-    format.finalize()
+    // let mut codec = PcmCodec::encoder(signal)?;
+    // let mut format = <WaveFormat<_>>::write_index(writer, [*codec.stream_spec()])?;
+    //
+    // format.as_primary_stream()?.copy_all_poll(&mut codec)?;
+    // format.finalize()
+    todo!()
 }

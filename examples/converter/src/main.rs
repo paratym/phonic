@@ -3,7 +3,7 @@ use phonic::{
     io::{
         utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, KnownFormat, StreamSpec,
     },
-    signal::{BlockingSignalCopy, PhonicError, PhonicResult},
+    signal::{PhonicError, PhonicResult},
 };
 use std::{
     fs::{create_dir_all, File},

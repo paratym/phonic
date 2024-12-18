@@ -1,5 +1,4 @@
 use phonic_macro::delegate_group;
-use std::ops::{Deref, DerefMut};
 
 delegate_group! {
     #![mod_path(crate)]
@@ -7,7 +6,7 @@ delegate_group! {
     pub trait Stream {
         type Tag: crate::CodecTag;
 
-    fn stream_spec(&self) -> &crate::StreamSpec<Self::Tag>;
+        fn stream_spec(&self) -> &crate::StreamSpec<Self::Tag>;
     }
 
     pub trait IndexedStream: Stream {
@@ -64,6 +63,7 @@ delegate_group! {
         }
     }
 
+    #[subgroup(Mut, Read)]
     pub trait StreamReader: Stream {
         fn read(&mut self, buf: &mut [std::mem::MaybeUninit<u8>]) -> phonic_signal::PhonicResult<usize>;
 
@@ -76,11 +76,24 @@ delegate_group! {
         }
     }
 
+    #[subgroup(Mut, Read, Blocking)]
+    pub trait BlockingStreamReader: StreamReader {
+        fn read_blocking(&mut self, buf: &mut [std::mem::MaybeUninit<u8>]) -> phonic_signal::PhonicResult<usize>;
+    }
+
+    #[subgroup(Mut, Write)]
     pub trait StreamWriter: Stream {
         fn write(&mut self, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
         fn flush(&mut self) -> phonic_signal::PhonicResult<()>;
     }
 
+    #[subgroup(Mut, Write, Blocking)]
+    pub trait BlockingStreamWriter: StreamWriter {
+        fn write_blocking(&mut self, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
+        fn flush_blocking(&mut self) -> phonic_signal::PhonicResult<()>;
+    }
+
+    #[subgroup(Mut)]
     pub trait StreamSeeker: Stream {
         fn seek(&mut self, offset: i64) -> phonic_signal::PhonicResult<()>;
 
@@ -111,17 +124,5 @@ delegate_group! {
         {
             self.set_pos(self.len())
         }
-    }
-}
-
-delegate_stream! {
-    delegate<T> * for T {
-        Self as T::Target;
-
-        &self => self.deref()
-        where T: Deref;
-
-        &mut self => self.deref_mut()
-        where T: DerefMut;
     }
 }
