@@ -1,4 +1,4 @@
-pub use phonic_signal as signal;
+pub use phonic_signal::*;
 
 #[cfg(feature = "dsp")]
 pub use phonic_dsp as dsp;

@@ -1,6 +1,6 @@
 use crate::{
-    utils::copy_to_uninit_slice, FiniteSignal, PhonicResult, Sample, Signal, SignalReader,
-    SignalSpec, SignalWriter,
+    utils::copy_to_uninit_slice, FiniteSignal, IntoDuration, NFrames, NSamples, PhonicResult,
+    Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
 use std::{
     borrow::{Borrow, BorrowMut},
@@ -62,7 +62,10 @@ where
     S: Sample,
 {
     fn len(&self) -> u64 {
-        self.iter.len() as u64 / self.spec.channels.count() as u64
+        let NFrames { n_frames } =
+            NSamples::from(self.iter.len() as u64).into_duration(self.spec());
+
+        n_frames
     }
 }
 
@@ -72,7 +75,10 @@ where
     S: Sample,
 {
     fn len(&self) -> u64 {
-        self.iter.len() as u64 / self.spec.channels.count() as u64
+        let NFrames { n_frames } =
+            NSamples::from(self.iter.len() as u64).into_duration(self.spec());
+
+        n_frames
     }
 }
 

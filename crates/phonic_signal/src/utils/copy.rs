@@ -1,18 +1,22 @@
-use crate::{BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult, Signal};
+use crate::{
+    BlockingSignalReader, BlockingSignalWriter, NSamples, PhonicError, PhonicResult, Signal,
+    SignalDuration,
+};
 use std::mem::MaybeUninit;
 
-pub fn copy_exact<R, W>(
+pub fn copy_exact<R, W, D>(
     reader: &mut R,
     writer: &mut W,
-    n_frames: u64,
+    duration: D,
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
 where
     R: BlockingSignalReader,
     W: BlockingSignalWriter<Sample = R::Sample>,
+    D: SignalDuration,
 {
     let spec = reader.spec().merged(writer.spec())?;
-    let n_samples = n_frames * spec.channels.count() as u64;
+    let NSamples { n_samples } = duration.into_duration(&spec);
     let mut n = 0;
 
     while n < n_samples {

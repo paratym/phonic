@@ -9,6 +9,7 @@ delegate_group! {
 
         fn format(&self) -> Self::Tag;
         fn streams(&self) -> &[crate::StreamSpec<<Self::Tag as crate::FormatTag>::Codec>];
+
         fn current_stream(&self) -> usize;
 
         fn primary_stream(&self) -> Option<usize> {
@@ -18,59 +19,13 @@ delegate_group! {
             }
         }
 
-        fn as_stream(&mut self, stream: usize) -> Option<crate::utils::StreamSelector<&mut Self>>
-        where
-            Self: Sized,
-        {
-            crate::utils::StreamSelector::new(self, stream)
-        }
-
-        fn into_stream(self, stream: usize) -> Option<crate::utils::StreamSelector<Self>>
-        where
-            Self: Sized,
-        {
-            crate::utils::StreamSelector::new(self, stream)
-        }
-
         fn current_stream_spec(&self) -> &crate::StreamSpec<<Self::Tag as crate::FormatTag>::Codec> {
             let i = self.current_stream();
             &self.streams()[i]
         }
 
-        fn as_current_stream(&mut self) -> crate::utils::StreamSelector<&mut Self>
-        where
-            Self: Sized,
-        {
-            let i = self.current_stream();
-            self.as_stream(i).unwrap()
-        }
-
-        fn into_current_stream(self) -> crate::utils::StreamSelector<Self>
-        where
-            Self: Sized,
-        {
-            let i = self.current_stream();
-            self.into_stream(i).unwrap()
-        }
-
         fn primary_stream_spec(&self) -> Option<&crate::StreamSpec<<Self::Tag as crate::FormatTag>::Codec>> {
             self.primary_stream().and_then(|i| self.streams().get(i))
-        }
-
-        fn as_primary_stream(&mut self) -> phonic_signal::PhonicResult<crate::utils::StreamSelector<&mut Self>>
-        where
-            Self: Sized,
-        {
-            let i = self.primary_stream().ok_or(phonic_signal::PhonicError::Unsupported)?;
-            self.as_stream(i).ok_or(phonic_signal::PhonicError::NotFound)
-        }
-
-        fn into_primary_stream(self) -> phonic_signal::PhonicResult<crate::utils::StreamSelector<Self>>
-        where
-            Self: Sized,
-        {
-            let i = self.primary_stream().ok_or(phonic_signal::PhonicError::Unsupported)?;
-            self.into_stream(i).ok_or(phonic_signal::PhonicError::NotFound)
         }
     }
 

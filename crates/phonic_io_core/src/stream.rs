@@ -10,28 +10,28 @@ delegate_group! {
     }
 
     pub trait IndexedStream: Stream {
+        /// retuns the number of bytes between the start and current position of the stream
         fn pos(&self) -> u64;
 
-        fn pos_blocks(&self) -> u64 {
-            self.pos() / self.stream_spec().block_align as u64
-        }
-
-        fn pos_duration(&self) -> std::time::Duration {
-            let seconds = self.pos() as f64 / self.stream_spec().avg_byte_rate as f64;
-            std::time::Duration::from_secs_f64(seconds)
+        fn pos_duration<D: crate::StreamDuration>(&self) -> D
+        where
+            Self: Sized
+        {
+            use crate::IntoStreamDuration;
+            crate::NBytes::from(self.pos()).into_stream_duration(self.stream_spec())
         }
     }
 
     pub trait FiniteStream: Stream {
+        /// returns the number of bytes between the start and end of the stream
         fn len(&self) -> u64;
 
-        fn len_blocks(&self) -> u64 {
-            self.len() / self.stream_spec().block_align as u64
-        }
-
-        fn len_duration(&self) -> std::time::Duration {
-            let seconds = self.len() as f64 / self.stream_spec().avg_byte_rate as f64;
-            std::time::Duration::from_secs_f64(seconds)
+        fn len_duration<D: crate::StreamDuration>(&self) -> D
+        where
+            Self: Sized
+        {
+            use crate::IntoStreamDuration;
+            crate::NBytes::from(self.len()).into_stream_duration(self.stream_spec())
         }
 
         fn is_empty(&self) -> bool
@@ -48,18 +48,12 @@ delegate_group! {
             self.len() - self.pos()
         }
 
-        fn rem_blocks(&self) -> u64
-        where
-            Self: Sized + IndexedStream,
-        {
-            self.rem() / self.stream_spec().block_align as u64
-        }
-
         fn rem_duration(&self) -> std::time::Duration
         where
             Self: Sized + IndexedStream,
         {
-            self.len_duration() - self.pos_duration()
+            use crate::IntoStreamDuration;
+            crate::NBytes::from(self.rem()).into_stream_duration(self.stream_spec())
         }
     }
 
@@ -96,33 +90,5 @@ delegate_group! {
     #[subgroup(Mut)]
     pub trait StreamSeeker: Stream {
         fn seek(&mut self, offset: i64) -> phonic_signal::PhonicResult<()>;
-
-        fn set_pos(&mut self, pos: u64) -> phonic_signal::PhonicResult<()>
-        where
-            Self: Sized + IndexedStream,
-        {
-            let current_pos = self.pos();
-            let offset = if pos >= current_pos {
-                (pos - current_pos) as i64
-            } else {
-                -((current_pos - pos) as i64)
-            };
-
-            self.seek(offset)
-        }
-
-        fn seek_start(&mut self) -> phonic_signal::PhonicResult<()>
-        where
-            Self: Sized + IndexedStream,
-        {
-            self.set_pos(0)
-        }
-
-        fn seek_end(&mut self) -> phonic_signal::PhonicResult<()>
-        where
-            Self: Sized + IndexedStream + FiniteStream,
-        {
-            self.set_pos(self.len())
-        }
     }
 }

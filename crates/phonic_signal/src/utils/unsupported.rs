@@ -1,6 +1,6 @@
 use crate::{
-    delegate_signal, FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
-    SignalWriter,
+    delegate_signal, FiniteSignal, PhonicError, PhonicResult, Signal, SignalDuration, SignalReader,
+    SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -20,7 +20,8 @@ delegate_signal! {
 
 impl<T: Signal> FiniteSignal for Infinite<T> {
     fn len(&self) -> u64 {
-        u64::MAX
+        // arithmetic overflow considerations
+        todo!()
     }
 }
 

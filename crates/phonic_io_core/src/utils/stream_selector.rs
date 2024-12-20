@@ -1,9 +1,9 @@
-use std::mem::MaybeUninit;
 use crate::{
     FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
     IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
 use phonic_signal::PhonicError;
+use std::mem::MaybeUninit;
 
 pub struct StreamSelector<F: Format> {
     inner: F,
@@ -12,14 +12,14 @@ pub struct StreamSelector<F: Format> {
 }
 
 impl<F: Format> StreamSelector<F> {
-    pub fn new(inner: F, stream: usize) -> Option<Self> {
-        let spec = *inner.streams().get(stream)?;
+    pub fn new(inner: F, stream: usize) -> Self {
+        let spec = inner.streams()[stream];
 
-        Some(Self {
+        Self {
             inner,
             spec,
             stream,
-        })
+        }
     }
 }
 

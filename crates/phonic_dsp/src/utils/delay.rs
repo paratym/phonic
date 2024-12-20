@@ -1,8 +1,8 @@
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal,
-    SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    utils::DefaultBuf, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample,
+    Signal, SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
-use std::{mem::MaybeUninit, time::Duration};
+use std::mem::MaybeUninit;
 
 pub struct Delay<T> {
     inner: T,
@@ -11,10 +11,11 @@ pub struct Delay<T> {
 }
 
 impl<T: Signal> Delay<T> {
-    pub fn new(inner: T, delay: u64) -> Self
+    pub fn new<D: SignalDuration>(inner: T, delay: D) -> Self
     where
         T: IndexedSignal,
     {
+        let NFrames { n_frames: delay } = delay.into_duration(inner.spec());
         let n_delayed = if inner.pos() == 0 { 0 } else { delay };
 
         Self {
@@ -24,56 +25,14 @@ impl<T: Signal> Delay<T> {
         }
     }
 
-    pub fn new_interleaved(inner: T, delay: u64) -> Self
-    where
-        T: IndexedSignal,
-    {
-        let n_channels = inner.spec().channels.count() as u64;
-        debug_assert_eq!(delay % n_channels, 0);
+    pub fn new_seeked<D: SignalDuration>(inner: T, delay: D) -> Self {
+        let NFrames { n_frames } = delay.into_duration(inner.spec());
 
-        Self::new(inner, delay / n_channels)
-    }
-
-    pub fn new_duration(inner: T, delay: Duration) -> Self
-    where
-        T: IndexedSignal,
-    {
-        let frame_duration = inner.spec().sample_rate_duration().as_secs_f64();
-        let frame_delay = delay.as_secs_f64() / frame_duration;
-
-        Self::new(inner, frame_delay as u64)
-    }
-
-    pub fn new_seeked(inner: T, delay: u64) -> Self {
         Self {
             inner,
-            delay,
-            n_delayed: delay,
+            delay: n_frames,
+            n_delayed: n_frames,
         }
-    }
-
-    pub fn new_interleaved_seeked(inner: T, delay: u64) -> Self {
-        let n_channels = inner.spec().channels.count() as u64;
-        debug_assert_eq!(delay % n_channels, 0);
-
-        Self::new_seeked(inner, delay / n_channels)
-    }
-
-    pub fn new_duration_seeked(inner: T, duration: Duration) -> Self {
-        let frame_duration = inner.spec().sample_rate_duration().as_secs_f64();
-        let frame_delay = duration.as_secs_f64() / frame_duration;
-
-        Self::new_seeked(inner, frame_delay as u64)
-    }
-}
-
-impl<T> Delay<T> {
-    pub fn as_inner(&self) -> &T {
-        &self.inner
-    }
-
-    pub fn into_inner(self) -> T {
-        self.inner
     }
 }
 

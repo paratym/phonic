@@ -1,6 +1,5 @@
 use crate::utils::{Concat, Delay, Repeat, Slice, Split};
-use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal};
-use std::time::Duration;
+use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalDuration};
 
 pub trait UtilSignalExt: Sized + Signal {
     fn concat<T>(self, other: T) -> PhonicResult<Concat<(Self, T)>>
@@ -10,37 +9,15 @@ pub trait UtilSignalExt: Sized + Signal {
         Concat::new((self, other))
     }
 
-    fn delay(self, n_frames: u64) -> Delay<Self>
+    fn delay<D: SignalDuration>(self, duration: D) -> Delay<Self>
     where
         Self: IndexedSignal,
     {
-        Delay::new(self, n_frames)
+        Delay::new(self, duration)
     }
 
-    fn delay_interleaved(self, n_samples: u64) -> Delay<Self>
-    where
-        Self: IndexedSignal,
-    {
-        Delay::new_interleaved(self, n_samples)
-    }
-
-    fn delay_duration(self, duration: Duration) -> Delay<Self>
-    where
-        Self: IndexedSignal,
-    {
-        Delay::new_duration(self, duration)
-    }
-
-    fn delay_seeked(self, n_frames: u64) -> Delay<Self> {
-        Delay::new_seeked(self, n_frames)
-    }
-
-    fn delay_interleaved_seeked(self, n_samples: u64) -> Delay<Self> {
-        Delay::new_interleaved_seeked(self, n_samples)
-    }
-
-    fn delay_duration_seeked(self, duration: Duration) -> Delay<Self> {
-        Delay::new_duration_seeked(self, duration)
+    fn delay_seeked<D: SignalDuration>(self, duration: D) -> Delay<Self> {
+        Delay::new_seeked(self, duration)
     }
 
     fn repeat_n(self, reps: u32) -> Repeat<Self> {
@@ -51,70 +28,40 @@ pub trait UtilSignalExt: Sized + Signal {
         Repeat::new(self, u32::MAX)
     }
 
-    fn slice(self, start: u64, end: u64) -> Slice<Self> {
-        Slice::new(self, start, end)
+    fn slice<D: SignalDuration>(self, start: D, end: D) -> Slice<Self> {
+        Slice::range(self, start, end)
     }
 
-    fn slice_interleaved(self, start: u64, end: u64) -> Slice<Self> {
-        Slice::new_interleaved(self, start, end)
+    fn slice_from_start<D: SignalDuration>(self, end: D) -> Slice<Self> {
+        Slice::from_start(self, end)
     }
 
-    fn slice_duration(self, start: Duration, end: Duration) -> Slice<Self> {
-        Slice::new_duration(self, start, end)
-    }
-
-    fn slice_from_start(self, end: u64) -> Slice<Self> {
-        Slice::new_from_start(self, end)
-    }
-
-    fn slice_from_start_interleaved(self, end: u64) -> Slice<Self> {
-        Slice::new_from_start_interleaved(self, end)
-    }
-
-    fn slice_from_start_duration(self, end: Duration) -> Slice<Self> {
-        Slice::new_from_start_duration(self, end)
-    }
-
-    fn slice_from_current(self, end: u64) -> Slice<Self>
+    fn slice_from_current<D: SignalDuration>(self, end: D) -> Slice<Self>
     where
         Self: IndexedSignal,
     {
-        Slice::new_from_current(self, end)
+        Slice::from_current(self, end)
     }
 
-    fn slice_from_current_interleaved(self, end: u64) -> Slice<Self>
+    fn slice_from_current_offset<D: SignalDuration>(self, offset: D) -> Slice<Self>
     where
         Self: IndexedSignal,
     {
-        Slice::new_from_current_interleaved(self, end)
+        Slice::from_current_offset(self, offset)
     }
 
-    fn slice_from_current_duration(self, end: Duration) -> Slice<Self>
-    where
-        Self: IndexedSignal,
-    {
-        Slice::new_from_current_duration(self, end)
-    }
-
-    fn slice_to_end(self, start: u64) -> Slice<Self>
+    fn slice_to_end<D: SignalDuration>(self, start: D) -> Slice<Self>
     where
         Self: FiniteSignal,
     {
-        Slice::new_to_end(self, start)
+        Slice::to_end(self, start)
     }
 
-    fn slice_to_end_interleaved(self, start: u64) -> Slice<Self>
+    fn slice_to_end_offset<D: SignalDuration>(self, start: D) -> Slice<Self>
     where
         Self: FiniteSignal,
     {
-        Slice::new_to_end_interleaved(self, start)
-    }
-
-    fn slice_to_end_duration(self, start: Duration) -> Slice<Self>
-    where
-        Self: FiniteSignal,
-    {
-        Slice::new_to_end_duration(self, start)
+        Slice::to_end_offset(self, start)
     }
 
     fn split(self) -> Split<Self> {

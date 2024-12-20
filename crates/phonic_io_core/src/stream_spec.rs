@@ -44,6 +44,10 @@ impl<C: CodecTag> StreamSpec<C> {
         Duration::from_secs_f64(seconds)
     }
 
+    pub fn avg_block_rate(&self) -> f64 {
+        self.avg_byte_rate as f64 / self.block_align as f64
+    }
+
     pub fn block_align_duration(&self) -> Duration {
         let seconds = self.block_align as f64 / self.avg_byte_rate as f64;
         Duration::from_secs_f64(seconds)

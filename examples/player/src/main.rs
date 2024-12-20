@@ -9,9 +9,8 @@ use phonic::{
         KnownFormat, KnownSample, TaggedSignal,
     },
     rtrb::SignalBuffer,
-    signal::{
-        utils::UtilSignalExt, BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
-    },
+    utils::UtilSignalExt,
+    BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
 };
 use std::{env, fs::File, path::Path, time::Duration};
 

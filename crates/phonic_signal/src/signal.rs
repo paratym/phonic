@@ -16,30 +16,26 @@ delegate_group! {
     }
 
     pub trait IndexedSignal: Signal {
-        /// returns the current position of this signal as a number of frames from the start.
         fn pos(&self) -> u64;
 
-        fn pos_interleaved(&self) -> u64 {
-            self.pos() * self.spec().channels.count() as u64
-        }
-
-        fn pos_duration(&self) -> std::time::Duration {
-            let seconds = self.pos() as f64 / self.spec().channels.count() as f64;
-            std::time::Duration::from_secs_f64(seconds)
+        fn pos_duration<D: crate::SignalDuration>(&self) -> D
+        where
+            Self: Sized
+        {
+            use crate::IntoDuration;
+            crate::NFrames::from(self.pos()).into_duration(self.spec())
         }
     }
 
     pub trait FiniteSignal: Signal {
-        /// returns the total length of this signal as a number of frames.
         fn len(&self) -> u64;
 
-        fn len_interleaved(&self) -> u64 {
-            self.len() * self.spec().channels.count() as u64
-        }
-
-        fn len_duration(&self) -> std::time::Duration {
-            let seconds = self.len() as f64 / self.spec().sample_rate as f64;
-            std::time::Duration::from_secs_f64(seconds)
+        fn len_duration<D: crate::SignalDuration>(&self) -> D
+        where
+            Self: Sized
+        {
+            use crate::IntoDuration;
+            crate::NFrames::from(self.len()).into_duration(self.spec())
         }
 
         fn is_empty(&self) -> bool
@@ -51,23 +47,18 @@ delegate_group! {
 
         fn rem(&self) -> u64
         where
-            Self: Sized + IndexedSignal,
+            Self: Sized + IndexedSignal
         {
             self.len() - self.pos()
         }
 
-        fn rem_interleaved(&self) -> u64
+        fn rem_duration<D>(&self) -> D
         where
             Self: Sized + IndexedSignal,
+            D: crate::SignalDuration
         {
-            self.len_interleaved() - self.pos_interleaved()
-        }
-
-        fn rem_duration(&self) -> std::time::Duration
-        where
-            Self: Sized + IndexedSignal,
-        {
-            self.len_duration() - self.pos_duration()
+            use crate::IntoDuration;
+            crate::NFrames::from(self.rem()).into_duration(self.spec())
         }
     }
 
@@ -75,7 +66,10 @@ delegate_group! {
     pub trait SignalReader: Signal {
         /// reads samples from this signal into the given buffer.
         /// returns the number of interleaved samples read.
-        fn read(&mut self, buf: &mut [std::mem::MaybeUninit<Self::Sample>]) -> crate::PhonicResult<usize>;
+        fn read(
+            &mut self,
+            buf: &mut [std::mem::MaybeUninit<Self::Sample>]
+        ) -> crate::PhonicResult<usize>;
 
         fn read_init<'a>(
             &mut self,
@@ -142,7 +136,10 @@ delegate_group! {
 
     #[subgroup(Mut, Read, Blocking)]
     pub trait BlockingSignalReader: SignalReader {
-        fn read_blocking(&mut self, buf: &mut [std::mem::MaybeUninit<Self::Sample>]) -> crate::PhonicResult<usize>;
+        fn read_blocking(
+            &mut self,
+            buf: &mut [std::mem::MaybeUninit<Self::Sample>]
+        ) -> crate::PhonicResult<usize>;
 
         fn read_init_blocking<'a>(
             &mut self,
@@ -211,14 +208,10 @@ delegate_group! {
                 }
 
                 let slice_len = available_len.min(buf_len - n_samples);
-                let buf_slice = &buf[n_samples..n_samples + slice_len];
-                let slot_ptr = available.as_mut_ptr().cast();
+                let src = &buf[n_samples..n_samples + slice_len];
+                let dst = &mut available[..slice_len];
 
-                unsafe {
-                    buf_slice
-                        .as_ptr()
-                        .copy_to_nonoverlapping(slot_ptr, slice_len);
-                }
+                crate::utils::copy_to_uninit_slice(src, dst);
 
                 self.commit_samples(slice_len);
                 n_samples += slice_len;
@@ -253,35 +246,69 @@ delegate_group! {
 
     #[subgroup(Mut)]
     pub trait SignalSeeker: Signal {
-        /// moves the current position of the stream by the given number of frames
         fn seek(&mut self, offset: i64) -> crate::PhonicResult<()>;
 
-        fn set_pos(&mut self, pos: u64) -> crate::PhonicResult<()>
+        fn seek_forward<D>(&mut self, offset: D) -> crate::PhonicResult<()>
+        where
+            Self: Sized,
+            D: crate::SignalDuration
+        {
+            let crate::NFrames { n_frames } = offset.into_duration(self.spec());
+            self.seek(n_frames as i64)
+        }
+
+        fn seek_backward<D>(&mut self, offset: D) -> crate::PhonicResult<()>
+        where
+            Self: Sized,
+            D: crate::SignalDuration
+        {
+            let crate::NFrames { n_frames } = offset.into_duration(self.spec());
+            self.seek(-(n_frames as i64))
+        }
+
+        fn seek_from_start<D>(&mut self, duration: D) -> crate::PhonicResult<()>
         where
             Self: Sized + IndexedSignal,
+            D: crate::SignalDuration
         {
-            let current_pos = self.pos();
-            let offset = if pos >= current_pos {
-                (pos - current_pos) as i64
+            let crate::NFrames { n_frames: pos } = self.pos_duration();
+            let crate::NFrames { n_frames: new_pos } = duration.into_duration(self.spec());
+
+            let offset = if new_pos >= pos {
+                (new_pos - pos) as i64
             } else {
-                -((current_pos - pos) as i64)
+                -((pos - new_pos) as i64)
             };
 
             self.seek(offset)
         }
 
-        fn seek_start(&mut self) -> crate::PhonicResult<()>
+        fn seek_to_start(&mut self) -> crate::PhonicResult<()>
         where
             Self: Sized + IndexedSignal,
         {
-            self.set_pos(0)
+            self.seek_from_start(crate::NFrames::from(0))
         }
 
-        fn seek_end(&mut self) -> crate::PhonicResult<()>
+        fn seek_from_end<D>(&mut self, duration: D) -> crate::PhonicResult<()>
         where
             Self: Sized + IndexedSignal + FiniteSignal,
+            D: crate::SignalDuration
         {
-            self.set_pos(self.len())
+            let crate::NFrames { n_frames } = duration.into_duration(self.spec());
+            let new_pos: crate::NFrames = self.len()
+                .checked_sub(n_frames)
+                .ok_or(crate::PhonicError::OutOfBounds)?
+                .into();
+
+            self.seek_from_start(new_pos)
+        }
+
+        fn seek_to_end(&mut self) -> crate::PhonicResult<()>
+        where
+            Self: Sized + IndexedSignal + FiniteSignal
+        {
+            self.seek_from_end(crate::NFrames::from(0))
         }
     }
 }

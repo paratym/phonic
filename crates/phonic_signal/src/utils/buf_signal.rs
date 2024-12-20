@@ -1,14 +1,13 @@
 use crate::{
     utils::{copy_to_uninit_slice, slice_as_uninit_mut, DynamicBuf, OwnedBuf, ResizeBuf, SizedBuf},
     BlockingSignalReader, BufferedSignal, BufferedSignalReader, BufferedSignalWriter, FiniteSignal,
-    IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSeeker,
-    SignalSpec, SignalWriter,
+    IndexedSignal, IntoDuration, NFrames, NSamples, PhonicError, PhonicResult, Sample, Signal,
+    SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
     mem::MaybeUninit,
-    time::Duration,
 };
 
 pub struct BufSignal<B, S> {
@@ -28,12 +27,16 @@ impl<B, S> BufSignal<B, S> {
         }
     }
 
-    pub fn new_uninit(spec: SignalSpec, n_frames: usize) -> BufSignal<B::Uninit, MaybeUninit<S>>
+    pub fn new_uninit<D>(spec: SignalSpec, duration: D) -> BufSignal<B::Uninit, MaybeUninit<S>>
     where
         B: DynamicBuf,
+        D: SignalDuration,
     {
-        let n_samples = n_frames * spec.channels.count() as usize;
-        Self::new_uninit_interleaved(spec, n_samples)
+        let NSamples { n_samples } = duration.into_duration(&spec);
+        debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
+
+        let buf = B::new_uninit(n_samples as usize);
+        BufSignal::new(spec, buf)
     }
 
     pub fn new_uninit_sized(spec: SignalSpec) -> BufSignal<B::Uninit, MaybeUninit<S>>
@@ -46,37 +49,17 @@ impl<B, S> BufSignal<B, S> {
         BufSignal::new(spec, buf)
     }
 
-    pub fn new_uninit_interleaved(
-        spec: SignalSpec,
-        n_samples: usize,
-    ) -> BufSignal<B::Uninit, MaybeUninit<S>>
-    where
-        B: DynamicBuf,
-    {
-        debug_assert_eq!(n_samples % spec.channels.count() as usize, 0);
-        let buf = B::new_uninit(n_samples);
-
-        BufSignal::new(spec, buf)
-    }
-
-    pub fn new_uninit_duration(
-        spec: SignalSpec,
-        duration: Duration,
-    ) -> BufSignal<B::Uninit, MaybeUninit<S>>
-    where
-        B: DynamicBuf,
-    {
-        let n_frames = duration.as_secs_f64() * spec.sample_rate as f64;
-        Self::new_uninit(spec, n_frames as usize)
-    }
-
-    pub fn silence(spec: SignalSpec, n_frames: usize) -> Self
+    pub fn silence<D>(spec: SignalSpec, duration: D) -> Self
     where
         B: DynamicBuf,
         B::Item: Sample,
+        D: SignalDuration,
     {
-        let n_samples = n_frames * spec.channels.count() as usize;
-        Self::silence_interleaved(spec, n_samples)
+        let NSamples { n_samples } = duration.into_duration(&spec);
+        debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
+
+        let buf = B::silence(n_samples as usize);
+        Self::new(spec, buf)
     }
 
     pub fn silence_sized(spec: SignalSpec) -> Self
@@ -88,26 +71,6 @@ impl<B, S> BufSignal<B, S> {
         debug_assert_eq!(buf._as_slice().len() % spec.channels.count() as usize, 0);
 
         Self::new(spec, buf)
-    }
-
-    pub fn silence_interleaved(spec: SignalSpec, n_samples: usize) -> Self
-    where
-        B: DynamicBuf,
-        B::Item: Sample,
-    {
-        debug_assert_eq!(n_samples % spec.channels.count() as usize, 0);
-        let buf = B::silence(n_samples);
-
-        Self::new(spec, buf)
-    }
-
-    pub fn silence_duration(spec: SignalSpec, duration: Duration) -> Self
-    where
-        B: DynamicBuf,
-        B::Item: Sample,
-    {
-        let n_frames = duration.as_secs_f64() * spec.sample_rate as f64;
-        Self::silence(spec, n_frames as usize)
     }
 
     pub fn read<R>(reader: &mut R) -> PhonicResult<Self>
@@ -135,35 +98,14 @@ impl<B, S> BufSignal<B, S> {
         Ok(Self::new(spec, buf))
     }
 
-    pub fn read_exact<R>(reader: &mut R, n_frames: usize) -> PhonicResult<Self>
+    pub fn read_exact<R, D>(reader: &mut R, duration: D) -> PhonicResult<Self>
     where
         B: DynamicBuf,
         R: BlockingSignalReader<Sample = B::Item>,
+        D: SignalDuration,
     {
         let spec = *reader.spec();
-        let buf = B::read_exact(reader, n_frames)?;
-
-        Ok(Self::new(spec, buf))
-    }
-
-    pub fn read_exact_interleaved<R>(reader: &mut R, n_samples: usize) -> PhonicResult<Self>
-    where
-        B: DynamicBuf,
-        R: BlockingSignalReader<Sample = B::Item>,
-    {
-        let spec = *reader.spec();
-        let buf = B::read_exact_interleaved(reader, n_samples)?;
-
-        Ok(Self::new(spec, buf))
-    }
-
-    pub fn read_exact_duration<R>(reader: &mut R, duration: Duration) -> PhonicResult<Self>
-    where
-        B: DynamicBuf,
-        R: BlockingSignalReader<Sample = B::Item>,
-    {
-        let spec = *reader.spec();
-        let buf = B::read_exact_duration(reader, duration)?;
+        let buf = B::read_exact(reader, duration)?;
 
         Ok(Self::new(spec, buf))
     }
@@ -180,8 +122,6 @@ impl<B, S> BufSignal<B, S> {
         Ok(Self::new(spec, buf))
     }
 }
-
-impl<B, S> BufSignal<B, S> {}
 
 impl<B, S: Sample> Signal for BufSignal<B, S> {
     type Sample = S;
@@ -220,7 +160,9 @@ impl<B, S: Sample> BufferedSignal for BufSignal<B, MaybeUninit<S>> {
 
 impl<B, S> BufSignal<B, S> {
     fn _pos(&self) -> u64 {
-        self.i as u64 / self.spec.channels.count() as u64
+        let NFrames { n_frames } = NSamples::from(self.i as u64).into_duration(&self.spec);
+
+        n_frames
     }
 }
 
@@ -237,8 +179,10 @@ impl<B, S: Sample> IndexedSignal for BufSignal<B, MaybeUninit<S>> {
 }
 
 impl<B, S> BufSignal<B, S> {
-    fn _len(&self, buf_len: usize) -> u64 {
-        buf_len as u64 / self.spec.channels.count() as u64
+    fn _len(&self, len: usize) -> u64 {
+        let NFrames { n_frames } = NSamples::from(len as u64).into_duration(&self.spec);
+
+        n_frames
     }
 }
 
@@ -350,16 +294,22 @@ where
     }
 }
 
-impl<B, S> BufSignal<B, S> {
-    fn _seek(&mut self, offset: i64, buf_len: usize) -> PhonicResult<()> {
-        let len = self._len(buf_len);
-        let pos = match self._pos().checked_add_signed(offset) {
-            None => return Err(PhonicError::OutOfBounds),
-            Some(pos) if pos > len => return Err(PhonicError::OutOfBounds),
-            Some(pos) => pos,
-        };
+impl<B, S> BufSignal<B, S>
+where
+    Self: IndexedSignal + FiniteSignal,
+{
+    fn _seek(&mut self, offset: i64) -> PhonicResult<()> {
+        let new_pos = self
+            .pos()
+            .checked_add_signed(offset)
+            .ok_or(PhonicError::OutOfBounds)?;
 
-        self.i = pos as usize * self.spec.channels.count() as usize;
+        if new_pos > self.len() {
+            return Err(PhonicError::OutOfBounds);
+        }
+
+        let NSamples { n_samples } = NFrames::from(new_pos).into_duration(self.spec());
+        self.i = n_samples as usize;
 
         Ok(())
     }
@@ -371,8 +321,7 @@ where
     S: Sample,
 {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        let buf_len = self.buf.borrow().len();
-        self._seek(offset, buf_len)
+        self._seek(offset)
     }
 }
 
@@ -382,7 +331,6 @@ where
     S: Sample,
 {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        let buf_len = self.buf.borrow().len();
-        self._seek(offset, buf_len)
+        self._seek(offset)
     }
 }

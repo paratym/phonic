@@ -1,8 +1,9 @@
 use phonic_signal::{
-    delegate_signal, utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicError, PhonicResult,
-    Signal, SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal, utils::DefaultBuf, FiniteSignal, IndexedSignal, IntoDuration, NFrames,
+    NSamples, PhonicError, PhonicResult, Signal, SignalDuration, SignalReader, SignalSeeker,
+    SignalWriter,
 };
-use std::{mem::MaybeUninit, time::Duration};
+use std::mem::MaybeUninit;
 
 pub struct Slice<T> {
     inner: T,
@@ -10,102 +11,53 @@ pub struct Slice<T> {
     end: u64,
 }
 
-impl<T> Slice<T> {
-    pub fn new(inner: T, start: u64, end: u64) -> Self {
-        debug_assert!(start < end);
+impl<T: Signal> Slice<T> {
+    pub fn range<D: SignalDuration>(inner: T, start: D, end: D) -> Self {
+        let NFrames { n_frames: start } = start.into_duration(inner.spec());
+        let NFrames { n_frames: end } = end.into_duration(inner.spec());
+
         Self { inner, start, end }
     }
 
-    pub fn new_interleaved(inner: T, start: u64, end: u64) -> Self
-    where
-        T: Signal,
-    {
-        let n_channels = inner.spec().channels.count() as u64;
-        Self::new(inner, start / n_channels, end / n_channels)
+    pub fn offset<D: SignalDuration>(inner: T, start: D, offset: D) -> Self {
+        Self::range(inner, start, start + offset)
     }
 
-    pub fn new_duration(inner: T, start: Duration, end: Duration) -> Self
-    where
-        T: Signal,
-    {
-        let sample_interval = inner.spec().sample_rate_duration().as_secs_f64();
-        let start_frame = start.as_secs_f64() / sample_interval;
-        let end_frame = end.as_secs_f64() / sample_interval;
-        Self::new(inner, start_frame as u64, end_frame as u64)
+    pub fn from_start<D: SignalDuration>(inner: T, end: D) -> Self {
+        let start = NFrames::from(0).into_duration(inner.spec());
+        Self::range(inner, start, end)
     }
 
-    pub fn new_from_start(inner: T, end: u64) -> Self {
-        Self::new(inner, 0, end)
-    }
-
-    pub fn new_from_start_interleaved(inner: T, end: u64) -> Self
-    where
-        T: Signal,
-    {
-        Self::new_interleaved(inner, 0, end)
-    }
-
-    pub fn new_from_start_duration(inner: T, end: Duration) -> Self
-    where
-        T: Signal,
-    {
-        Self::new_duration(inner, Duration::ZERO, end)
-    }
-
-    pub fn new_from_current(inner: T, end: u64) -> Self
-    where
-        T: IndexedSignal,
-    {
-        let start = inner.pos();
-        Self::new(inner, start, end)
-    }
-
-    pub fn new_from_current_interleaved(inner: T, end: u64) -> Self
-    where
-        T: IndexedSignal,
-    {
-        let start = inner.pos_interleaved();
-        Self::new_interleaved(inner, start, end)
-    }
-
-    pub fn new_from_current_duration(inner: T, end: Duration) -> Self
+    pub fn from_current<D: SignalDuration>(inner: T, end: D) -> Self
     where
         T: IndexedSignal,
     {
         let start = inner.pos_duration();
-        Self::new_duration(inner, start, end)
+        Self::range(inner, start, end)
     }
 
-    pub fn new_to_end(inner: T, start: u64) -> Self
+    pub fn from_current_offset<D: SignalDuration>(inner: T, offset: D) -> Self
     where
-        T: FiniteSignal,
+        T: IndexedSignal,
     {
-        let end = inner.len();
-        Self::new(inner, start, end)
+        let start = inner.pos_duration();
+        Self::offset(inner, start, offset)
     }
 
-    pub fn new_to_end_interleaved(inner: T, start: u64) -> Self
-    where
-        T: FiniteSignal,
-    {
-        let end = inner.len_interleaved();
-        Self::new_interleaved(inner, start, end)
-    }
-
-    pub fn new_to_end_duration(inner: T, start: Duration) -> Self
+    pub fn to_end<D: SignalDuration>(inner: T, start: D) -> Self
     where
         T: FiniteSignal,
     {
         let end = inner.len_duration();
-        Self::new_duration(inner, start, end)
+        Self::range(inner, start, end)
     }
 
-    pub fn as_inner(&self) -> &T {
-        &self.inner
-    }
-
-    pub fn into_inner(self) -> T {
-        self.inner
+    pub fn to_end_offset<D: SignalDuration>(inner: T, offset: D) -> Self
+    where
+        T: FiniteSignal,
+    {
+        let end: D = inner.len_duration();
+        Self::range(inner, end - offset, end)
     }
 }
 
@@ -151,7 +103,9 @@ impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         self.read_padding(buf)?;
 
-        let len = buf.len().min(self.rem_interleaved() as usize);
+        let NSamples { n_samples } = self.rem_duration();
+        let len = buf.len().min(n_samples as usize);
+
         self.inner.read(&mut buf[..len])
     }
 }
@@ -180,7 +134,9 @@ impl<T: IndexedSignal + SignalWriter> SignalWriter for Slice<T> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         self.write_padding()?;
 
-        let len = buf.len().min(self.rem_interleaved() as usize);
+        let NSamples { n_samples } = self.rem_duration();
+        let len = buf.len().min(n_samples as usize);
+
         self.inner.write(&buf[..len])
     }
 

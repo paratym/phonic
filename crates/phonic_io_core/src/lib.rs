@@ -1,4 +1,5 @@
 mod codec;
+mod duration;
 mod dyn_io;
 mod format;
 mod format_tag;
@@ -7,6 +8,7 @@ mod stream_spec;
 mod tagged_signal;
 
 pub use codec::*;
+pub use duration::*;
 pub use dyn_io::*;
 pub use format::*;
 pub use format_tag::*;

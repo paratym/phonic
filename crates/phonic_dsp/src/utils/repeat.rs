@@ -1,5 +1,5 @@
 use phonic_signal::{
-    delegate_signal, FiniteSignal, IndexedSignal, PhonicError, PhonicResult, SignalReader,
+    delegate_signal, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, SignalReader,
     SignalSeeker,
 };
 use std::mem::MaybeUninit;
@@ -67,12 +67,18 @@ impl<T: IndexedSignal + SignalReader + SignalSeeker> SignalReader for Repeat<T> 
 
 impl<T: IndexedSignal + FiniteSignal + SignalSeeker> SignalSeeker for Repeat<T> {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        let pos = self.pos().checked_add_signed(offset);
-        if pos.is_none_or(|pos| pos > self.len()) {
+        let pos = self
+            .pos()
+            .checked_add_signed(offset)
+            .ok_or(PhonicError::OutOfBounds)?;
+
+        if pos > self.len() {
             return Err(PhonicError::OutOfBounds);
         }
 
-        let inner_pos = pos.unwrap() % self.inner.len();
-        self.inner.set_pos(inner_pos)
+        let inner_pos = NFrames::from(pos % self.inner.len());
+        self.inner.seek_from_start(inner_pos)
+
+        // TODO: set current repetition
     }
 }
