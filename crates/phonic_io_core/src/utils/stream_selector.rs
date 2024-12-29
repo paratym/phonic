@@ -1,8 +1,9 @@
 use crate::{
+    BlockingFormatReader, BlockingFormatWriter, BlockingStreamReader, BlockingStreamWriter,
     FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker, FormatTag, FormatWriter,
     IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec, StreamWriter,
 };
-use phonic_signal::PhonicError;
+use phonic_signal::{PhonicError, PhonicResult};
 use std::mem::MaybeUninit;
 
 pub struct StreamSelector<F: Format> {
@@ -47,9 +48,21 @@ impl<T: FormatReader> StreamReader for StreamSelector<T> {
     fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> Result<usize, PhonicError> {
         loop {
             match self.inner.read(buf) {
-                Err(e) => return Err(e),
                 Ok((i, n)) if i == self.stream => return Ok(n),
                 Ok(_) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}
+
+impl<T: BlockingFormatReader> BlockingStreamReader for StreamSelector<T> {
+    fn read_blocking(&mut self, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
+        loop {
+            match self.inner.read_blocking(buf) {
+                Ok((i, n)) if i == self.stream => return Ok(n),
+                Err(PhonicError::Interrupted | PhonicError::NotFound) | Ok(_) => continue,
+                Err(e) => return Err(e),
             }
         }
     }
@@ -62,6 +75,16 @@ impl<T: FormatWriter> StreamWriter for StreamSelector<T> {
 
     fn flush(&mut self) -> Result<(), PhonicError> {
         self.inner.flush()
+    }
+}
+
+impl<T: BlockingFormatWriter> BlockingStreamWriter for StreamSelector<T> {
+    fn write_blocking(&mut self, buf: &[u8]) -> PhonicResult<usize> {
+        self.inner.write_blocking(self.stream, buf)
+    }
+
+    fn flush_blocking(&mut self) -> PhonicResult<()> {
+        self.inner.flush_blocking()
     }
 }
 

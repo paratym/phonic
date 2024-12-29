@@ -25,9 +25,10 @@ pub struct SpmcRingBuf<B> {
 impl<B> SpmcRingBuf<B> {
     pub fn new<S>(buf: B, align: usize) -> Self
     where
-        B: Deref<Target = [S]>,
+        // TODO: MaybeUninit
+        B: AsRef<[S]>,
     {
-        let mut buf_len = buf.len();
+        let mut buf_len = buf.as_ref().len();
         buf_len -= buf_len % align;
 
         SpmcRingBuf {
@@ -91,12 +92,12 @@ impl<B> SpmcRingBuf<B> {
 
     pub fn available_buf<S>(&mut self) -> &mut [S]
     where
-        B: DerefMut<Target = [S]>,
+        B: AsMut<[S]>,
     {
         let buf_wraps = self.start > self.end || (self.start == self.end && !self.empty);
         let end = if buf_wraps { self.start } else { self.buf_len };
 
-        &mut self.buf[self.end..end]
+        &mut self.buf.as_mut()[self.end..end]
     }
 
     pub fn instance_remainder(&self, id: &usize) -> usize {
@@ -130,10 +131,11 @@ impl<B> SpmcRingBuf<B> {
 
     pub fn instance_buf<S>(&self, id: &usize) -> (&[S], &[S])
     where
-        B: Deref<Target = [S]>,
+        B: AsRef<[S]>,
     {
+        let buf = self.buf.as_ref();
         let Some(cursor) = self.cursor.get(id) else {
-            let empty = &self.buf[self.end..self.end];
+            let empty = &buf[self.end..self.end];
             return (empty, empty);
         };
 
@@ -141,13 +143,10 @@ impl<B> SpmcRingBuf<B> {
             || (self.start == self.end && cursor.pos == self.start && !cursor.empty);
 
         if !buf_wraps {
-            return (
-                &self.buf[cursor.pos..self.end],
-                &self.buf[self.end..self.end],
-            );
+            return (&buf[cursor.pos..self.end], &buf[self.end..self.end]);
         }
 
-        (&self.buf[cursor.pos..self.buf_len], &self.buf[..self.end])
+        (&buf[cursor.pos..self.buf_len], &buf[..self.end])
     }
 
     pub fn advance_instance(&mut self, id: &usize, n: usize) -> PhonicResult<()> {

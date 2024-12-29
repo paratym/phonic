@@ -455,12 +455,19 @@ name = "phonic"
 version = "0.0.1"
 dependencies = [
  "cpal",
+ "phonic_buf",
  "phonic_cpal",
  "phonic_dsp",
  "phonic_io",
- "phonic_rtrb",
  "phonic_signal",
  "rtrb",
+]
+
+[[package]]
+name = "phonic_buf"
+version = "0.1.0"
+dependencies = [
+ "phonic_signal",
 ]
 
 [[package]]
@@ -485,6 +492,7 @@ name = "phonic_dsp"
 version = "0.1.0"
 dependencies = [
  "num-traits",
+ "phonic_buf",
  "phonic_io",
  "phonic_macro",
  "phonic_signal",
@@ -528,14 +536,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "phonic_rtrb"
-version = "0.1.0"
-dependencies = [
- "phonic_signal",
- "rtrb",
-]
-
-[[package]]
 name = "phonic_signal"
 version = "0.1.0"
 dependencies = [
@@ -554,7 +554,6 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "phonic",
- "rtrb",
 ]
 
 [[package]]

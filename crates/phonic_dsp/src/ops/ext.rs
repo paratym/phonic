@@ -2,19 +2,21 @@ use crate::ops::{
     ClipSample, Complement, ComplementSample, Convert, DbRatio, Gain, GainSample, Limit, Mix,
 };
 use num_traits::Inv;
+use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_signal::{IndexedSignal, PhonicResult, Sample, Signal};
 
-pub trait OpSignalExt: Sized + Signal {
+pub trait DspOpsExt: Sized + Signal {
     fn complement(self) -> Complement<Self> {
         Complement::new(self)
     }
 
     fn convert<S: Sample>(self) -> Convert<Self, S> {
-        Convert::new(self)
+        let buf = DefaultSizedBuf::new_uninit();
+        Convert::new(self, buf)
     }
 
-    fn convert_buffered<S: Sample, B>(self, buf: B) -> Convert<Self, S, B> {
-        Convert::new_buffered(self, buf)
+    fn convert_buf<S: Sample, B>(self, buf: B) -> Convert<Self, S, B> {
+        Convert::new(self, buf)
     }
 
     fn gain_amp(
@@ -84,15 +86,16 @@ pub trait OpSignalExt: Sized + Signal {
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
     {
-        Mix::new((self, other))
+        let buf = DefaultSizedBuf::new_uninit();
+        Mix::new((self, other), buf)
     }
 
-    fn mix_buffered<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, T), B>>
+    fn mix_buf<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, T), B>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
     {
-        Mix::new_buffered((self, other), buf)
+        Mix::new((self, other), buf)
     }
 
     fn cancel<T>(self, other: T) -> PhonicResult<Mix<(Self, Complement<T>)>>
@@ -101,17 +104,18 @@ pub trait OpSignalExt: Sized + Signal {
         T: IndexedSignal<Sample = Self::Sample>,
         T::Sample: ComplementSample,
     {
-        Mix::cancel(self, other)
+        let buf = DefaultSizedBuf::new_uninit();
+        Mix::cancel(self, other, buf)
     }
 
-    fn cancel_buffered<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, Complement<T>), B>>
+    fn cancel_buf<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, Complement<T>), B>>
     where
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
         T::Sample: ComplementSample,
     {
-        Mix::cancel_buffered(self, other, buf)
+        Mix::cancel(self, other, buf)
     }
 }
 
-impl<T: Signal> OpSignalExt for T {}
+impl<T: Signal> DspOpsExt for T {}

@@ -7,7 +7,7 @@ use std::{mem::MaybeUninit, time::Duration};
 pub struct Poll<T>(pub T);
 
 impl<T> Poll<T> {
-    fn poll_interval() {
+    pub fn poll_interval() {
         std::thread::sleep(Duration::from_millis(10))
 
         // TODO

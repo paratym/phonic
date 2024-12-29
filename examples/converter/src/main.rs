@@ -1,8 +1,10 @@
 use phonic::{
     dsp::ops::TaggedSignalExt,
     io::{
-        utils::FormatIdentifier, DynFormatConstructor, DynStream, Format, KnownFormat, StreamSpec,
+        utils::{FormatIdentifier, FormatUtilsExt},
+        DynFormatConstructor, DynStream, KnownFormat, StreamSpec,
     },
+    utils::SignalUtilsExt,
     PhonicError, PhonicResult,
 };
 use std::{

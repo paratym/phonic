@@ -1,13 +1,16 @@
 use phonic::{
-    dsp::{gen::Osc, utils::UtilSignalExt},
+    dsp::{gen::Osc, utils::DspUtilsExt},
     io::{
-        codecs::pcm::PcmCodec, formats::wave::WaveFormat, CodecConstructor, Format,
-        FormatConstructor, FormatWriter, Stream,
+        codecs::pcm::PcmCodec,
+        formats::wave::WaveFormat,
+        utils::{FormatUtilsExt, StreamUtilsExt},
+        CodecConstructor, Format, FormatConstructor, FormatWriter, Stream,
     },
-    PhonicResult, SignalReader, SignalSpec,
+    PhonicError, PhonicResult, SignalReader, SignalSpec,
 };
 use std::{
     fs::{remove_file, File},
+    mem::MaybeUninit,
     path::Path,
     time::Duration,
 };
@@ -32,10 +35,15 @@ fn export(
     signal: &mut impl SignalReader<Sample = f32>,
     writer: &mut impl std::io::Write,
 ) -> PhonicResult<()> {
-    // let mut codec = PcmCodec::encoder(signal)?;
-    // let mut format = <WaveFormat<_>>::write_index(writer, [*codec.stream_spec()])?;
-    //
-    // format.as_primary_stream()?.copy_all_poll(&mut codec)?;
-    // format.finalize()
-    todo!()
+    let mut codec = PcmCodec::encoder(signal)?.polled();
+    let mut format = <WaveFormat<_>>::write_index(writer, [*codec.stream_spec()])?;
+    let mut buf = [MaybeUninit::<u8>::uninit(); 4096];
+
+    (&mut format)
+        .into_primary_stream()?
+        .polled()
+        .copy_all(&mut codec, &mut buf)?;
+
+    // TODO: format.finalize()
+    Ok(())
 }

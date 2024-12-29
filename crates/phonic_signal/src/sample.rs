@@ -1,4 +1,6 @@
-pub trait Sample: Copy + Sized + Send + Sync + 'static {
+use std::fmt::Debug;
+
+pub trait Sample: 'static + Sized + Send + Sync + Copy + Debug {
     const ORIGIN: Self;
 }
 

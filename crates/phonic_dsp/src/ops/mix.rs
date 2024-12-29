@@ -2,16 +2,14 @@ use crate::{
     ops::Complement,
     types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList},
 };
+use phonic_buf::DefaultSizedBuf;
 use phonic_signal::{
-    utils::{slice_as_init_mut, DefaultBuf},
-    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSpec,
+    utils::slice_as_init_mut, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal,
+    SignalReader, SignalSpec,
 };
-use std::{
-    mem::MaybeUninit,
-    ops::{Add, DerefMut},
-};
+use std::{mem::MaybeUninit, ops::Add};
 
-pub struct Mix<T: SignalList, B = DefaultBuf<MaybeUninit<<T as SignalList>::Sample>>> {
+pub struct Mix<T: SignalList, B = DefaultSizedBuf<MaybeUninit<<T as SignalList>::Sample>>> {
     inner: T,
     spec: SignalSpec,
     queue: PosQueue,
@@ -25,14 +23,7 @@ pub trait MixSample {
 }
 
 impl<T: IndexedSignalList, B> Mix<T, B> {
-    pub fn new(inner: T) -> PhonicResult<Self>
-    where
-        B: Default,
-    {
-        Self::new_buffered(inner, B::default())
-    }
-
-    pub fn new_buffered(inner: T, buf: B) -> PhonicResult<Self> {
+    pub fn new(inner: T, buf: B) -> PhonicResult<Self> {
         let spec = inner.spec()?;
         let queue = PosQueue::new(&inner);
 
@@ -59,29 +50,21 @@ impl<T, C, B> Mix<(T, Complement<C>), B>
 where
     (T, Complement<C>): IndexedSignalList,
 {
-    pub fn cancel(inner: T, other: C) -> PhonicResult<Self>
-    where
-        B: Default,
-    {
+    pub fn cancel(inner: T, other: C, buf: B) -> PhonicResult<Self> {
         let complement = Complement::new(other);
-        Self::new((inner, complement))
-    }
-
-    pub fn cancel_buffered(inner: T, other: C, buf: B) -> PhonicResult<Self> {
-        let complement = Complement::new(other);
-        Self::new_buffered((inner, complement), buf)
+        Self::new((inner, complement), buf)
     }
 }
 
 impl<T, B> Mix<T, B>
 where
     T: SignalList,
-    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
+    B: AsMut<[MaybeUninit<T::Sample>]>,
 {
     fn take_partial_samples(&mut self, buf: &mut [MaybeUninit<T::Sample>]) -> usize {
         let partial_len = self.partial_end - self.partial_start;
         let buf_len = buf.len().min(partial_len);
-        let partial_buf = &self.buf[self.partial_start..self.partial_start + buf_len];
+        let partial_buf = &self.buf.as_mut()[self.partial_start..self.partial_start + buf_len];
         buf[..buf_len].copy_from_slice(partial_buf);
 
         if buf_len == partial_len {
@@ -107,7 +90,7 @@ where
         }
 
         let start_i = start_i as usize;
-        self.buf[start_i..start_i + buf_len].copy_from_slice(buf);
+        self.buf.as_mut()[start_i..start_i + buf_len].copy_from_slice(buf);
     }
 }
 
@@ -135,14 +118,14 @@ impl<T, B> SignalReader for Mix<T, B>
 where
     T: IndexedSignalList + SignalReaderList,
     T::Sample: MixSample,
-    B: DerefMut<Target = [MaybeUninit<T::Sample>]>,
+    B: AsMut<[MaybeUninit<T::Sample>]>,
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
             return Ok(0);
         };
 
-        let mut buf_len = buf.len().min(self.buf.len());
+        let mut buf_len = buf.len().min(self.buf.as_mut().len());
         let n_channels = self.spec().channels.count() as usize;
         buf_len -= buf_len % n_channels;
 
@@ -164,7 +147,7 @@ where
                 break;
             }
 
-            let inner_buf = &mut self.buf[start_i..buf_len];
+            let inner_buf = &mut self.buf.as_mut()[start_i..buf_len];
             let result = self.inner.read_init(cursor.id, inner_buf);
 
             match result {

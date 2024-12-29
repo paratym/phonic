@@ -1,4 +1,4 @@
-use crate::CodecTag;
+use crate::{CodecTag, KnownSampleType};
 use phonic_signal::{PhonicError, PhonicResult, Sample, Signal, SignalSpec, SignalSpecBuilder};
 use std::{any::TypeId, fmt::Debug, time::Duration};
 
@@ -48,9 +48,21 @@ impl<C: CodecTag> StreamSpec<C> {
         self.avg_byte_rate as f64 / self.block_align as f64
     }
 
+    pub fn avg_bytes_per_sample(&self) -> f64 {
+        self.avg_byte_rate as f64 / self.decoded_spec.sample_rate as f64
+    }
+
+    pub fn avg_bytes_per_frame(&self) -> f64 {
+        self.avg_bytes_per_sample() * self.decoded_spec.channels.count() as f64
+    }
+
     pub fn block_align_duration(&self) -> Duration {
         let seconds = self.block_align as f64 / self.avg_byte_rate as f64;
         Duration::from_secs_f64(seconds)
+    }
+
+    pub fn known_sample_type(&self) -> PhonicResult<KnownSampleType> {
+        KnownSampleType::try_from(self.sample_type)
     }
 
     pub fn merge<T>(&mut self, other: &StreamSpec<T>) -> PhonicResult<()>

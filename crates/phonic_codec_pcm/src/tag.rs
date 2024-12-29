@@ -1,7 +1,7 @@
 use crate::PcmCodec;
 use phonic_io_core::{
-    match_tagged_signal, CodecConstructor, CodecTag, DynStream, KnownSampleType, StreamSpecBuilder,
-    TaggedSignal,
+    match_tagged_signal, utils::PollIo, CodecConstructor, CodecTag, DynStream, KnownSampleType,
+    StreamSpecBuilder, TaggedSignal,
 };
 use phonic_signal::{utils::Poll, PhonicError, PhonicResult};
 
@@ -74,17 +74,17 @@ where
     let sample_type = KnownSampleType::try_from(stream.stream_spec().sample_type)?;
     let signal = match sample_type {
         KnownSampleType::I8 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::I16 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::I32 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::I64 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::I16 => dyn_construct_branch!(I16, stream),
+        KnownSampleType::I32 => dyn_construct_branch!(I32, stream),
+        KnownSampleType::I64 => dyn_construct_branch!(I64, stream),
 
-        KnownSampleType::U8 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::U16 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::U32 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::U64 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::U8 => dyn_construct_branch!(U8, stream),
+        KnownSampleType::U16 => dyn_construct_branch!(U16, stream),
+        KnownSampleType::U32 => dyn_construct_branch!(U32, stream),
+        KnownSampleType::U64 => dyn_construct_branch!(U64, stream),
 
-        KnownSampleType::F32 => dyn_construct_branch!(I8, stream),
-        KnownSampleType::F64 => dyn_construct_branch!(I8, stream),
+        KnownSampleType::F32 => dyn_construct_branch!(F32, stream),
+        KnownSampleType::F64 => dyn_construct_branch!(F64, stream),
     };
 
     Ok(signal)
@@ -98,6 +98,5 @@ where
     PcmCodecTag: TryInto<C>,
     PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
 {
-    // match_tagged_signal!(signal, inner => Ok(Box::new(PcmCodec::encoder(inner)?)))
-    todo!()
+    match_tagged_signal!(signal, inner => Ok(Box::new(PollIo(PcmCodec::encoder(inner)?))))
 }

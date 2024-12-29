@@ -7,12 +7,12 @@ use std::{
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NBytes {
-    n_bytes: u64,
+    pub n_bytes: u64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NBlocks {
-    n_blocks: u64,
+    pub n_blocks: u64,
 }
 
 pub trait FromStreamDuration<T> {
@@ -114,13 +114,15 @@ impl<T, U: FromStreamDuration<T>> IntoStreamDuration<U> for T {
 
 impl FromStreamDuration<NFrames> for NBytes {
     fn from_stream_duration<C: CodecTag>(duration: NFrames, spec: &StreamSpec<C>) -> Self {
-        todo!()
+        let n_bytes = (duration.n_frames as f64 * spec.avg_bytes_per_frame()) as u64;
+        Self { n_bytes }
     }
 }
 
 impl FromStreamDuration<NSamples> for NBytes {
     fn from_stream_duration<C: CodecTag>(duration: NSamples, spec: &StreamSpec<C>) -> Self {
-        todo!()
+        let n_bytes = (duration.n_samples as f64 * spec.avg_bytes_per_sample()) as u64;
+        Self { n_bytes }
     }
 }
 
@@ -140,13 +142,13 @@ impl FromStreamDuration<Duration> for NBytes {
 
 impl FromStreamDuration<NFrames> for NBlocks {
     fn from_stream_duration<C: CodecTag>(duration: NFrames, spec: &StreamSpec<C>) -> Self {
-        todo!()
+        NBytes::from_stream_duration(duration, spec).into_stream_duration(spec)
     }
 }
 
 impl FromStreamDuration<NSamples> for NBlocks {
     fn from_stream_duration<C: CodecTag>(duration: NSamples, spec: &StreamSpec<C>) -> Self {
-        todo!()
+        NBytes::from_stream_duration(duration, spec).into_stream_duration(spec)
     }
 }
 

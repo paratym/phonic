@@ -3,30 +3,31 @@ use cpal::{
     BufferSize, SizedSample,
 };
 use phonic::{
+    buf::spsc::SignalBuf,
     cpal::DeviceExt,
     io::{
-        match_tagged_signal, utils::FormatIdentifier, DynFormatConstructor, DynStream, Format,
-        KnownFormat, KnownSample, TaggedSignal,
+        match_tagged_signal,
+        utils::{FormatIdentifier, FormatUtilsExt},
+        DynFormatConstructor, DynStream, KnownFormat, KnownSample, TaggedSignal,
     },
-    rtrb::SignalBuffer,
-    utils::UtilSignalExt,
-    BlockingSignalReader, BlockingSignalWriter, PhonicError, PhonicResult,
+    utils::SignalUtilsExt,
+    BlockingSignalReader, PhonicError, PhonicResult,
 };
-use std::{env, fs::File, path::Path, time::Duration};
+use std::{env, fmt::Debug, fs::File, path::Path, thread::sleep, time::Duration};
 
 fn main() -> PhonicResult<()> {
-    let path_arg = env::args().nth(1).ok_or(PhonicError::MissingData)?;
-    let path = Path::new(path_arg.as_str());
+    // let path_arg = env::args().nth(1).ok_or(PhonicError::MissingData)?;
+    let path_arg = "/home/ben/Desktop/phonic/examples/export/sine.wav";
+    let path = Path::new(path_arg);
     let file = File::open(path)?;
 
     let format = KnownFormat::try_from(FormatIdentifier::try_from(path)?)?;
-    todo!()
-    // let signal = format
-    //     .read_index(file)?
-    //     .into_primary_stream()?
-    //     .into_decoder()?;
-    //
-    // match_tagged_signal!(signal, inner => play(inner))
+    let signal = format
+        .read_index(file)?
+        .into_primary_stream()?
+        .into_decoder()?;
+
+    match_tagged_signal!(signal, inner => play(inner))
 }
 
 fn play<S>(mut signal: S) -> PhonicResult<()>
@@ -36,7 +37,7 @@ where
 {
     let spec = signal.spec();
     const BUF_DURATION: Duration = Duration::from_millis(200);
-    let (mut producer, consumer) = SignalBuffer::new_duration(*spec, BUF_DURATION);
+    let (mut producer, consumer) = SignalBuf::default_duration(*spec, BUF_DURATION);
 
     let output = cpal::default_host()
         .default_output_device()
@@ -49,6 +50,10 @@ where
         );
 
     output.unwrap().play().unwrap();
-    producer.copy_all(&mut signal)?;
-    producer.flush_blocking()
+    producer.copy_all_buffered(&mut signal)?;
+
+    sleep(Duration::from_secs(1));
+    // producer.flush_blocking()
+
+    Ok(())
 }

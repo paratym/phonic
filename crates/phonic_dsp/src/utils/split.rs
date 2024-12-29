@@ -1,7 +1,6 @@
 use crate::types::SpmcRingBuf;
-use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSpec,
-};
+use phonic_buf::{DefaultSizedBuf, SizedBuf};
+use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSpec};
 use std::{
     cell::RefCell,
     mem::MaybeUninit,
@@ -14,7 +13,7 @@ struct SplitInner<T, B> {
     buf: SpmcRingBuf<B>,
 }
 
-pub struct Split<T: Signal, B = DefaultBuf<<T as Signal>::Sample>> {
+pub struct Split<T: Signal, B = DefaultSizedBuf<<T as Signal>::Sample>> {
     id: usize,
     spec: SignalSpec,
     inner_ref: Rc<RefCell<SplitInner<T, B>>>,
@@ -32,8 +31,8 @@ impl<T: Signal, B> SplitInner<T, B> {
     }
 }
 
-impl<T: Signal, B: Deref<Target = [T::Sample]>> Split<T, B> {
-    pub fn new_buffered(inner: T, buf: B) -> Self {
+impl<T: Signal, B: AsRef<[T::Sample]>> Split<T, B> {
+    pub fn new(inner: T, buf: B) -> Self {
         let spec = *inner.spec();
         let n_channels = spec.channels.count() as usize;
 
@@ -49,13 +48,6 @@ impl<T: Signal, B: Deref<Target = [T::Sample]>> Split<T, B> {
             inner_ref,
         }
     }
-
-    pub fn new(inner: T) -> Self
-    where
-        B: Default,
-    {
-        Self::new_buffered(inner, B::default())
-    }
 }
 
 impl<T: Signal, B> Signal for Split<T, B> {
@@ -69,7 +61,7 @@ impl<T: Signal, B> Signal for Split<T, B> {
 impl<T, B> IndexedSignal for Split<T, B>
 where
     T: IndexedSignal,
-    B: Deref<Target = [T::Sample]>,
+    B: AsRef<[T::Sample]>,
 {
     fn pos(&self) -> u64 {
         let inner = self.inner_ref.as_ref().borrow();
@@ -91,7 +83,7 @@ where
 impl<T, B> Split<T, B>
 where
     T: SignalReader,
-    B: DerefMut<Target = [T::Sample]>,
+    B: AsMut<[T::Sample]>,
 {
     fn read_inner(&mut self, buf: &mut [<Self as Signal>::Sample]) -> PhonicResult<()> {
         todo!()
@@ -101,7 +93,7 @@ where
 impl<T, B> SignalReader for Split<T, B>
 where
     T: SignalReader,
-    B: DerefMut<Target = [T::Sample]>,
+    B: AsMut<[T::Sample]>,
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         // self.read_inner(buf)?;

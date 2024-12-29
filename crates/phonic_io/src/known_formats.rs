@@ -1,7 +1,7 @@
 use crate::KnownCodec;
 use lazy_static::lazy_static;
 use phonic_io_core::{
-    utils::{DropFinalize, FormatIdentifier},
+    utils::{DropFinalize, FormatIdentifier, PollIo},
     DynFormat, DynFormatConstructor, FormatConstructor, FormatTag, StdIoSource, StreamSpec,
 };
 use phonic_signal::{PhonicError, PhonicResult};
@@ -57,8 +57,9 @@ impl DynFormatConstructor for KnownFormat {
         use crate::formats::*;
 
         Ok(match self {
-            // #[cfg(feature = "wave")]
-            // Self::Wave => Box::new(DropFinalize(wave::WaveFormat::read_index(inner)?)),
+            #[cfg(feature = "wave")]
+            Self::Wave => Box::new(DropFinalize(PollIo(wave::WaveFormat::read_index(inner)?))),
+
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
         })
@@ -72,8 +73,11 @@ impl DynFormatConstructor for KnownFormat {
         use crate::formats::*;
 
         Ok(match self {
-            // #[cfg(feature = "wave")]
-            // Self::Wave => Box::new(DropFinalize(wave::WaveFormat::write_index(inner, index)?)),
+            #[cfg(feature = "wave")]
+            Self::Wave => Box::new(DropFinalize(PollIo(wave::WaveFormat::write_index(
+                inner, index,
+            )?))),
+
             #[allow(unreachable_patterns)]
             _ => return Err(PhonicError::Unsupported),
         })

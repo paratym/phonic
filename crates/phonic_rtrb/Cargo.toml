@@ -1,8 +1,0 @@
-[package]
-name = "phonic_rtrb"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-rtrb = "0.3.0"
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }

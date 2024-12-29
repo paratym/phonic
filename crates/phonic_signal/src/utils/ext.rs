@@ -1,118 +1,40 @@
-use super::{
-    copy_all, BufSignal, DefaultBuf, DynamicBuf, Indexed, Observer, Poll, ResizeBuf, SignalEvent,
-    SizedBuf,
-};
 use crate::{
-    utils::copy_exact, BlockingSignalReader, BlockingSignalWriter, NFrames, PhonicResult, Signal,
+    utils::{
+        copy_all, copy_all_buffered, copy_exact, copy_exact_buffered, Indexed, Observer, Poll,
+        SignalEvent,
+    },
+    BlockingSignalReader, BlockingSignalWriter, BufferedSignalWriter, PhonicResult, Signal,
     SignalDuration,
 };
-use std::{mem::MaybeUninit, time::Duration};
+use std::mem::MaybeUninit;
 
-pub trait UtilSignalExt: Sized + Signal {
-    fn read_into<T>(&mut self) -> PhonicResult<T>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        T::Uninit: ResizeBuf,
-    {
-        T::read(self)
-    }
-
-    fn read_into_sized<T>(&mut self) -> PhonicResult<T>
-    where
-        Self: BlockingSignalReader,
-        T: SizedBuf<Item = Self::Sample>,
-    {
-        T::read(self)
-    }
-
-    fn read_into_exact<T, D>(&mut self, duration: D) -> PhonicResult<T>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        D: SignalDuration,
-    {
-        T::read_exact(self, duration)
-    }
-
-    fn read_all_into<T>(&mut self) -> PhonicResult<T>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        T::Uninit: ResizeBuf,
-    {
-        T::read_all(self)
-    }
-
-    fn take<T>(&mut self) -> PhonicResult<BufSignal<T, Self::Sample>>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        T::Uninit: ResizeBuf,
-    {
-        BufSignal::read(self)
-    }
-
-    fn take_sized<T>(&mut self) -> PhonicResult<BufSignal<T, Self::Sample>>
-    where
-        Self: BlockingSignalReader,
-        T: SizedBuf<Item = Self::Sample>,
-    {
-        BufSignal::read_sized(self)
-    }
-
-    fn take_exact<T, D>(&mut self, duration: D) -> PhonicResult<BufSignal<T, Self::Sample>>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        D: SignalDuration,
-    {
-        BufSignal::read_exact(self, duration)
-    }
-
-    fn take_all<T>(&mut self) -> PhonicResult<BufSignal<T, Self::Sample>>
-    where
-        Self: BlockingSignalReader,
-        T: DynamicBuf<Item = Self::Sample>,
-        T::Uninit: ResizeBuf,
-    {
-        BufSignal::read_all(self)
-    }
-
-    fn copy_exact<R, D>(&mut self, reader: &mut R, duration: D) -> PhonicResult<()>
-    where
-        Self: BlockingSignalWriter,
-        R: BlockingSignalReader<Sample = Self::Sample>,
-        D: SignalDuration,
-    {
-        let mut buf = <DefaultBuf<Self::Sample>>::new_uninit();
-        copy_exact(reader, self, duration, &mut buf)
-    }
-
-    fn copy_exact_buffered<R, D>(
+pub trait SignalUtilsExt: Sized + Signal {
+    fn copy_exact<R>(
         &mut self,
         reader: &mut R,
-        duration: D,
+        duration: impl SignalDuration,
         buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()>
     where
         Self: BlockingSignalWriter,
         R: BlockingSignalReader<Sample = Self::Sample>,
-        D: SignalDuration,
     {
         copy_exact(reader, self, duration, buf)
     }
 
-    fn copy_all<R>(&mut self, reader: &mut R) -> PhonicResult<()>
+    fn copy_exact_buffered<R>(
+        &mut self,
+        reader: &mut R,
+        duration: impl SignalDuration,
+    ) -> PhonicResult<()>
     where
-        Self: BlockingSignalWriter,
+        Self: BufferedSignalWriter,
         R: BlockingSignalReader<Sample = Self::Sample>,
     {
-        let mut buf = <DefaultBuf<Self::Sample>>::new_uninit();
-        copy_all(reader, self, &mut buf)
+        copy_exact_buffered(reader, self, duration)
     }
 
-    fn copy_all_buffered<R>(
+    fn copy_all<R>(
         &mut self,
         reader: &mut R,
         buf: &mut [MaybeUninit<Self::Sample>],
@@ -122,6 +44,14 @@ pub trait UtilSignalExt: Sized + Signal {
         R: BlockingSignalReader<Sample = Self::Sample>,
     {
         copy_all(reader, self, buf)
+    }
+
+    fn copy_all_buffered<R>(&mut self, reader: &mut R) -> PhonicResult<()>
+    where
+        Self: BufferedSignalWriter,
+        R: BlockingSignalReader<Sample = Self::Sample>,
+    {
+        copy_all_buffered(reader, self)
     }
 
     fn indexed(self) -> Indexed<Self> {
@@ -161,4 +91,4 @@ pub trait UtilSignalExt: Sized + Signal {
     }
 }
 
-impl<T: Sized + Signal> UtilSignalExt for T {}
+impl<T: Sized + Signal> SignalUtilsExt for T {}

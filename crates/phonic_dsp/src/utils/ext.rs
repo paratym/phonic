@@ -1,7 +1,8 @@
 use crate::utils::{Concat, Delay, Repeat, Slice, Split};
+use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalDuration};
 
-pub trait UtilSignalExt: Sized + Signal {
+pub trait DspUtilsExt: Sized + Signal {
     fn concat<T>(self, other: T) -> PhonicResult<Concat<(Self, T)>>
     where
         T: Signal<Sample = Self::Sample>,
@@ -65,8 +66,13 @@ pub trait UtilSignalExt: Sized + Signal {
     }
 
     fn split(self) -> Split<Self> {
-        Split::new(self)
+        let buf = DefaultSizedBuf::silence();
+        Split::new(self, buf)
+    }
+
+    fn split_buf<B: AsRef<[Self::Sample]>>(self, buf: B) -> Split<Self, B> {
+        Split::new(self, buf)
     }
 }
 
-impl<T: Signal> UtilSignalExt for T {}
+impl<T: Signal> DspUtilsExt for T {}

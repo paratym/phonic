@@ -157,7 +157,8 @@ where
     }
 
     fn finalize(&mut self) -> PhonicResult<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 }
 

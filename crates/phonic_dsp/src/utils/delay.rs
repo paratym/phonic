@@ -1,6 +1,7 @@
+use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_signal::{
-    utils::DefaultBuf, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample,
-    Signal, SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample, Signal,
+    SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -97,7 +98,7 @@ impl<T: SignalWriter> Delay<T> {
             return Ok(0);
         }
 
-        let buf = <DefaultBuf<_>>::default();
+        let buf = <DefaultSizedBuf<_>>::silence();
         let n_channels = self.spec().channels.count() as usize;
         let mut n_written = 0;
 

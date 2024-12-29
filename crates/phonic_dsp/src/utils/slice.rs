@@ -1,7 +1,9 @@
+use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_signal::{
-    delegate_signal, utils::DefaultBuf, FiniteSignal, IndexedSignal, IntoDuration, NFrames,
-    NSamples, PhonicError, PhonicResult, Signal, SignalDuration, SignalReader, SignalSeeker,
-    SignalWriter,
+    delegate_signal,
+    utils::{copy_exact, NullSignal},
+    FiniteSignal, IndexedSignal, IntoDuration, NFrames, NSamples, PhonicError, PhonicResult,
+    Signal, SignalDuration, SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -112,7 +114,7 @@ impl<T: IndexedSignal + SignalReader> SignalReader for Slice<T> {
 
 impl<T: IndexedSignal + SignalWriter> Slice<T> {
     fn write_padding(&mut self) -> PhonicResult<()> {
-        let buf = <DefaultBuf<_>>::default();
+        let buf = DefaultSizedBuf::<T::Sample>::silence();
 
         let buf_len = buf.len();
         let n_channels = self.spec().channels.count() as usize;
@@ -121,12 +123,14 @@ impl<T: IndexedSignal + SignalWriter> Slice<T> {
             let pos = self.inner.pos();
             let n_before = self.start.saturating_sub(pos);
             if n_before == 0 {
-                break Ok(());
+                break;
             }
 
             let len = buf_len.min(n_before as usize * n_channels);
             self.inner.write(&buf[..len])?;
         }
+
+        Ok(())
     }
 }
 

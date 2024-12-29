@@ -117,6 +117,7 @@ delegate_group! {
                 let dst = &mut buf[n_samples..n_samples + slice_len];
 
                 crate::utils::copy_to_uninit_slice(src, dst);
+
                 self.commit_samples(slice_len);
                 n_samples += slice_len;
             }
@@ -130,6 +131,7 @@ delegate_group! {
         ) -> &'a mut [Self::Sample] {
             let n_samples = self.read_available(buf);
             let uninit_slice = &mut buf[..n_samples];
+
             unsafe { crate::utils::slice_as_init_mut(uninit_slice) }
         }
     }
@@ -147,8 +149,8 @@ delegate_group! {
         ) -> crate::PhonicResult<&'a mut [Self::Sample]> {
             let n_samples = self.read_blocking(buf)?;
             let uninit_slice = &mut buf[..n_samples];
-            let init_slice = unsafe { crate::utils::slice_as_init_mut(uninit_slice) };
 
+            let init_slice = unsafe { crate::utils::slice_as_init_mut(uninit_slice) };
             Ok(init_slice)
         }
 
@@ -179,7 +181,9 @@ delegate_group! {
             buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
         ) -> crate::PhonicResult<&'a mut [Self::Sample]> {
             self.read_exact(buf)?;
-            Ok(unsafe { crate::utils::slice_as_init_mut(buf) })
+
+            let init_slice = unsafe { crate::utils::slice_as_init_mut(buf) };
+            Ok(init_slice)
         }
     }
 
