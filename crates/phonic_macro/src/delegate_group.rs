@@ -1,15 +1,11 @@
 use crate::utils::CratePathVisitor;
-use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
-use quote::{quote, ToTokens};
-use std::collections::HashMap;
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use syn::{
-    braced,
-    parse::{Parse, ParseStream, Parser},
-    punctuated::Punctuated,
-    spanned::Spanned,
+    parse::{Parse, ParseStream},
     visit_mut::VisitMut,
-    AttrStyle, Attribute, Ident, ItemTrait, Meta, MetaList, Path, PathArguments, PathSegment,
-    PredicateType, Token, TraitItem, Type, TypePath, WherePredicate,
+    Attribute, Ident, ItemTrait, Meta, MetaList, Path, PathSegment, PredicateType, Token,
+    TraitItem, Type, TypePath, WherePredicate,
 };
 
 pub struct DelegateGroupInput {
@@ -17,31 +13,19 @@ pub struct DelegateGroupInput {
     traits: Vec<ItemTrait>,
 }
 
-#[derive(Clone)]
-pub struct TraitSignature {
-    pub subgroups: Vec<Ident>,
-    pub trait_token: Token![trait],
-    pub path: Path,
-    pub items: Vec<TraitItem>,
-}
-
 pub fn gen_delegate_group(mut input: DelegateGroupInput) -> syn::Result<TokenStream> {
-    let mut subgroups = input.take_subgroup_attrs()?;
-    let input_traits = input.traits.clone();
-    let macro_ident = input.gen_macro_ident();
+    let mut input_traits = input.traits.clone();
+    input_traits.iter_mut().for_each(remove_attrs);
 
+    let macro_ident = input.gen_macro_ident();
     let internal_macro_name = format!("_{}", macro_ident.clone());
     let internal_macro_ident = Ident::new(internal_macro_name.as_str(), macro_ident.span());
 
-    input.expand_crate_paths();
     input.filter_bounded_items();
+    input.remove_default_impls();
+    input.expand_crate_paths();
 
-    let mut traits = input.into_trait_signatures();
-    traits.iter_mut().for_each(|signature| {
-        if let Some(subgroups) = subgroups.remove(signature.ident()) {
-            signature.subgroups.extend(subgroups);
-        }
-    });
+    let DelegateGroupInput { mod_path, traits } = input;
 
     Ok(quote! {
         #(#input_traits)*
@@ -50,6 +34,7 @@ pub fn gen_delegate_group(mut input: DelegateGroupInput) -> syn::Result<TokenStr
         macro_rules! #internal_macro_ident {
             ($($input:tt)*) => {
                 ::phonic_macro::delegate_impl! {
+                    mod as #mod_path;
                     #(#traits)*
                     $($input)*
                 }
@@ -61,44 +46,6 @@ pub fn gen_delegate_group(mut input: DelegateGroupInput) -> syn::Result<TokenStr
 }
 
 impl DelegateGroupInput {
-    fn take_subgroup_attrs(&mut self) -> syn::Result<HashMap<Ident, Vec<Ident>>> {
-        let mut trait_subgroups = HashMap::new();
-
-        for trait_ in &mut self.traits {
-            let meta_list = trait_
-                .attrs
-                .iter()
-                .enumerate()
-                .find_map(|(i, attr)| match attr {
-                    Attribute {
-                        style: AttrStyle::Outer,
-                        meta: Meta::List(list),
-                        ..
-                    } if list.path.segments.len() == 1
-                        && list.path.segments.last().unwrap().ident == "subgroup" =>
-                    {
-                        Some((i, list))
-                    }
-                    _ => None,
-                });
-
-            let Some((attr_i, meta_list)) = meta_list else {
-                continue;
-            };
-
-            let subgroup_list = Parser::parse2(
-                Punctuated::<Ident, Token![,]>::parse_terminated,
-                meta_list.tokens.clone(),
-            )?;
-
-            let subgroups = subgroup_list.into_iter().collect();
-            trait_subgroups.insert(trait_.ident.clone(), subgroups);
-            trait_.attrs.remove(attr_i);
-        }
-
-        Ok(trait_subgroups)
-    }
-
     fn gen_macro_ident(&self) -> Ident {
         let base_trait = self.traits.first().unwrap();
         let macro_ident_str = format!("delegate_{}", base_trait.ident).to_lowercase();
@@ -142,88 +89,35 @@ impl DelegateGroupInput {
         });
     }
 
-    fn into_trait_signatures(self) -> Vec<TraitSignature> {
-        let Self { mod_path, traits } = self;
-
-        traits
-            .into_iter()
-            .map(|trait_| {
-                let ItemTrait {
-                    trait_token,
-                    ident,
-                    mut items,
-                    ..
-                } = trait_;
-
-                let mut path = mod_path.clone();
-                path.segments.push(PathSegment {
-                    ident,
-                    arguments: PathArguments::None,
-                });
-
-                items.iter_mut().for_each(|item| match item {
-                    TraitItem::Type(type_) => {
-                        type_.attrs.clear();
-                        type_.colon_token = None;
-                        type_.bounds.clear();
-                        type_.default = None;
-                    }
-                    TraitItem::Const(const_) => {
-                        const_.attrs.clear();
-                        const_.default = None;
-                    }
-                    TraitItem::Fn(fn_) => {
-                        fn_.attrs.clear();
-                        fn_.default = None;
-                    }
-                    _ => {}
-                });
-
-                TraitSignature {
-                    subgroups: Vec::new(),
-                    trait_token,
-                    path,
-                    items,
+    fn remove_default_impls(&mut self) {
+        self.traits.iter_mut().for_each(|trait_| {
+            trait_.items.iter_mut().for_each(|item| match item {
+                TraitItem::Type(type_) => {
+                    type_.attrs.clear();
+                    type_.colon_token = None;
+                    type_.bounds.clear();
+                    type_.default = None;
                 }
+                TraitItem::Const(const_) => {
+                    const_.attrs.clear();
+                    const_.default = None;
+                }
+                TraitItem::Fn(fn_) => {
+                    fn_.attrs.clear();
+                    fn_.default = None;
+                }
+                _ => {}
             })
-            .collect()
-    }
-}
-
-impl TraitSignature {
-    pub fn ident(&self) -> &Ident {
-        &self.path.segments.last().unwrap().ident
+        });
     }
 }
 
 impl Parse for DelegateGroupInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let attrs = Attribute::parse_inner(input)?;
-        let mod_path = match attrs.as_slice() {
-            [Attribute {
-                meta:
-                    Meta::List(MetaList {
-                        path:
-                            Path {
-                                leading_colon: None,
-                                segments,
-                                ..
-                            },
-                        tokens,
-                        ..
-                    }),
-                ..
-            }] if segments.len() == 1 && segments.last().unwrap().ident == "mod_path" => {
-                Parser::parse2(Path::parse_mod_style, tokens.clone())?
-            }
-            [] | [_] => {
-                return Err(syn::Error::new(
-                    input.span(),
-                    "expected a mod_path attribute",
-                ))
-            }
-            [..] => return Err(syn::Error::new(input.span(), "too many attributes")),
-        };
+        <Token![mod]>::parse(input)?;
+        <Token![as]>::parse(input)?;
+        let mod_path = input.parse()?;
+        <Token![;]>::parse(input)?;
 
         let mut traits = Vec::new();
         while !input.is_empty() {
@@ -238,72 +132,24 @@ impl Parse for DelegateGroupInput {
     }
 }
 
-impl Parse for TraitSignature {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let attrs = Attribute::parse_outer(input)?;
-        let subgroups = match attrs.as_slice() {
-            [] => Vec::new(),
-            [Attribute {
-                meta:
-                    Meta::List(MetaList {
-                        path:
-                            Path {
-                                leading_colon: None,
-                                segments,
-                            },
-                        tokens,
-                        ..
-                    }),
-                ..
-            }] if segments.len() == 1 && segments.last().unwrap().ident == "subgroup" => {
-                let subgroup_list = Parser::parse2(
-                    Punctuated::<Ident, Token![,]>::parse_terminated,
-                    tokens.clone(),
-                )?;
-
-                subgroup_list.into_iter().collect()
-            }
-            [attr] => return Err(syn::Error::new(attr.span(), "expected subgroup attribute")),
-            [_, attr, ..] => return Err(syn::Error::new(attr.span(), "too many attributes")),
-        };
-
-        let trait_token = input.parse()?;
-        let path = input.parse()?;
-
-        let content;
-        braced!(content in input);
-
-        let mut items = Vec::new();
-        while !content.is_empty() {
-            items.push(content.parse()?);
+fn remove_attrs(trait_: &mut ItemTrait) {
+    let attrs = trait_.attrs.iter().filter(|attr| match attr {
+        Attribute {
+            meta: Meta::List(MetaList { path, .. }),
+            ..
+        } if path
+            .segments
+            .last()
+            .is_some_and(|seg| seg.ident == "subgroup") =>
+        {
+            false
         }
+        Attribute {
+            meta: Meta::List(MetaList { path, .. }),
+            ..
+        } if path.segments.last().is_some_and(|seg| seg.ident == "rcv") => false,
+        _ => true,
+    });
 
-        Ok(Self {
-            subgroups,
-            trait_token,
-            path,
-            items,
-        })
-    }
-}
-
-impl ToTokens for TraitSignature {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        if !self.subgroups.is_empty() {
-            let subgroups = &self.subgroups;
-            let attr = quote! { #[subgroup(#(#subgroups),*)] };
-            attr.to_tokens(tokens);
-        }
-
-        self.trait_token.to_tokens(tokens);
-        self.path.to_tokens(tokens);
-
-        let mut item_tokens = TokenStream::new();
-        self.items
-            .iter()
-            .for_each(|item| item.to_tokens(&mut item_tokens));
-
-        let items = TokenTree::Group(Group::new(Delimiter::Brace, item_tokens));
-        items.to_tokens(tokens);
-    }
+    trait_.attrs = attrs.cloned().collect();
 }

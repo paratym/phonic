@@ -1,26 +1,28 @@
-use crate::{delegate_group::TraitSignature, utils::CratePathVisitor};
+use crate::utils::CratePathVisitor;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
     braced,
-    parse::{Parse, ParseStream},
+    parse::{Parse, ParseStream, Parser},
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Brace, Impl, Paren},
     visit_mut::VisitMut,
-    Block, Expr, ExprCall, ExprPath, FnArg, Generics, Ident, ImplItem, ImplItemConst, ImplItemFn,
-    ImplItemType, ItemImpl, Local, LocalInit, Pat, PatIdent, Path, PathSegment, PredicateType,
-    QSelf, Receiver, Stmt, Token, TraitBound, TraitBoundModifier, TraitItem, TraitItemFn, Type,
-    TypeParamBound, TypePath, Visibility, WhereClause, WherePredicate,
+    Attribute, Block, Expr, ExprCall, ExprPath, FnArg, Generics, Ident, ImplItem, ImplItemConst,
+    ImplItemFn, ImplItemType, ItemImpl, ItemTrait, Local, LocalInit, Meta, MetaList, Pat, PatIdent,
+    Path, PathSegment, PredicateType, QSelf, Receiver, Stmt, Token, TraitBound, TraitBoundModifier,
+    TraitItem, TraitItemFn, Type, TypeParamBound, TypePath, Visibility, WhereClause,
+    WherePredicate,
 };
 
 pub struct DelegateImplInput {
-    traits: Vec<TraitSignature>,
+    mod_path: Path,
+    traits: Vec<ItemTrait>,
     block: DelegateBlock,
 }
 
 struct DelegateBlock {
-    delegate_token: Ident,
+    impl_token: Token![impl],
     generics: Generics,
     selector: TraitSelector,
     for_token: Token![for],
@@ -46,7 +48,7 @@ struct DelegateBranch {
 
 pub fn gen_delegate_impl(mut input: DelegateImplInput) -> syn::Result<TokenStream> {
     input.inline_crate_paths();
-    input.filter_traits();
+    input.filter_subgroups()?;
     let impl_items = input.into_impl_items()?;
 
     Ok(quote! { #(#impl_items)* })
@@ -56,44 +58,51 @@ impl DelegateImplInput {
     fn inline_crate_paths(&mut self) {
         let mut visitor = CratePathVisitor::inline_strict();
 
-        self.traits.iter_mut().for_each(|signature| {
-            visitor.visit_path_mut(&mut signature.path);
-
-            signature
-                .items
-                .iter_mut()
-                .for_each(|item| visitor.visit_trait_item_mut(item));
-        });
+        visitor.visit_path_mut(&mut self.mod_path);
+        self.traits
+            .iter_mut()
+            .for_each(|trait_| visitor.visit_item_trait_mut(trait_));
     }
 
-    fn filter_traits(&mut self) {
+    fn filter_subgroups(&mut self) -> syn::Result<()> {
         let filtered = self
             .traits
             .iter()
-            .filter(|signature| self.block.selector.includes(signature))
+            .map(|trait_| {
+                self.block
+                    .selector
+                    .includes(trait_)
+                    .map(|included| (included, trait_))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|(included, _)| *included)
+            .map(|(_, trait_)| trait_)
             .cloned()
             .collect();
 
         self.traits = filtered;
+
+        Ok(())
     }
 
     fn into_impl_items(self) -> syn::Result<Vec<ItemImpl>> {
-        let Self { traits, block } = self;
+        let Self {
+            mod_path,
+            traits,
+            block,
+        } = self;
 
         traits
             .into_iter()
-            .map(|signature| block.gen_trait_impl(signature))
+            .map(|signature| block.gen_trait_impl(&mod_path, signature))
             .collect()
     }
 }
 
 impl DelegateBlock {
-    fn gen_trait_impl(&self, signature: TraitSignature) -> syn::Result<ItemImpl> {
-        let TraitSignature { path, items, .. } = signature;
-
-        let impl_token = Impl {
-            span: self.delegate_token.span(),
-        };
+    fn gen_trait_impl(&self, mod_path: &Path, signature: ItemTrait) -> syn::Result<ItemImpl> {
+        let ItemTrait { ident, items, .. } = signature;
 
         let mut generics = self.generics.clone();
         let where_clause = generics.where_clause.get_or_insert(WhereClause {
@@ -134,32 +143,46 @@ impl DelegateBlock {
 
         where_clause.predicates.extend(rcv_predicates);
 
-        where_clause
-            .predicates
-            .push(WherePredicate::Type(PredicateType {
+        // if !supertraits.is_empty() {
+        //     let super_predicates = WherePredicate::Type(PredicateType {
+        //         lifetimes: None,
+        //         bounded_ty: self.self_ty.clone(),
+        //         colon_token: Default::default(),
+        //         bounds: supertraits,
+        //     });
+        //
+        //     where_clause.predicates.push(super_predicates);
+        // }
+
+        let mut trait_path = mod_path.clone();
+        trait_path.segments.push(ident.into());
+
+        let delegate_predicate = WherePredicate::Type(PredicateType {
+            lifetimes: None,
+            bounded_ty: self.delegate_ty.clone(),
+            colon_token: Default::default(),
+            bounds: Punctuated::from_iter([TypeParamBound::Trait(TraitBound {
+                paren_token: None,
+                modifier: TraitBoundModifier::None,
                 lifetimes: None,
-                bounded_ty: self.delegate_ty.clone(),
-                colon_token: Default::default(),
-                bounds: Punctuated::from_iter([TypeParamBound::Trait(TraitBound {
-                    paren_token: None,
-                    modifier: TraitBoundModifier::None,
-                    lifetimes: None,
-                    path: path.clone(),
-                })]),
-            }));
+                path: trait_path.clone(),
+            })]),
+        });
+
+        where_clause.predicates.push(delegate_predicate);
 
         let impl_items = items
             .into_iter()
-            .map(|item| self.gen_trait_item_impl(&path, item))
+            .map(|item| self.gen_trait_item_impl(&trait_path, item))
             .collect::<Result<_, _>>()?;
 
         Ok(ItemImpl {
             attrs: Vec::new(),
             defaultness: None,
             unsafety: None,
-            impl_token,
+            impl_token: self.impl_token,
             generics,
-            trait_: Some((None, path, self.for_token)),
+            trait_: Some((None, trait_path, self.for_token)),
             self_ty: Box::new(self.self_ty.clone()),
             brace_token: Brace::default(),
             items: impl_items,
@@ -330,43 +353,71 @@ impl DelegateBlock {
 }
 
 impl TraitSelector {
-    fn includes(&self, signature: &TraitSignature) -> bool {
+    fn includes(&self, trait_: &ItemTrait) -> syn::Result<bool> {
         let (idents, explicit) = match self {
             Self::Explicit { included } => (included, true),
             Self::Wildcard { omitted } => (omitted, false),
         };
 
+        let subgroups = match trait_.attrs.as_slice() {
+            [Attribute {
+                meta:
+                    Meta::List(MetaList {
+                        path:
+                            Path {
+                                leading_colon: None,
+                                segments,
+                            },
+                        tokens,
+                        ..
+                    }),
+                ..
+            }] if segments.len() == 1 && segments.last().unwrap().ident == "subgroup" => {
+                let subgroup_list = Parser::parse2(
+                    Punctuated::<Ident, Token![,]>::parse_terminated,
+                    tokens.clone(),
+                )?;
+
+                subgroup_list.into_iter().collect()
+            }
+            [attr] => return Err(syn::Error::new(attr.span(), "expected subgroup attribute")),
+            // [_, attr, ..] => return Err(syn::Error::new(attr.span(), "too many attributes")),
+            _ => Vec::new(),
+        };
+
         let matches = idents.iter().any(|ident| {
-            ident == signature.ident()
-                || signature.subgroups.iter().any(|subgroup| ident == subgroup)
+            *ident == trait_.ident || subgroups.iter().any(|subgroup| ident == subgroup)
         });
 
-        matches == explicit
+        Ok(matches == explicit)
     }
 }
 
 impl Parse for DelegateImplInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        <Token![mod]>::parse(input)?;
+        <Token![as]>::parse(input)?;
+        let mod_path = input.parse()?;
+        <Token![;]>::parse(input)?;
+
         let mut traits = Vec::new();
-        while input.peek(Token![#]) || input.peek(Token![trait]) {
+        while !input.peek(Token![impl]) {
             traits.push(input.parse()?);
         }
 
         let block = input.parse()?;
 
-        Ok(Self { traits, block })
+        Ok(Self {
+            mod_path,
+            traits,
+            block,
+        })
     }
 }
 
 impl Parse for DelegateBlock {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let delegate_token = Ident::parse(input)?;
-        if delegate_token != "delegate" {
-            return Err(syn::Error::new(
-                delegate_token.span(),
-                "expected `delegate`",
-            ));
-        }
+        let impl_token = input.parse()?;
 
         let generics = input.parse()?;
         let selector = input.parse()?;
@@ -431,7 +482,7 @@ impl Parse for DelegateBlock {
         }
 
         Ok(Self {
-            delegate_token,
+            impl_token,
             generics,
             selector,
             for_token,

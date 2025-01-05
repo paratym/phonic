@@ -2,7 +2,6 @@ use crate::{
     BlockingSignalReader, BlockingSignalWriter, BufferedSignalWriter, FromDuration, IntoDuration,
     NFrames, NSamples, PhonicError, PhonicResult, Signal, SignalDuration,
 };
-use core::panic;
 use std::mem::MaybeUninit;
 
 pub fn copy_exact<R, W>(
@@ -110,7 +109,6 @@ where
         let buf = writer.available_slots();
         if buf.is_empty() {
             // TODO: block until slots are available?
-            panic!();
             continue;
         }
 

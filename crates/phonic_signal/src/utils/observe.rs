@@ -92,7 +92,7 @@ impl<T: Signal> Callback<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !Mut for Observer<T> {
+    impl<T> * + !Mut for Observer<T> {
         Self as T;
 
         &self => &self.inner;

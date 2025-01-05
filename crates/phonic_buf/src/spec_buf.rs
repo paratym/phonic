@@ -198,7 +198,7 @@ where
     B: Borrow<[S]>,
     S: Sample,
 {
-    fn available_samples(&self) -> &[Self::Sample] {
+    fn read_available(&self) -> &[Self::Sample] {
         &self.buf.borrow()[self.i..]
     }
 }

@@ -59,7 +59,7 @@ impl<T: Signal> Limit<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !Read + !Write for Limit<T> {
+    impl<T> * + !Read + !Write for Limit<T> {
         Self as T;
 
         &self => &self.inner;

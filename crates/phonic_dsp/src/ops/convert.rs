@@ -43,7 +43,7 @@ where
 }
 
 delegate_signal! {
-    delegate<T, S: Sample, B> * + !Signal + !Read + !Write for Convert<T, S, B> {
+    impl<T, S: Sample, B> * + !Signal + !Read + !Write for Convert<T, S, B> {
         Self as T;
 
         &self => &self.inner;

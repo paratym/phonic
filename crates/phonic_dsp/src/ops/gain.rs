@@ -54,7 +54,7 @@ impl<T, R> Gain<T, R> {
 }
 
 delegate_signal! {
-    delegate<T, R> * + !Read + !Write for Gain<T, R> {
+    impl<T, R> * + !Read + !Write for Gain<T, R> {
         Self as T;
 
         &self => &self.inner;

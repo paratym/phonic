@@ -64,7 +64,7 @@ impl<T: Signal> Slice<T> {
 }
 
 delegate_signal! {
-    delegate<T> Signal for Slice<T> {
+    impl<T> Signal for Slice<T> {
         Self as T;
 
         &self => &self.inner;

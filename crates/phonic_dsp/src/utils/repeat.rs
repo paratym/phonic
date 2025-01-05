@@ -29,7 +29,7 @@ impl<T> Repeat<T> {
 }
 
 delegate_signal! {
-    delegate<T> Signal for Repeat<T> {
+    impl<T> Signal for Repeat<T> {
         Self as T;
 
         &self => &self.inner;

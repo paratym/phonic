@@ -24,7 +24,7 @@ impl<T> Complement<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !Read + !Write for Complement<T> {
+    impl<T> * + !Read + !Write for Complement<T> {
         Self as T;
 
         &self => &self.inner;

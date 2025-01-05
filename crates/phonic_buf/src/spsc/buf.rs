@@ -23,7 +23,7 @@ pub struct SpscBuf<T, B> {
     r_idx: AtomicUsize,
 
     /// only used to differentiate between an empty and a full buffer when r_idx == w_idx.
-    /// if both indecies are equal and the last operation was a write the buffer must be full.
+    /// if both indices are equal and the last operation was a write the buffer must be full.
     trailing_write: AtomicBool,
 }
 
@@ -46,15 +46,15 @@ impl<T, B> SpscBuf<T, B> {
         let buf_cap = slice.len();
 
         let inner = Self {
+            _buf: buf,
+            _element: PhantomData,
+
             buf_ptr,
             buf_cap,
 
             r_idx: AtomicUsize::default(),
             w_idx: AtomicUsize::default(),
             trailing_write: AtomicBool::default(),
-
-            _buf: buf,
-            _element: PhantomData,
         };
 
         let inner_ref = Arc::new(inner);
@@ -62,10 +62,6 @@ impl<T, B> SpscBuf<T, B> {
     }
 
     unsafe fn drop_elements(&self, start: usize, end: usize) {
-        if start == end && !self.trailing_write.load(Ordering::Acquire) {
-            return;
-        }
-
         let mut ptr: *mut T = self.buf_ptr.add(start).cast();
         let end_ptr: *mut T = self.buf_ptr.add(end).cast();
         let wrap_ptr: *mut T = self.buf_ptr.add(self.buf_cap).cast();
@@ -184,6 +180,12 @@ impl<T, B> Consumer<T, B> {
     }
 
     pub fn commit(&mut self, n: usize) {
+        if n == 0 {
+            // this check is necessary because drop_elements assumes the buffer is always full when
+            // start == end
+            return;
+        }
+
         let r_idx = self.inner.r_idx.load(Ordering::Relaxed);
         let end_idx = r_idx + n % self.inner.buf_cap;
 
@@ -205,6 +207,10 @@ impl<T, B> Drop for SpscBuf<T, B> {
     fn drop(&mut self) {
         let w_idx = self.w_idx.load(Ordering::Relaxed);
         let r_idx = self.r_idx.load(Ordering::Relaxed);
+
+        if r_idx == w_idx && !self.trailing_write.load(Ordering::Relaxed) {
+            return;
+        }
 
         unsafe { self.drop_elements(r_idx, w_idx) }
     }

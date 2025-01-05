@@ -10,7 +10,7 @@ pub struct UnWriteable<T>(pub T);
 pub struct UnSeekable<T>(pub T);
 
 delegate_signal! {
-    delegate<T> * + !FiniteSignal for Infinite<T> {
+    impl<T> * + !FiniteSignal for Infinite<T> {
         Self as T;
 
         &self => &self.0;
@@ -26,7 +26,7 @@ impl<T: Signal> FiniteSignal for Infinite<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !SignalReader for UnReadable<T> {
+    impl<T> * + !SignalReader for UnReadable<T> {
         Self as T;
 
         &self => &self.0;
@@ -41,7 +41,7 @@ impl<T: Signal> SignalReader for UnReadable<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !SignalWriter for UnWriteable<T> {
+    impl<T> * + !SignalWriter for UnWriteable<T> {
         Self as T;
 
         &self => &self.0;
@@ -60,7 +60,7 @@ impl<T: Signal> SignalWriter for UnWriteable<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !SignalSeeker for UnSeekable<T> {
+    impl<T> * + !SignalSeeker for UnSeekable<T> {
         Self as T;
 
         &self => &self.0;

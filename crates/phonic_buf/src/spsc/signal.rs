@@ -4,7 +4,8 @@ use crate::{
 };
 use phonic_signal::{
     utils::copy_to_uninit_slice, BufferedSignal, BufferedSignalReader, BufferedSignalWriter,
-    NSamples, PhonicResult, Sample, Signal, SignalDuration, SignalReader, SignalSpec, SignalWriter,
+    NSamples, PhonicError, PhonicResult, Sample, Signal, SignalDuration, SignalReader, SignalSpec,
+    SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -108,6 +109,14 @@ impl<T: Sample, B> BufferedSignal for SignalProducer<T, B> {
 impl<T: Sample, B> SignalReader for SignalConsumer<T, B> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let (trailing, leading) = self.consumer.elements();
+        if trailing.is_empty() {
+            if self.consumer.is_abandoned() {
+                return Ok(0);
+            }
+
+            return Err(PhonicError::NotReady);
+        }
+
         let trailing_len = trailing.len().min(buf.len());
         let leading_len = leading.len().min(buf.len() - trailing_len);
         let n_samples = trailing_len + leading_len;
@@ -121,7 +130,7 @@ impl<T: Sample, B> SignalReader for SignalConsumer<T, B> {
 }
 
 impl<T: Sample, B> BufferedSignalReader for SignalConsumer<T, B> {
-    fn available_samples(&self) -> &[Self::Sample] {
+    fn read_available(&self) -> &[Self::Sample] {
         let (trailing, _) = self.consumer.elements();
 
         trailing
@@ -130,6 +139,10 @@ impl<T: Sample, B> BufferedSignalReader for SignalConsumer<T, B> {
 
 impl<T: Sample, B> SignalWriter for SignalProducer<T, B> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
+        if self.producer.is_abandoned() {
+            return Err(PhonicError::Terminated);
+        }
+
         let (trailing, leading) = self.producer.slots();
         let trailing_len = trailing.len().min(buf.len());
         let leading_len = trailing.len().min(buf.len() - trailing_len);

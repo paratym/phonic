@@ -1,7 +1,7 @@
 use proc_macro2::Span;
 use syn::{visit_mut::VisitMut, Ident, Path, PathSegment, Token};
 
-enum CratePathVisitorMethod {
+pub enum CratePathVisitorMethod {
     Expand,
     Inline { strict: bool },
 }

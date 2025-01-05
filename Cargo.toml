@@ -25,10 +25,10 @@ members = [
 
 [features]
 default = []
-buf = ["dep:phonic_buf"]
+buf = ["dep:phonic_buf", "phonic_buf/signal"]
 dsp = ["dep:phonic_dsp"]
 
-io = ["dep:phonic_io", "phonic_dsp?/io"]
+io = ["dep:phonic_io", "phonic_signal/io", "phonic_dsp?/io"]
 io-full = ["io", "wave", "pcm"]
 wave = ["io", "phonic_io/wave"]
 pcm = ["io", "phonic_io/pcm"]
@@ -44,4 +44,3 @@ phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true 
 
 [dev-dependencies]
 cpal = "0.15.3"
-rtrb = "0.3.1"

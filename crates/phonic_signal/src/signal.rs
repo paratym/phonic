@@ -2,7 +2,7 @@ use phonic_macro::delegate_group;
 use std::ops::{Deref, DerefMut};
 
 delegate_group! {
-    #![mod_path(crate)]
+    mod as crate;
 
     pub trait Signal {
         type Sample: crate::Sample;
@@ -11,11 +11,11 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Buffered)]
-    pub trait BufferedSignal: Signal {
+    pub trait BufferedSignal: crate::Signal {
         fn commit_samples(&mut self, n_samples: usize);
     }
 
-    pub trait IndexedSignal: Signal {
+    pub trait IndexedSignal: crate::Signal {
         fn pos(&self) -> u64;
 
         fn pos_duration<D: crate::SignalDuration>(&self) -> D
@@ -27,7 +27,7 @@ delegate_group! {
         }
     }
 
-    pub trait FiniteSignal: Signal {
+    pub trait FiniteSignal: crate::Signal {
         fn len(&self) -> u64;
 
         fn len_duration<D: crate::SignalDuration>(&self) -> D
@@ -63,7 +63,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Read)]
-    pub trait SignalReader: Signal {
+    pub trait SignalReader: crate::Signal {
         /// reads samples from this signal into the given buffer.
         /// returns the number of interleaved samples read.
         fn read(
@@ -98,46 +98,13 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Read, Buffered)]
-    pub trait BufferedSignalReader: BufferedSignal + SignalReader {
-        fn available_samples(&self) -> &[Self::Sample];
-
-        fn read_available(&mut self, buf: &mut [std::mem::MaybeUninit<Self::Sample>]) -> usize {
-            let mut n_samples = 0;
-            let buf_len = buf.len();
-
-            while n_samples < buf_len {
-                let available = self.available_samples();
-                let available_len = available.len();
-                if available_len == 0 {
-                    break;
-                }
-
-                let slice_len = available_len.min(buf_len - n_samples);
-                let src = &available[..slice_len];
-                let dst = &mut buf[n_samples..n_samples + slice_len];
-
-                crate::utils::copy_to_uninit_slice(src, dst);
-
-                self.commit_samples(slice_len);
-                n_samples += slice_len;
-            }
-
-            n_samples
-        }
-
-        fn read_init_available<'a>(
-            &mut self,
-            buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> &'a mut [Self::Sample] {
-            let n_samples = self.read_available(buf);
-            let uninit_slice = &mut buf[..n_samples];
-
-            unsafe { crate::utils::slice_as_init_mut(uninit_slice) }
-        }
+    pub trait BufferedSignalReader: crate::BufferedSignal + crate::SignalReader {
+        fn peek(&self) -> &[Self::Sample];
+        fn try_peek(&self) -> crate::PhonicResult<&[Self::Sample]>;
     }
 
     #[subgroup(Mut, Read, Blocking)]
-    pub trait BlockingSignalReader: SignalReader {
+    pub trait BlockingSignalReader: crate::SignalReader {
         fn read_blocking(
             &mut self,
             buf: &mut [std::mem::MaybeUninit<Self::Sample>]
@@ -188,7 +155,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Write)]
-    pub trait SignalWriter: Signal {
+    pub trait SignalWriter: crate::Signal {
         /// writes samples from the given buffer to this signal.
         /// returns the number of interleaved samples written.
         fn write(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
@@ -197,7 +164,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Write, Buffered)]
-    pub trait BufferedSignalWriter: BufferedSignal + SignalWriter {
+    pub trait BufferedSignalWriter: crate::BufferedSignal + crate::SignalWriter {
         fn available_slots(&mut self) -> &mut [std::mem::MaybeUninit<Self::Sample>];
 
         fn write_available(&mut self, buf: &[Self::Sample]) -> usize {
@@ -226,7 +193,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Write, Blocking)]
-    pub trait BlockingSignalWriter: SignalWriter {
+    pub trait BlockingSignalWriter: crate::SignalWriter {
         fn write_blocking(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
         fn flush_blocking(&mut self) -> crate::PhonicResult<()>;
 
@@ -249,7 +216,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut)]
-    pub trait SignalSeeker: Signal {
+    pub trait SignalSeeker: crate::Signal {
         fn seek(&mut self, offset: i64) -> crate::PhonicResult<()>;
 
         fn seek_forward<D>(&mut self, offset: D) -> crate::PhonicResult<()>
@@ -318,7 +285,7 @@ delegate_group! {
 }
 
 delegate_signal! {
-    delegate<T> * for T {
+    impl<T> * for T {
         Self as T::Target;
 
         &self => self.deref()

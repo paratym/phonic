@@ -17,7 +17,7 @@ impl<T> Indexed<T> {
 }
 
 delegate_signal! {
-    delegate<T> * + !IndexedSignal + !Mut for Indexed<T> {
+    impl<T> * + !IndexedSignal + !Mut for Indexed<T> {
         Self as T;
 
         &self => &self.inner;
@@ -50,8 +50,8 @@ impl<T: SignalReader> SignalReader for Indexed<T> {
 }
 
 impl<T: BufferedSignalReader> BufferedSignalReader for Indexed<T> {
-    fn available_samples(&self) -> &[Self::Sample] {
-        self.inner.available_samples()
+    fn read_available(&self) -> &[Self::Sample] {
+        self.inner.read_available()
     }
 }
 

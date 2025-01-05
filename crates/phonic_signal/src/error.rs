@@ -10,7 +10,7 @@ pub enum PhonicError {
     /// The receiver is in an invalid state.
     InvalidState,
 
-    /// The operation requires data that was determined invalid.
+    /// The operation requires data that was determined to be invalid.
     InvalidData,
 
     /// The receiver is missing data required to complete the operation.
