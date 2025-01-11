@@ -3,7 +3,7 @@ use crate::{delegate_format, FormatWriter};
 pub struct DropFinalize<T: FormatWriter>(pub T);
 
 delegate_format! {
-    delegate<T: FormatWriter> * for DropFinalize<T> {
+    impl<T: FormatWriter> * for DropFinalize<T> {
         Self as T;
 
         &self => &self.0;

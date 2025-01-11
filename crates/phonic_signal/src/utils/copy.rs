@@ -1,6 +1,6 @@
 use crate::{
-    BlockingSignalReader, BlockingSignalWriter, BufferedSignalWriter, FromDuration, IntoDuration,
-    NFrames, NSamples, PhonicError, PhonicResult, Signal, SignalDuration,
+    BlockingSignal, BufferedSignalWriter, IntoDuration, NSamples, PhonicError, PhonicResult,
+    Signal, SignalDuration, SignalExt, SignalReader, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -11,8 +11,8 @@ pub fn copy_exact<R, W>(
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
 where
-    R: BlockingSignalReader,
-    W: BlockingSignalWriter<Sample = R::Sample>,
+    R: BlockingSignal + SignalReader,
+    W: BlockingSignal + SignalWriter<Sample = R::Sample>,
 {
     let spec = reader.spec().merged(writer.spec())?;
     let NSamples { n_samples } = duration.into_duration(&spec);
@@ -40,17 +40,21 @@ pub fn copy_exact_buffered<R, W>(
     duration: impl SignalDuration,
 ) -> PhonicResult<()>
 where
-    R: BlockingSignalReader,
-    W: BufferedSignalWriter<Sample = R::Sample>,
+    R: BlockingSignal + SignalReader,
+    W: BlockingSignal + BufferedSignalWriter<Sample = R::Sample>,
 {
     let spec = reader.spec().merged(writer.spec())?;
+    let n_channels = spec.channels.count() as usize;
     let n_samples = IntoDuration::<NSamples>::into_duration(duration, &spec).n_samples as usize;
     let mut n = 0;
 
     while n < n_samples {
-        let buf = writer.available_slots();
-        if buf.is_empty() {
-            // TODO: block until slots are available?
+        let Some(buf) = writer.buffer_mut() else {
+            return Err(PhonicError::OutOfBounds);
+        };
+
+        if buf.len() < n_channels {
+            writer.flush_blocking()?;
             continue;
         }
 
@@ -62,7 +66,7 @@ where
             Ok(n_read) => n_read,
         };
 
-        writer.commit_samples(n_read);
+        writer.commit(n_read);
         n += n_read;
     }
 
@@ -75,8 +79,8 @@ pub fn copy_all<R, W>(
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
 where
-    R: BlockingSignalReader,
-    W: BlockingSignalWriter<Sample = R::Sample>,
+    R: BlockingSignal + SignalReader,
+    W: BlockingSignal + SignalWriter<Sample = R::Sample>,
 {
     let _spec = reader.spec().merged(writer.spec())?;
 
@@ -100,21 +104,25 @@ where
 
 pub fn copy_all_buffered<R, W>(reader: &mut R, writer: &mut W) -> PhonicResult<()>
 where
-    R: BlockingSignalReader,
-    W: BufferedSignalWriter<Sample = R::Sample>,
+    R: BlockingSignal + SignalReader,
+    W: BlockingSignal + BufferedSignalWriter<Sample = R::Sample>,
 {
-    let _spec = reader.spec().merged(writer.spec())?;
+    let spec = reader.spec().merged(writer.spec())?;
+    let n_channels = spec.channels.count() as usize;
 
     loop {
-        let buf = writer.available_slots();
-        if buf.is_empty() {
-            // TODO: block until slots are available?
+        let Some(buf) = writer.buffer_mut() else {
+            break;
+        };
+
+        if buf.len() < n_channels {
+            writer.flush_blocking()?;
             continue;
         }
 
         match reader.read_blocking(buf) {
             Ok(0) => break,
-            Ok(n) => writer.commit_samples(n),
+            Ok(n) => writer.commit(n),
             Err(PhonicError::Interrupted | PhonicError::NotReady) => continue,
             Err(e) => return Err(e),
         }

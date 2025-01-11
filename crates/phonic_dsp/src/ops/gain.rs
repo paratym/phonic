@@ -1,6 +1,6 @@
 use crate::ops::{FromSample, IntoSample};
 use num_traits::Inv;
-use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalReader};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalExt, SignalReader};
 use std::{mem::MaybeUninit, ops::Mul};
 
 pub struct Gain<T, R> {

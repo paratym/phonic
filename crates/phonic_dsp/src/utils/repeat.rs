@@ -1,6 +1,6 @@
 use phonic_signal::{
-    delegate_signal, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, SignalReader,
-    SignalSeeker,
+    delegate_signal, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, SignalExt,
+    SignalReader, SignalSeeker,
 };
 use std::mem::MaybeUninit;
 

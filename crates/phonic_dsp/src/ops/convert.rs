@@ -1,10 +1,9 @@
 use crate::ops::ClipSample;
-use phonic_buf::DefaultSizedBuf;
 use phonic_signal::{
-    delegate_signal, utils::slice_as_init, BlockingSignalReader, BlockingSignalWriter,
-    PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+    delegate_signal, utils::slice_as_init, DefaultSizedBuf, PhonicResult, Sample, Signal,
+    SignalExt, SignalReader, SignalSpec, SignalWriter,
 };
-use std::{marker::PhantomData, mem::MaybeUninit, ops::DerefMut};
+use std::{marker::PhantomData, mem::MaybeUninit};
 
 pub struct Convert<T: Signal, S: Sample, B = DefaultSizedBuf<MaybeUninit<<T as Signal>::Sample>>> {
     inner: T,
@@ -59,27 +58,17 @@ impl<T: Signal, S: Sample, B> Signal for Convert<T, S, B> {
     }
 }
 
-impl<T, S, B> Convert<T, S, B>
+impl<T, S, B> SignalReader for Convert<T, S, B>
 where
-    T: Signal,
+    T: SignalReader,
     T::Sample: IntoSample<S>,
     S: Sample,
     B: AsMut<[MaybeUninit<T::Sample>]>,
 {
-    fn _read<F>(
-        &mut self,
-        read_inner: F,
-        buf: &mut [MaybeUninit<<Self as Signal>::Sample>],
-    ) -> PhonicResult<usize>
-    where
-        F: for<'a> Fn(
-            &mut T,
-            &'a mut [MaybeUninit<T::Sample>],
-        ) -> PhonicResult<&'a mut [T::Sample]>,
-    {
+    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let inner_buf = self.buf.as_mut();
         let buf_len = buf.len().min(inner_buf.len());
-        let samples = read_inner(&mut self.inner, &mut inner_buf[..buf_len])?;
+        let samples = self.inner.read_init(&mut inner_buf[..buf_len])?;
 
         buf.iter_mut()
             .zip(samples.iter())
@@ -91,40 +80,13 @@ where
     }
 }
 
-impl<T, S, B> SignalReader for Convert<T, S, B>
+impl<T, S, B> SignalWriter for Convert<T, S, B>
 where
-    T: SignalReader,
-    T::Sample: IntoSample<S>,
-    S: Sample,
-    B: AsMut<[MaybeUninit<T::Sample>]>,
-{
-    fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        self._read(SignalReader::read_init, buf)
-    }
-}
-
-impl<T, S, B> BlockingSignalReader for Convert<T, S, B>
-where
-    T: BlockingSignalReader,
-    T::Sample: IntoSample<S>,
-    S: Sample,
-    B: AsMut<[MaybeUninit<T::Sample>]>,
-{
-    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        self._read(BlockingSignalReader::read_init_blocking, buf)
-    }
-}
-
-impl<T, S, B> Convert<T, S, B>
-where
-    T: Signal,
+    T: SignalWriter,
     S: Sample + IntoSample<T::Sample>,
     B: AsMut<[MaybeUninit<T::Sample>]>,
 {
-    fn _write<F>(&mut self, write_inner: F, buf: &[<Self as Signal>::Sample]) -> PhonicResult<usize>
-    where
-        F: Fn(&mut T, &[T::Sample]) -> PhonicResult<usize>,
-    {
+    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let inner_buf = self.buf.as_mut();
         let iter = buf.iter().zip(&mut *inner_buf);
         let len = iter.len();
@@ -136,37 +98,11 @@ where
         let uninit_slice = &inner_buf[..len];
         let init_slice = unsafe { slice_as_init(uninit_slice) };
 
-        write_inner(&mut self.inner, init_slice)
-    }
-}
-
-impl<T, S, B> SignalWriter for Convert<T, S, B>
-where
-    T: SignalWriter,
-    S: Sample + IntoSample<T::Sample>,
-    B: AsMut<[MaybeUninit<T::Sample>]>,
-{
-    fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        self._write(SignalWriter::write, buf)
+        self.inner.write(init_slice)
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
         self.inner.flush()
-    }
-}
-
-impl<T, S, B> BlockingSignalWriter for Convert<T, S, B>
-where
-    T: BlockingSignalWriter,
-    S: Sample + IntoSample<T::Sample>,
-    B: AsMut<[MaybeUninit<T::Sample>]>,
-{
-    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        self._write(BlockingSignalWriter::write_blocking, buf)
-    }
-
-    fn flush_blocking(&mut self) -> PhonicResult<()> {
-        self.inner.flush_blocking()
     }
 }
 

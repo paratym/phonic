@@ -1,8 +1,5 @@
 pub use phonic_signal::*;
 
-#[cfg(feature = "buf")]
-pub use phonic_buf as buf;
-
 #[cfg(feature = "dsp")]
 pub use phonic_dsp as dsp;
 

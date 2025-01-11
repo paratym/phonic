@@ -1,3 +1,6 @@
+use crate::{
+    BlockingSignal, NSamples, PhonicResult, Sample, SignalDuration, SignalExt, SignalReader,
+};
 use std::{
     mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -20,28 +23,24 @@ pub trait OwnedBuf: Sized {
 }
 
 pub trait SizedBuf: OwnedBuf {
-    fn new_uninit() -> Self::Uninit;
+    fn uninit() -> Self::Uninit;
 
-    #[cfg(feature = "signal")]
     fn silence() -> Self
     where
-        Self::Item: phonic_signal::Sample,
+        Self::Item: Sample,
     {
-        use phonic_signal::Sample;
-
-        let mut buf = Self::new_uninit();
+        let mut buf = Self::uninit();
         buf._as_mut_slice()
             .fill(MaybeUninit::new(Self::Item::ORIGIN));
 
         unsafe { Self::from_uninit(buf) }
     }
 
-    #[cfg(feature = "signal")]
-    fn read<R>(reader: &mut R) -> phonic_signal::PhonicResult<Self>
+    fn read<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: phonic_signal::BlockingSignalReader<Sample = Self::Item>,
+        R: BlockingSignal + SignalReader<Sample = Self::Item>,
     {
-        let mut buf = Self::new_uninit();
+        let mut buf = Self::uninit();
         reader.read_exact(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
@@ -49,54 +48,47 @@ pub trait SizedBuf: OwnedBuf {
 }
 
 pub trait DynamicBuf: OwnedBuf {
-    fn new_uninit(len: usize) -> Self::Uninit;
+    fn uninit(len: usize) -> Self::Uninit;
 
-    #[cfg(feature = "signal")]
     fn silence(len: usize) -> Self
     where
-        Self::Item: phonic_signal::Sample,
+        Self::Item: Sample,
     {
-        use phonic_signal::Sample;
-
-        let mut buf = Self::new_uninit(len);
+        let mut buf = Self::uninit(len);
         buf._as_mut_slice()
             .fill(MaybeUninit::new(Self::Item::ORIGIN));
 
         unsafe { Self::from_uninit(buf) }
     }
 
-    #[cfg(feature = "signal")]
-    fn read<R>(reader: &mut R) -> phonic_signal::PhonicResult<Self>
+    fn read<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: phonic_signal::BlockingSignalReader<Sample = Self::Item>,
+        R: SignalReader<Sample = Self::Item>,
         Self::Uninit: ResizeBuf,
     {
-        let mut buf = Self::new_uninit(DEFAULT_BUF_LEN);
-        let n_samples = reader.read_blocking(buf._as_mut_slice())?;
+        let mut buf = Self::uninit(DEFAULT_BUF_LEN);
+        let n_samples = reader.read(buf._as_mut_slice())?;
         unsafe { buf._resize(n_samples) }
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
 
-    #[cfg(feature = "signal")]
-    fn read_exact<R, D>(reader: &mut R, duration: D) -> phonic_signal::PhonicResult<Self>
+    fn read_exact<R>(reader: &mut R, duration: impl SignalDuration) -> PhonicResult<Self>
     where
-        R: phonic_signal::BlockingSignalReader<Sample = Self::Item>,
-        D: phonic_signal::SignalDuration,
+        R: BlockingSignal + SignalReader<Sample = Self::Item>,
     {
-        let phonic_signal::NSamples { n_samples } = duration.into_duration(reader.spec());
+        let NSamples { n_samples } = duration.into_duration(reader.spec());
         debug_assert_eq!(n_samples % reader.spec().channels.count() as u64, 0);
 
-        let mut buf = Self::new_uninit(n_samples as usize);
+        let mut buf = Self::uninit(n_samples as usize);
         reader.read_exact(buf._as_mut_slice())?;
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
 
-    #[cfg(feature = "signal")]
-    fn read_all<R>(reader: &mut R) -> phonic_signal::PhonicResult<Self>
+    fn read_all<R>(reader: &mut R) -> PhonicResult<Self>
     where
-        R: phonic_signal::BlockingSignalReader<Sample = Self::Item>,
+        R: BlockingSignal + SignalReader<Sample = Self::Item>,
         Self::Uninit: ResizeBuf,
     {
         todo!()
@@ -194,13 +186,13 @@ impl<T> OwnedBuf for Arc<[T]> {
 }
 
 impl<S: Sized, const N: usize> SizedBuf for [S; N] {
-    fn new_uninit() -> Self::Uninit {
+    fn uninit() -> Self::Uninit {
         unsafe { MaybeUninit::uninit().assume_init() }
     }
 }
 
 impl<S> DynamicBuf for Vec<S> {
-    fn new_uninit(capacity: usize) -> Self::Uninit {
+    fn uninit(capacity: usize) -> Self::Uninit {
         let mut buf = Vec::with_capacity(capacity);
         unsafe { buf.set_len(capacity) }
 
@@ -209,19 +201,19 @@ impl<S> DynamicBuf for Vec<S> {
 }
 
 impl<S> DynamicBuf for Box<[S]> {
-    fn new_uninit(capacity: usize) -> Self::Uninit {
-        Vec::new_uninit(capacity)
+    fn uninit(capacity: usize) -> Self::Uninit {
+        Vec::uninit(capacity)
     }
 }
 
 impl<S> DynamicBuf for Rc<[S]> {
-    fn new_uninit(len: usize) -> Self::Uninit {
+    fn uninit(len: usize) -> Self::Uninit {
         Rc::new_uninit_slice(len)
     }
 }
 
 impl<S> DynamicBuf for Arc<[S]> {
-    fn new_uninit(len: usize) -> Self::Uninit {
+    fn uninit(len: usize) -> Self::Uninit {
         Arc::new_uninit_slice(len)
     }
 }

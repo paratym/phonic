@@ -9,7 +9,7 @@ use std::mem::MaybeUninit;
 pub struct PollIo<T>(pub T);
 
 delegate_stream! {
-    delegate<T> * + !Blocking for PollIo<T> {
+    impl<T> * + !Blocking for PollIo<T> {
         Self as T;
 
         &self => &self.0;
@@ -18,7 +18,7 @@ delegate_stream! {
 }
 
 delegate_format! {
-    delegate<T> * + !Blocking for PollIo<T> {
+    impl<T> * + !Blocking for PollIo<T> {
         Self as T;
 
         &self => &self.0;
@@ -31,7 +31,7 @@ macro_rules! poll {
         loop {
             match $func {
                 Err(PhonicError::Interrupted) => continue,
-                Err(PhonicError::NotReady) => Poll::<()>::poll_interval(),
+                Err(PhonicError::NotReady) => todo!(),
                 result => return result,
             }
         }

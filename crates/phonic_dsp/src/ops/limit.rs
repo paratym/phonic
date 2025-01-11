@@ -1,5 +1,5 @@
 use crate::ops::ComplementSample;
-use phonic_signal::{delegate_signal, PhonicResult, Sample, Signal, SignalReader};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, Signal, SignalExt, SignalReader};
 use std::mem::MaybeUninit;
 
 pub struct Limit<T: Signal> {

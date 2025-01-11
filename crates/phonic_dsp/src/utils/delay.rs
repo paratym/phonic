@@ -1,7 +1,6 @@
-use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_signal::{
-    FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample, Signal,
-    SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter,
+    DefaultSizedBuf, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample,
+    Signal, SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter, SizedBuf,
 };
 use std::mem::MaybeUninit;
 

@@ -2,7 +2,7 @@ use phonic_macro::delegate_group;
 use std::ops::{Deref, DerefMut};
 
 delegate_group! {
-    #![mod_path(crate)]
+    mod as crate;
 
     pub trait Format {
         type Tag: crate::FormatTag;
@@ -101,7 +101,7 @@ delegate_group! {
 }
 
 delegate_format! {
-    delegate<T> * for T {
+    impl<T> * for T {
         Self as T::Target;
 
         &self => self.deref()

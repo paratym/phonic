@@ -1,12 +1,8 @@
 use crate::types::SpmcRingBuf;
-use phonic_buf::{DefaultSizedBuf, SizedBuf};
-use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSpec};
-use std::{
-    cell::RefCell,
-    mem::MaybeUninit,
-    ops::{Deref, DerefMut},
-    rc::Rc,
+use phonic_signal::{
+    DefaultSizedBuf, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSpec,
 };
+use std::{cell::RefCell, mem::MaybeUninit, rc::Rc};
 
 struct SplitInner<T, B> {
     inner: T,

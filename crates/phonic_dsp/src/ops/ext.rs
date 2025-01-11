@@ -2,8 +2,7 @@ use crate::ops::{
     ClipSample, Complement, ComplementSample, Convert, DbRatio, Gain, GainSample, Limit, Mix,
 };
 use num_traits::Inv;
-use phonic_buf::{DefaultSizedBuf, SizedBuf};
-use phonic_signal::{IndexedSignal, PhonicResult, Sample, Signal};
+use phonic_signal::{DefaultSizedBuf, IndexedSignal, PhonicResult, Sample, Signal, SizedBuf};
 
 pub trait DspOpsExt: Sized + Signal {
     fn complement(self) -> Complement<Self> {
@@ -11,7 +10,7 @@ pub trait DspOpsExt: Sized + Signal {
     }
 
     fn convert<S: Sample>(self) -> Convert<Self, S> {
-        let buf = DefaultSizedBuf::new_uninit();
+        let buf = DefaultSizedBuf::uninit();
         Convert::new(self, buf)
     }
 
@@ -86,7 +85,7 @@ pub trait DspOpsExt: Sized + Signal {
         Self: IndexedSignal,
         T: IndexedSignal<Sample = Self::Sample>,
     {
-        let buf = DefaultSizedBuf::new_uninit();
+        let buf = DefaultSizedBuf::uninit();
         Mix::new((self, other), buf)
     }
 
@@ -104,7 +103,7 @@ pub trait DspOpsExt: Sized + Signal {
         T: IndexedSignal<Sample = Self::Sample>,
         T::Sample: ComplementSample,
     {
-        let buf = DefaultSizedBuf::new_uninit();
+        let buf = DefaultSizedBuf::uninit();
         Mix::cancel(self, other, buf)
     }
 

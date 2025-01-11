@@ -2,10 +2,9 @@ use crate::{
     ops::Complement,
     types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList},
 };
-use phonic_buf::DefaultSizedBuf;
 use phonic_signal::{
-    utils::slice_as_init_mut, FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal,
-    SignalReader, SignalSpec,
+    utils::slice_as_init_mut, DefaultSizedBuf, FiniteSignal, IndexedSignal, PhonicResult, Sample,
+    Signal, SignalReader, SignalSpec,
 };
 use std::{mem::MaybeUninit, ops::Add};
 

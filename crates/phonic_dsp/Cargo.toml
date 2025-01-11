@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
-phonic_buf = { version = "0.1.0", path = "../phonic_buf" }
 phonic_io = { version = "0.1.0", path = "../phonic_io", optional = true }
 phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
 num-traits = "0.2.19"

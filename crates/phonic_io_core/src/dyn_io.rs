@@ -5,8 +5,8 @@ use crate::{
     StreamWriter, TaggedSignal,
 };
 use phonic_signal::{
-    BlockingSignalReader, BlockingSignalWriter, FiniteSignal, IndexedSignal, PhonicResult, Signal,
-    SignalReader, SignalSeeker, SignalWriter,
+    BlockingSignal, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalWriter,
 };
 use std::io::{Read, Seek, Write};
 
@@ -78,12 +78,11 @@ impl<T> DynStream for T where
 
 pub trait DynSignal:
     Signal
+    + BlockingSignal
     + IndexedSignal
     + FiniteSignal
     + SignalReader
-    + BlockingSignalReader
     + SignalWriter
-    + BlockingSignalWriter
     + SignalSeeker
     + Send
     + Sync
@@ -101,12 +100,11 @@ pub trait DynSignal:
 
 impl<T> DynSignal for T where
     T: Signal
+        + BlockingSignal
         + IndexedSignal
         + FiniteSignal
         + SignalReader
-        + BlockingSignalReader
         + SignalWriter
-        + BlockingSignalWriter
         + SignalSeeker
         + Send
         + Sync

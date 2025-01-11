@@ -1,4 +1,4 @@
-use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalReader};
+use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalExt, SignalReader};
 use std::{mem::MaybeUninit, ops::Neg};
 
 pub trait ComplementSample: Sample {

@@ -4,8 +4,8 @@ use cpal::{
 };
 use phonic_io_core::{KnownSample, KnownSampleType};
 use phonic_signal::{
-    utils::slice_as_uninit_mut, BufferedSignalReader, BufferedSignalWriter, PhonicError,
-    PhonicResult, Sample, Signal, SignalSpec,
+    utils::copy_to_uninit_slice, BufferedSignalReader, BufferedSignalWriter, PhonicError,
+    PhonicResult, Signal, SignalSpec,
 };
 use std::time::Duration;
 
@@ -107,8 +107,12 @@ pub trait DeviceExt: DeviceTrait {
         self.build_input_stream(
             &signal.spec().into_cpal_config(buffer_size),
             move |buf: &[S::Sample], _: &InputCallbackInfo| {
-                let n_samples = signal.write_available(buf);
-                debug_assert!(buf.len() == n_samples);
+                let inner_buf = signal.buffer_mut().unwrap_or_default();
+                let n_samples = inner_buf.len().min(buf.len());
+                debug_assert!(buf.len() <= inner_buf.len());
+
+                copy_to_uninit_slice(&buf[..n_samples], &mut inner_buf[..n_samples]);
+                signal.commit(n_samples);
             },
             error_callback,
             timeout,
@@ -130,9 +134,12 @@ pub trait DeviceExt: DeviceTrait {
         self.build_output_stream(
             &signal.spec().into_cpal_config(buffer_size),
             move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
-                let uninit_slice = slice_as_uninit_mut(buf);
-                let n_samples = signal.read_available(uninit_slice);
-                buf[n_samples..].fill(S::Sample::ORIGIN);
+                let inner_buf = signal.buffer().unwrap_or_default();
+                let n_samples = inner_buf.len().min(buf.len());
+                debug_assert!(buf.len() <= inner_buf.len());
+
+                buf[..n_samples].copy_from_slice(&inner_buf[..n_samples]);
+                signal.consume(n_samples);
             },
             error_callback,
             timeout,

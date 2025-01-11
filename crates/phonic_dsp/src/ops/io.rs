@@ -1,7 +1,6 @@
 use crate::ops::{Convert, FromSample, IntoSample};
-use phonic_buf::{DefaultSizedBuf, SizedBuf};
 use phonic_io::{match_tagged_signal, DynSignal, TaggedSignal};
-use phonic_signal::Sample;
+use phonic_signal::{DefaultSizedBuf, Sample, SizedBuf};
 
 pub trait FromKnownSample:
     Sample
@@ -75,7 +74,7 @@ impl TaggedSignalExt for TaggedSignal {
         S: FromKnownSample + IntoKnownSample,
     {
         match_tagged_signal!(self, signal => {
-            let buf = DefaultSizedBuf::new_uninit();
+            let buf = DefaultSizedBuf::uninit();
             Box::new(<Convert<_, _>>::new(signal, buf))
         })
     }

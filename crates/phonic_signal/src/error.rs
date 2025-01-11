@@ -37,7 +37,6 @@ pub enum PhonicError {
 
     /// An io operation returned an error that could not be represented by another variant of
     /// this enum
-    #[cfg(feature = "io")]
     Io(std::io::Error),
 }
 
@@ -60,7 +59,6 @@ impl std::fmt::Display for PhonicError {
             Self::Interrupted => write!(f, "interrupted"),
             Self::Terminated => write!(f, "terminated"),
 
-            #[cfg(feature = "io")]
             Self::Io(e) => write!(f, "io error: {e}"),
         }
     }
@@ -72,7 +70,6 @@ impl From<std::convert::Infallible> for PhonicError {
     }
 }
 
-#[cfg(feature = "io")]
 impl From<std::io::Error> for PhonicError {
     fn from(error: std::io::Error) -> Self {
         use std::io::ErrorKind;

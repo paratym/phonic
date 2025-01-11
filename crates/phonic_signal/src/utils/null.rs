@@ -1,7 +1,4 @@
-use crate::{
-    BlockingSignalReader, BlockingSignalWriter, PhonicResult, Sample, Signal, SignalReader,
-    SignalSpec, SignalWriter,
-};
+use crate::{PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter};
 use std::{marker::PhantomData, mem::MaybeUninit};
 
 pub struct NullSignal<S> {
@@ -36,12 +33,6 @@ impl<S: Sample> SignalReader for NullSignal<S> {
     }
 }
 
-impl<S: Sample> BlockingSignalReader for NullSignal<S> {
-    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        self.read(buf)
-    }
-}
-
 impl<S: Sample> SignalWriter for NullSignal<S> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut len = buf.len();
@@ -52,15 +43,5 @@ impl<S: Sample> SignalWriter for NullSignal<S> {
 
     fn flush(&mut self) -> PhonicResult<()> {
         Ok(())
-    }
-}
-
-impl<S: Sample> BlockingSignalWriter for NullSignal<S> {
-    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        self.write(buf)
-    }
-
-    fn flush_blocking(&mut self) -> PhonicResult<()> {
-        self.flush()
     }
 }

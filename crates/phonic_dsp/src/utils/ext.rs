@@ -1,6 +1,7 @@
 use crate::utils::{Concat, Delay, Repeat, Slice, Split};
-use phonic_buf::{DefaultSizedBuf, SizedBuf};
-use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalDuration};
+use phonic_signal::{
+    DefaultSizedBuf, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalDuration, SizedBuf,
+};
 
 pub trait DspUtilsExt: Sized + Signal {
     fn concat<T>(self, other: T) -> PhonicResult<Concat<(Self, T)>>

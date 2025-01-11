@@ -10,56 +10,16 @@ delegate_group! {
         fn spec(&self) -> &crate::SignalSpec;
     }
 
-    #[subgroup(Mut, Buffered)]
-    pub trait BufferedSignal: crate::Signal {
-        fn commit_samples(&mut self, n_samples: usize);
+    pub trait BlockingSignal: crate::Signal {
+        fn block(&self);
     }
 
     pub trait IndexedSignal: crate::Signal {
         fn pos(&self) -> u64;
-
-        fn pos_duration<D: crate::SignalDuration>(&self) -> D
-        where
-            Self: Sized
-        {
-            use crate::IntoDuration;
-            crate::NFrames::from(self.pos()).into_duration(self.spec())
-        }
     }
 
     pub trait FiniteSignal: crate::Signal {
         fn len(&self) -> u64;
-
-        fn len_duration<D: crate::SignalDuration>(&self) -> D
-        where
-            Self: Sized
-        {
-            use crate::IntoDuration;
-            crate::NFrames::from(self.len()).into_duration(self.spec())
-        }
-
-        fn is_empty(&self) -> bool
-        where
-            Self: Sized + IndexedSignal,
-        {
-            self.pos() == self.len()
-        }
-
-        fn rem(&self) -> u64
-        where
-            Self: Sized + IndexedSignal
-        {
-            self.len() - self.pos()
-        }
-
-        fn rem_duration<D>(&self) -> D
-        where
-            Self: Sized + IndexedSignal,
-            D: crate::SignalDuration
-        {
-            use crate::IntoDuration;
-            crate::NFrames::from(self.rem()).into_duration(self.spec())
-        }
     }
 
     #[subgroup(Mut, Read)]
@@ -70,88 +30,26 @@ delegate_group! {
             &mut self,
             buf: &mut [std::mem::MaybeUninit<Self::Sample>]
         ) -> crate::PhonicResult<usize>;
-
-        fn read_init<'a>(
-            &mut self,
-            buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> crate::PhonicResult<&'a mut [Self::Sample]> {
-            let n_samples = self.read(buf)?;
-            let uninit_slice = &mut buf[..n_samples];
-            let init_slice = unsafe { crate::utils::slice_as_init_mut(uninit_slice) };
-
-            Ok(init_slice)
-        }
-
-        fn read_frames<'a>(
-            &mut self,
-            buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> crate::PhonicResult<impl Iterator<Item = &'a [Self::Sample]>>
-        where
-            Self: Sized,
-        {
-            let samples = self.read_init(buf)?;
-            let n_channels = self.spec().channels.count() as usize;
-            debug_assert_eq!(samples.len() % n_channels, 0);
-
-            Ok(samples.chunks_exact(n_channels))
-        }
     }
 
     #[subgroup(Mut, Read, Buffered)]
-    pub trait BufferedSignalReader: crate::BufferedSignal + crate::SignalReader {
-        fn peek(&self) -> &[Self::Sample];
-        fn try_peek(&self) -> crate::PhonicResult<&[Self::Sample]>;
-    }
+    pub trait BufferedSignalReader: crate::SignalReader {
+        /// Ensures there are samples available in this signal's inner buffer and returns a
+        /// reference to them. On "pull-based" signal chains the samples are read from the next
+        /// source. On "push-based" signal chains `Err(PhonicError::NotReady)` is returned until
+        /// there are samples available.
+        fn fill(&mut self) -> crate::PhonicResult<&[Self::Sample]>;
 
-    #[subgroup(Mut, Read, Blocking)]
-    pub trait BlockingSignalReader: crate::SignalReader {
-        fn read_blocking(
-            &mut self,
-            buf: &mut [std::mem::MaybeUninit<Self::Sample>]
-        ) -> crate::PhonicResult<usize>;
+        /// Returns a reference to this signal's inner buffer, or `None` if this signal is
+        /// exhausted. To handle an empty buffer see `BufferedSignalReader::fill`.
+        fn buffer(&self) -> Option<&[Self::Sample]>;
 
-        fn read_init_blocking<'a>(
-            &mut self,
-            buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> crate::PhonicResult<&'a mut [Self::Sample]> {
-            let n_samples = self.read_blocking(buf)?;
-            let uninit_slice = &mut buf[..n_samples];
-
-            let init_slice = unsafe { crate::utils::slice_as_init_mut(uninit_slice) };
-            Ok(init_slice)
-        }
-
-        fn read_exact(
-            &mut self,
-            buf: &mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> crate::PhonicResult<()> {
-            let buf_len = buf.len();
-            if buf_len % self.spec().channels.count() as usize != 0 {
-                return Err(crate::PhonicError::InvalidInput);
-            }
-
-            let mut i = 0;
-            while i < buf_len {
-                match self.read_blocking(&mut buf[i..]) {
-                    Err(crate::PhonicError::Interrupted | crate::PhonicError::NotReady) => continue,
-                    Err(e) => return Err(e),
-                    Ok(0) => return Err(crate::PhonicError::OutOfBounds),
-                    Ok(n) => i += n,
-                }
-            }
-
-            Ok(())
-        }
-
-        fn read_exact_init<'a>(
-            &mut self,
-            buf: &'a mut [std::mem::MaybeUninit<Self::Sample>],
-        ) -> crate::PhonicResult<&'a mut [Self::Sample]> {
-            self.read_exact(buf)?;
-
-            let init_slice = unsafe { crate::utils::slice_as_init_mut(buf) };
-            Ok(init_slice)
-        }
+        /// Moves the read/write head forward by `n_samples` and frees the consumed section of
+        /// this signal's inner buffer for reuse.
+        ///
+        /// # Panics
+        /// panics if `n_samples` is greater than the length of the available inner buffer.
+        fn consume(&mut self, n_samples: usize);
     }
 
     #[subgroup(Mut, Write)]
@@ -160,127 +58,31 @@ delegate_group! {
         /// returns the number of interleaved samples written.
         fn write(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
 
+        /// Ensures all samples in the signal chain have been written to the innermost
+        /// destination. On "push-based" signal chains the samples are recursively written to
+        /// the next destination. On "pull-based" signal chains `Err(PhonicError::NotReady)` is
+        /// returned until there are no samples left.
         fn flush(&mut self) -> crate::PhonicResult<()>;
     }
 
     #[subgroup(Mut, Write, Buffered)]
-    pub trait BufferedSignalWriter: crate::BufferedSignal + crate::SignalWriter {
-        fn available_slots(&mut self) -> &mut [std::mem::MaybeUninit<Self::Sample>];
+    pub trait BufferedSignalWriter: crate::SignalWriter {
+        /// Returns a mutable reference to this signal's inner buffer, or `None` if this signal
+        /// is exhausted. To handle an empty buffer, see `SignalWriter::flush`.
+        fn buffer_mut(&mut self) -> Option<&mut [std::mem::MaybeUninit<Self::Sample>]>;
 
-        fn write_available(&mut self, buf: &[Self::Sample]) -> usize {
-            let mut n_samples = 0;
-            let buf_len = buf.len();
-
-            while n_samples < buf_len {
-                let available = self.available_slots();
-                let available_len = available.len();
-                if available_len == 0 {
-                    break;
-                }
-
-                let slice_len = available_len.min(buf_len - n_samples);
-                let src = &buf[n_samples..n_samples + slice_len];
-                let dst = &mut available[..slice_len];
-
-                crate::utils::copy_to_uninit_slice(src, dst);
-
-                self.commit_samples(slice_len);
-                n_samples += slice_len;
-            }
-
-            n_samples
-        }
-    }
-
-    #[subgroup(Mut, Write, Blocking)]
-    pub trait BlockingSignalWriter: crate::SignalWriter {
-        fn write_blocking(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
-        fn flush_blocking(&mut self) -> crate::PhonicResult<()>;
-
-        fn write_exact(&mut self, mut buf: &[Self::Sample]) -> crate::PhonicResult<()> {
-            if buf.len() % self.spec().channels.count() as usize != 0 {
-                return Err(crate::PhonicError::InvalidInput);
-            }
-
-            while !buf.is_empty() {
-                match self.write_blocking(buf) {
-                    Err(crate::PhonicError::Interrupted | crate::PhonicError::NotReady) => continue,
-                    Err(e) => return Err(e),
-                    Ok(0) => return Err(crate::PhonicError::OutOfBounds),
-                    Ok(n) => buf = &buf[n..],
-                };
-            }
-
-            Ok(())
-        }
+        /// Moves the read/write head forward by `n_samples` and marks the committed section of this
+        /// signal's inner buffer to be written to the underlying writer. To ensure the marked
+        /// samples have been written see `SignalWriter::flush`.
+        ///
+        /// # Panics
+        /// panics if `n_samples` is greater than the length of the available inner buffer.
+        fn commit(&mut self, n_samples: usize);
     }
 
     #[subgroup(Mut)]
     pub trait SignalSeeker: crate::Signal {
-        fn seek(&mut self, offset: i64) -> crate::PhonicResult<()>;
-
-        fn seek_forward<D>(&mut self, offset: D) -> crate::PhonicResult<()>
-        where
-            Self: Sized,
-            D: crate::SignalDuration
-        {
-            let crate::NFrames { n_frames } = offset.into_duration(self.spec());
-            self.seek(n_frames as i64)
-        }
-
-        fn seek_backward<D>(&mut self, offset: D) -> crate::PhonicResult<()>
-        where
-            Self: Sized,
-            D: crate::SignalDuration
-        {
-            let crate::NFrames { n_frames } = offset.into_duration(self.spec());
-            self.seek(-(n_frames as i64))
-        }
-
-        fn seek_from_start<D>(&mut self, duration: D) -> crate::PhonicResult<()>
-        where
-            Self: Sized + IndexedSignal,
-            D: crate::SignalDuration
-        {
-            let crate::NFrames { n_frames: pos } = self.pos_duration();
-            let crate::NFrames { n_frames: new_pos } = duration.into_duration(self.spec());
-
-            let offset = if new_pos >= pos {
-                (new_pos - pos) as i64
-            } else {
-                -((pos - new_pos) as i64)
-            };
-
-            self.seek(offset)
-        }
-
-        fn seek_to_start(&mut self) -> crate::PhonicResult<()>
-        where
-            Self: Sized + IndexedSignal,
-        {
-            self.seek_from_start(crate::NFrames::from(0))
-        }
-
-        fn seek_from_end<D>(&mut self, duration: D) -> crate::PhonicResult<()>
-        where
-            Self: Sized + IndexedSignal + FiniteSignal,
-            D: crate::SignalDuration
-        {
-            let crate::NFrames { n_frames } = duration.into_duration(self.spec());
-            let new_pos: crate::NFrames = self.len()
-                .checked_sub(n_frames)
-                .ok_or(crate::PhonicError::OutOfBounds)?
-                .into();
-
-            self.seek_from_start(new_pos)
-        }
-
-        fn seek_to_end(&mut self) -> crate::PhonicResult<()>
-        where
-            Self: Sized + IndexedSignal + FiniteSignal
-        {
-            self.seek_from_end(crate::NFrames::from(0))
-        }
+        fn seek(&mut self, n_frames: i64) -> crate::PhonicResult<()>;
     }
 }
 

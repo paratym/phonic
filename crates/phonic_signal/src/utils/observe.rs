@@ -1,6 +1,6 @@
 use crate::{
-    delegate_signal, BlockingSignalReader, BlockingSignalWriter, NFrames, PhonicResult, Signal,
-    SignalDuration, SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal, BufferedSignalReader, BufferedSignalWriter, PhonicResult, Signal, SignalExt,
+    SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -11,7 +11,7 @@ pub struct Observer<T: Signal> {
 
 #[allow(clippy::type_complexity)]
 enum Callback<T: Signal> {
-    Event(Box<dyn for<'e> Fn(&T, SignalEvent<'e, T>)>),
+    Event(Box<dyn for<'a> Fn(&T, SignalEvent<'a, T>)>),
     Read(Box<dyn Fn(&T, &[T::Sample])>),
     Write(Box<dyn Fn(&T, &[T::Sample])>),
     Seek(Box<dyn Fn(&T, i64)>),
@@ -108,19 +108,20 @@ impl<T: SignalReader> SignalReader for Observer<T> {
     }
 }
 
-impl<T: BlockingSignalReader> BlockingSignalReader for Observer<T> {
-    fn read_blocking(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        let samples = self.inner.read_init_blocking(buf)?;
-        self.callback.on_read(&self.inner, samples);
-
-        Ok(samples.len())
+impl<T: BufferedSignalReader> BufferedSignalReader for Observer<T> {
+    fn fill(&mut self) -> PhonicResult<&[Self::Sample]> {
+        self.inner.fill()
     }
 
-    fn read_exact(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<()> {
-        let samples = self.inner.read_exact_init(buf)?;
+    fn buffer(&self) -> Option<&[Self::Sample]> {
+        self.inner.buffer()
+    }
+
+    fn consume(&mut self, n_samples: usize) {
+        let samples = &self.inner.buffer().unwrap()[..n_samples];
         self.callback.on_read(&self.inner, samples);
 
-        Ok(())
+        self.inner.consume(n_samples)
     }
 }
 
@@ -137,23 +138,17 @@ impl<T: SignalWriter> SignalWriter for Observer<T> {
     }
 }
 
-impl<T: BlockingSignalWriter> BlockingSignalWriter for Observer<T> {
-    fn write_blocking(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        let n = self.inner.write_blocking(buf)?;
-        self.callback.on_write(&self.inner, &buf[..n]);
-
-        Ok(n)
+impl<T: BufferedSignalWriter> BufferedSignalWriter for Observer<T> {
+    fn buffer_mut(&mut self) -> Option<&mut [MaybeUninit<Self::Sample>]> {
+        self.inner.buffer_mut()
     }
 
-    fn write_exact(&mut self, buf: &[Self::Sample]) -> PhonicResult<()> {
-        self.inner.write_exact(buf)?;
-        self.callback.on_write(&self.inner, buf);
+    fn commit(&mut self, n_samples: usize) {
+        // let uninit_samples = &self.inner.buffer_mut().unwrap()[..n_samples];
+        // let samples = unsafe { slice_as_init(uninit_samples) };
+        // self.callback.on_write(&self.inner, samples);
 
-        Ok(())
-    }
-
-    fn flush_blocking(&mut self) -> PhonicResult<()> {
-        self.inner.flush_blocking()
+        self.inner.commit(n_samples)
     }
 }
 
