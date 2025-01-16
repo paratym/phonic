@@ -459,14 +459,7 @@ dependencies = [
  "phonic_dsp",
  "phonic_io",
  "phonic_signal",
-]
-
-[[package]]
-name = "phonic_codec_pcm"
-version = "0.1.0"
-dependencies = [
- "phonic_io_core",
- "phonic_signal",
+ "phonic_sync",
 ]
 
 [[package]]
@@ -474,7 +467,6 @@ name = "phonic_cpal"
 version = "0.1.0"
 dependencies = [
  "cpal",
- "phonic_io_core",
  "phonic_signal",
 ]
 
@@ -489,27 +481,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "phonic_format_wave"
-version = "0.1.0"
-dependencies = [
- "phonic_codec_pcm",
- "phonic_io_core",
- "phonic_signal",
-]
-
-[[package]]
 name = "phonic_io"
-version = "0.1.0"
-dependencies = [
- "lazy_static",
- "phonic_codec_pcm",
- "phonic_format_wave",
- "phonic_io_core",
- "phonic_signal",
-]
-
-[[package]]
-name = "phonic_io_core"
 version = "0.1.0"
 dependencies = [
  "phonic_macro",
@@ -530,6 +502,13 @@ name = "phonic_signal"
 version = "0.1.0"
 dependencies = [
  "phonic_macro",
+]
+
+[[package]]
+name = "phonic_sync"
+version = "0.1.0"
+dependencies = [
+ "phonic_signal",
 ]
 
 [[package]]

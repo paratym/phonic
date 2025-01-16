@@ -10,4 +10,5 @@ phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
 num-traits = "0.2.19"
 
 [features]
+gen = []
 io = ["dep:phonic_io"]

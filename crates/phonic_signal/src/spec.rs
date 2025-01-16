@@ -29,6 +29,10 @@ impl SignalSpec {
         SignalSpecBuilder::new()
     }
 
+    pub fn into_builder(self) -> SignalSpecBuilder {
+        self.into()
+    }
+
     pub fn sample_rate_interleaved(&self) -> u32 {
         self.sample_rate * self.channels.count()
     }

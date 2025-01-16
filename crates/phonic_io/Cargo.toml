@@ -3,14 +3,15 @@ name = "phonic_io"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-phonic_io_core = { version = "0.1.0", path = "../phonic_io_core" }
-phonic_codec_pcm = { version = "0.1.0", path = "../phonic_codec_pcm", optional = true }
-phonic_format_wave = { version = "0.1.0", path = "../phonic_format_wave", optional = true }
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
-lazy_static = "1.4.0"
-
 [features]
-wave = ["dep:phonic_format_wave"]
+dyn-io = []
 
-pcm = ["dep:phonic_codec_pcm", "phonic_format_wave/pcm"]
+all-formats = ["wave"]
+wave = []
+
+all-codecs = ["pcm"]
+pcm = []
+
+[dependencies]
+phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
+phonic_signal = { version = "0.1.0", path = "../phonic_signal" }

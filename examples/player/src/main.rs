@@ -3,20 +3,20 @@ use cpal::{
     BufferSize, SizedSample,
 };
 use phonic::{
-    buf::spsc::SignalBuf,
     cpal::DeviceExt,
     io::{
+        dyn_io::{DynFormatConstructor, DynStream, KnownFormat, KnownSample},
         match_tagged_signal,
         utils::{FormatIdentifier, FormatUtilsExt},
-        DynFormatConstructor, DynStream, KnownFormat, KnownSample, TaggedSignal,
     },
+    sync::spsc::SignalBuf,
     utils::SignalUtilsExt,
-    BlockingSignalReader, PhonicError, PhonicResult,
+    BlockingSignal, PhonicError, PhonicResult, SignalExt, SignalReader,
 };
-use std::{env, fmt::Debug, fs::File, path::Path, thread::sleep, time::Duration};
+use std::{fs::File, path::Path, time::Duration};
 
 fn main() -> PhonicResult<()> {
-    // let path_arg = env::args().nth(1).ok_or(PhonicError::MissingData)?;
+    // let path_arg = std::env::args().nth(1).expect("missing file arg");
     let path_arg = "/home/ben/Desktop/phonic/examples/export/sine.wav";
     let path = Path::new(path_arg);
     let file = File::open(path)?;
@@ -32,7 +32,7 @@ fn main() -> PhonicResult<()> {
 
 fn play<S>(mut signal: S) -> PhonicResult<()>
 where
-    S: BlockingSignalReader + Send + Sync,
+    S: BlockingSignal + SignalReader + Send + Sync,
     S::Sample: KnownSample + SizedSample,
 {
     let spec = signal.spec();
@@ -51,9 +51,5 @@ where
 
     output.unwrap().play().unwrap();
     producer.copy_all_buffered(&mut signal)?;
-
-    sleep(Duration::from_secs(1));
-    // producer.flush_blocking()
-
-    Ok(())
+    producer.flush_blocking()
 }

@@ -5,27 +5,35 @@ delegate_group! {
     mod as crate;
 
     pub trait Signal {
+        /// The type of sample that can be read from/written to this signal.
         type Sample: crate::Sample;
 
+        /// Returns a set of parameters that determines how the samples that are read from/written
+        /// to this signal should be interpreted.
         fn spec(&self) -> &crate::SignalSpec;
     }
 
     pub trait BlockingSignal: crate::Signal {
+        /// Blocks the current thread for an unspecified period of time or until an unknown event
+        /// occurs. Generally this method is used inside of a loop to handle
+        /// `PhonicError::NotReady`
         fn block(&self);
     }
 
     pub trait IndexedSignal: crate::Signal {
+        /// Returns the number of frames between the start and the read/write head of this signal.
         fn pos(&self) -> u64;
     }
 
     pub trait FiniteSignal: crate::Signal {
+        /// Returns the number of frames between the start and the end of this signal.
         fn len(&self) -> u64;
     }
 
     #[subgroup(Mut, Read)]
     pub trait SignalReader: crate::Signal {
-        /// reads samples from this signal into the given buffer.
-        /// returns the number of interleaved samples read.
+        /// Reads samples from this signal into the given buffer and returns the number of
+        /// interleaved samples read.
         fn read(
             &mut self,
             buf: &mut [std::mem::MaybeUninit<Self::Sample>]
@@ -44,8 +52,8 @@ delegate_group! {
         /// exhausted. To handle an empty buffer see `BufferedSignalReader::fill`.
         fn buffer(&self) -> Option<&[Self::Sample]>;
 
-        /// Moves the read/write head forward by `n_samples` and frees the consumed section of
-        /// this signal's inner buffer for reuse.
+        /// Moves this signal's read/write head forward by `n_samples` and frees the consumed
+        /// section of its inner buffer for reuse.
         ///
         /// # Panics
         /// panics if `n_samples` is greater than the length of the available inner buffer.
@@ -54,8 +62,8 @@ delegate_group! {
 
     #[subgroup(Mut, Write)]
     pub trait SignalWriter: crate::Signal {
-        /// writes samples from the given buffer to this signal.
-        /// returns the number of interleaved samples written.
+        /// Writes samples from the given buffer to this signal and returns the number of
+        /// interleaved samples written.
         fn write(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
 
         /// Ensures all samples in the signal chain have been written to the innermost
@@ -71,9 +79,9 @@ delegate_group! {
         /// is exhausted. To handle an empty buffer, see `SignalWriter::flush`.
         fn buffer_mut(&mut self) -> Option<&mut [std::mem::MaybeUninit<Self::Sample>]>;
 
-        /// Moves the read/write head forward by `n_samples` and marks the committed section of this
-        /// signal's inner buffer to be written to the underlying writer. To ensure the marked
-        /// samples have been written see `SignalWriter::flush`.
+        /// Moves this signal's read/write head forward by `n_samples` and marks the committed
+        /// section of its inner buffer to be written to the underlying writer. To ensure the
+        /// marked samples have been written see `SignalWriter::flush`.
         ///
         /// # Panics
         /// panics if `n_samples` is greater than the length of the available inner buffer.
@@ -82,6 +90,7 @@ delegate_group! {
 
     #[subgroup(Mut)]
     pub trait SignalSeeker: crate::Signal {
+        /// Moves this signal's read/write head by `n_frames`.
         fn seek(&mut self, n_frames: i64) -> crate::PhonicResult<()>;
     }
 }

@@ -13,9 +13,7 @@ members = [
 	"crates/phonic_macro",
 	"crates/phonic_dsp",
 	"crates/phonic_io",
-	"crates/phonic_io_core",
-	"crates/phonic_format_wave",
-	"crates/phonic_codec_pcm",
+	"crates/phonic_sync",
 	"crates/phonic_cpal",
 	"examples/player",
 	"examples/export",
@@ -23,13 +21,26 @@ members = [
 ]
 
 [features]
-default = []
+full = ["signal-full", "dsp-full", "io-full", "sync"]
+
+signal-full = ["buf"]
+buf = ["phonic_signal/buf"]
+
 dsp = ["dep:phonic_dsp"]
+dsp-full = ["dsp", "gen"]
+gen = ["dsp", "phonic_dsp/gen"]
 
 io = ["dep:phonic_io", "phonic_dsp?/io"]
-io-full = ["io", "wave", "pcm"]
+io-full = ["io", "dyn-io", "all-formats", "all-codecs"]
+dyn-io = ["io", "phonic_io/dyn-io"]
+
+all-formats = ["io", "phonic_io/all-formats"]
 wave = ["io", "phonic_io/wave"]
+
+all-codecs = ["io", "phonic_io/all-codecs"]
 pcm = ["io", "phonic_io/pcm"]
+
+sync = ["dep:phonic_sync", "phonic_sync/signal"]
 
 cpal = ["dep:phonic_cpal"]
 
@@ -37,6 +48,7 @@ cpal = ["dep:phonic_cpal"]
 phonic_signal = { version = "0.1.0", path = "crates/phonic_signal" }
 phonic_dsp = { version = "0.1.0", path = "crates/phonic_dsp", optional = true }
 phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
+phonic_sync = { version = "0.1.0", path = "crates/phonic_sync", optional = true }
 phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }
 
 [dev-dependencies]

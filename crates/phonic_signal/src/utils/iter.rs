@@ -277,7 +277,6 @@ where
             };
 
             copy_to_uninit_slice(&buf[i..i + n_channels], frame.borrow_mut());
-
             i += n_channels;
         }
 

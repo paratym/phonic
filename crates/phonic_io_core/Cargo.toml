@@ -1,8 +1,0 @@
-[package]
-name = "phonic_io_core"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }

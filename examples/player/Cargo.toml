@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15.2"
-phonic = { path = "../..", features = ["io-full", "cpal"] }
+phonic = { path = "../..", features = ["full", "cpal"] }
