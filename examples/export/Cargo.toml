@@ -1,7 +1,0 @@
-[package]
-name = "export"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-phonic = { path = "../..", version = "0.0.1", features = ["dsp", "io", "pcm", "wave"] }

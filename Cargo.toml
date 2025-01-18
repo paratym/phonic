@@ -2,6 +2,12 @@
 name = "phonic"
 version = "0.0.1"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/b3nb5n/phonic"
+description = "A library for digital signal processing with a focus on audio"
+keywords = ["audio", "dsp", "signal", "format", "codec"]
+categories = ["multimedia", "multimedia::audio", "multimedia::encoding"]
+metadata.docs.rs.all-features = true
 
 [lib]
 path = "lib.rs"
@@ -9,15 +15,13 @@ path = "lib.rs"
 [workspace]
 resolver = "2"
 members = [
-	"crates/phonic_signal",
 	"crates/phonic_macro",
-	"crates/phonic_dsp",
+	"crates/phonic_signal",
 	"crates/phonic_io",
+	"crates/phonic_dsp",
+	"crates/phonic_graph",
 	"crates/phonic_sync",
 	"crates/phonic_cpal",
-	"examples/player",
-	"examples/export",
-	"examples/converter",
 ]
 
 [features]
@@ -45,11 +49,11 @@ sync = ["dep:phonic_sync", "phonic_sync/signal"]
 cpal = ["dep:phonic_cpal"]
 
 [dependencies]
-phonic_signal = { version = "0.1.0", path = "crates/phonic_signal" }
-phonic_dsp = { version = "0.1.0", path = "crates/phonic_dsp", optional = true }
-phonic_io = { version = "0.1.0", path = "crates/phonic_io", optional = true }
-phonic_sync = { version = "0.1.0", path = "crates/phonic_sync", optional = true }
-phonic_cpal = { version = "0.1.0", path = "crates/phonic_cpal", optional = true }
+phonic_signal = { version = "0.0.1", path = "crates/phonic_signal" }
+phonic_dsp = { version = "0.0.1", path = "crates/phonic_dsp", optional = true }
+phonic_io = { version = "0.0.1", path = "crates/phonic_io", optional = true }
+phonic_sync = { version = "0.0.1", path = "crates/phonic_sync", optional = true }
+phonic_cpal = { version = "0.0.1", path = "crates/phonic_cpal", optional = true }
 
 [dev-dependencies]
 cpal = "0.15.3"

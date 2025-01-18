@@ -1,8 +1,0 @@
-[package]
-name = "player"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-cpal = "0.15.2"
-phonic = { path = "../..", features = ["full", "cpal"] }

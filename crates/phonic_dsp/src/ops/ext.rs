@@ -1,7 +1,7 @@
 use crate::ops::{
     ClipSample, Complement, ComplementSample, Convert, DbRatio, Gain, GainSample, Limit, Mix,
+    Reciprocal,
 };
-use num_traits::Inv;
 use phonic_signal::{DefaultSizedBuf, IndexedSignal, PhonicResult, Sample, Signal, SizedBuf};
 
 pub trait DspOpsExt: Sized + Signal {
@@ -45,7 +45,7 @@ pub trait DspOpsExt: Sized + Signal {
     ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
     where
         Self::Sample: GainSample,
-        <Self::Sample as GainSample>::Ratio: Inv<Output = <Self::Sample as GainSample>::Ratio>,
+        <Self::Sample as GainSample>::Ratio: Reciprocal,
     {
         Gain::attenuate(self, ratio)
     }
@@ -56,8 +56,7 @@ pub trait DspOpsExt: Sized + Signal {
     ) -> Gain<Self, <Self::Sample as GainSample>::Ratio>
     where
         Self::Sample: GainSample,
-        <Self::Sample as GainSample>::Ratio:
-            DbRatio + Inv<Output = <Self::Sample as GainSample>::Ratio>,
+        <Self::Sample as GainSample>::Ratio: DbRatio + Reciprocal,
     {
         Gain::attenuate_db(self, db)
     }

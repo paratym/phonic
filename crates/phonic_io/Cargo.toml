@@ -1,6 +1,6 @@
 [package]
 name = "phonic_io"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [features]
@@ -13,5 +13,5 @@ all-codecs = ["pcm"]
 pcm = []
 
 [dependencies]
-phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
+phonic_macro = { version = "0.0.1", path = "../phonic_macro" }
+phonic_signal = { version = "0.0.1", path = "../phonic_signal" }

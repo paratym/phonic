@@ -1,10 +1,10 @@
 [package]
 name = "phonic_signal"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [features]
 buf = []
 
 [dependencies]
-phonic_macro = { version = "0.1.0", path = "../phonic_macro" }
+phonic_macro = { version = "0.0.1", path = "../phonic_macro" }

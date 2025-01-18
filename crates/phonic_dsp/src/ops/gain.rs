@@ -1,5 +1,4 @@
 use crate::ops::{FromSample, IntoSample};
-use num_traits::Inv;
 use phonic_signal::{delegate_signal, PhonicResult, Sample, SignalExt, SignalReader};
 use std::{mem::MaybeUninit, ops::Mul};
 
@@ -18,6 +17,10 @@ pub trait DbRatio {
     fn db_ratio(self) -> Self;
 }
 
+pub trait Reciprocal {
+    fn reciprocal(self) -> Self;
+}
+
 impl<T, R> Gain<T, R> {
     pub fn new(inner: T, ratio: R) -> Self {
         Self { inner, ratio }
@@ -32,14 +35,14 @@ impl<T, R> Gain<T, R> {
 
     pub fn attenuate(inner: T, ratio: R) -> Self
     where
-        R: Inv<Output = R>,
+        R: Reciprocal,
     {
-        Self::new(inner, ratio.inv())
+        Self::new(inner, ratio.reciprocal())
     }
 
     pub fn attenuate_db(inner: T, db: R) -> Self
     where
-        R: DbRatio + Inv<Output = R>,
+        R: DbRatio + Reciprocal,
     {
         Self::attenuate(inner, db.db_ratio())
     }
@@ -112,6 +115,12 @@ macro_rules! impl_db_ratio {
         impl DbRatio for $ratio {
             fn db_ratio(self) -> Self {
                 <$ratio>::powf(10.0, self / 20.0)
+            }
+        }
+
+        impl Reciprocal for $ratio {
+            fn reciprocal(self) -> Self {
+                <$ratio>::recip(self)
             }
         }
     };

@@ -1,10 +1,10 @@
 [package]
 name = "phonic_sync"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [features]
 signal = ["dep:phonic_signal"]
 
 [dependencies]
-phonic_signal = { version = "0.1.0", path = "../phonic_signal", optional = true }
+phonic_signal = { version = "0.0.1", path = "../phonic_signal", optional = true }

@@ -1,28 +1,22 @@
 # Phonic
 
-A set of types and utilities for audio processing written in pure rust. The main module `signal` defines types for building and describing pcm signals as readers/writers. It is assumed that all signals have a constant sample rate and interleaved channels. the other two: `io` and `dsp` both depend on `signal`. `io` provides audio formatters and codecs also as readers/writers, and methods for dynamically resolving/constructing them. `dsp` (which currently consists of a sine generator) will eventually define types for creating signal chains to generate and manipulate digital signals.
+Phonic is a rust library for digital signal processing with a focus on audio. The api is loosely based on the `std::io` interface and aims to be modular, extensible, and to make as few assumptions about its surrounding systems as possible.
 
-## Disclaimer
+## Features
 
-Not on crates.io yet because I need a new name
+- Buffers can be statically allocated and uninitialized
+- All structures that require an internal buffer are generic over `AsMut<[T]>`
+- Flexible blocking interface to allow for yielding time back to an arbitrary scheduler
+- Support for both static and dynamic construction of formats and codecs
 
-This project is very early in development. It's untested, and the api changes with every commit. please dont use it... yet. If you are looking for something to use in your own project and somehow found this page before any of these, check them out:
+## Modules
 
-- [Symphonia](https://github.com/pdeljanov/Symphonia)
-- [dasp](https://github.com/RustAudio/dasp)
-- [hound](https://github.com/ruuda/hound)
+It is recommended to use the `phonic` crate and enable the necessary features instead of the individual crates unless you are implementing a library.
 
-## Roadmap
-
-[x] Extensible "known" formats/codecs \
-[ ] FFMPEG integration \
-[ ] Write format resolver for byte string identifiers \
-[ ] Finish the sample conversions \
-[ ] Complete the core signal adapters \
-[x] Feature flagging \
-[x] Cpal integration \
-[x] Seeking support \
-[ ] Logging \
-[ ] Real time signal wrapper \
-[ ] Benchmarks \
-[ ] Sample buffer pool \
+| Module | Crate         | Description                                                |
+| ------ | ------------- | ---------------------------------------------------------- |
+| \*     | phonic_signal | The core signal traits                                     |
+| io     | phonic_io     | Traits for working with audio formats and codecs           |
+| dsp    | phonic_dsp    | Utilities for generating, analyzing, and modifying signals |
+| sync   | phonic_sync   | Types for synchronizing signals between threads            |
+| cpal   | phonic_cpal   | Integration with [cpal](https://github.com/rustaudio/cpal) |

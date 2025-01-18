@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+#![doc(
+    issue_tracker_base_url = "https://github.com/b3nb5n/phonic/issues",
+    html_playground_url = "https://play.rust-lang.org/"
+)]
+
 pub use phonic_signal::*;
 
 #[cfg(feature = "dsp")]

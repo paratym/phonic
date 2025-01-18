@@ -1,8 +1,8 @@
 [package]
 name = "phonic_cpal"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [dependencies]
 cpal = "0.15.2"
-phonic_signal = { version = "0.1.0", path = "../phonic_signal" }
+phonic_signal = { version = "0.0.1", path = "../phonic_signal" }
