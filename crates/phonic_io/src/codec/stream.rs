@@ -10,24 +10,24 @@ delegate_group! {
         fn stream_spec(&self) -> &crate::StreamSpec<Self::Tag>;
     }
 
-    pub trait BlockingStream: Stream {
+    pub trait BlockingStream: crate::Stream {
         fn block(&self);
     }
 
-    pub trait IndexedStream: Stream {
+    pub trait IndexedStream: crate::Stream {
         /// retuns the number of bytes between the start and current position of the stream
         fn pos(&self) -> u64;
 
     }
 
-    pub trait FiniteStream: Stream {
+    pub trait FiniteStream: crate::Stream {
         /// returns the number of bytes between the start and end of the stream
         fn len(&self) -> u64;
 
     }
 
     #[subgroup(Mut, Read)]
-    pub trait StreamReader: Stream {
+    pub trait StreamReader: crate::Stream {
         fn read(
             &mut self,
             buf: &mut [std::mem::MaybeUninit<u8>]
@@ -35,7 +35,7 @@ delegate_group! {
     }
 
     #[subgroup(Mut, Read, Buffered)]
-    pub trait BufferedStreamReader {
+    pub trait BufferedStreamReader: crate::StreamReader {
         fn fill(&mut self) -> phonic_signal::PhonicResult<&[u8]>;
         fn buffer(&self) -> Option<&[u8]>;
         fn consume(&mut self, n_bytes: usize);
@@ -43,19 +43,19 @@ delegate_group! {
 
 
     #[subgroup(Mut, Write)]
-    pub trait StreamWriter: Stream {
+    pub trait StreamWriter: crate::Stream {
         fn write(&mut self, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
         fn flush(&mut self) -> phonic_signal::PhonicResult<()>;
     }
 
     #[subgroup(Mut, Write, Buffered)]
-    pub trait BufferedStreamWriter {
+    pub trait BufferedStreamWriter: crate::StreamWriter {
         fn buffer_mut(&mut self) -> phonic_signal::PhonicResult<&mut [u8]>;
         fn commit(&mut self, n_bytes: usize);
     }
 
     #[subgroup(Mut)]
-    pub trait StreamSeeker: Stream {
+    pub trait StreamSeeker: crate::Stream {
         fn seek(&mut self, offset: i64) -> phonic_signal::PhonicResult<()>;
     }
 }

@@ -1,9 +1,5 @@
-use crate::{
-    delegate_format, delegate_stream, BlockingFormat, BlockingStream, Format, FormatReader,
-    FormatWriter, Stream, StreamReader, StreamWriter,
-};
-use phonic_signal::{utils::Poll, PhonicError, PhonicResult};
-use std::mem::MaybeUninit;
+use crate::{delegate_format, delegate_stream, BlockingFormat, BlockingStream, Format, Stream};
+use phonic_signal::utils::Poll;
 
 #[repr(transparent)]
 pub struct PollIo<T>(pub T);

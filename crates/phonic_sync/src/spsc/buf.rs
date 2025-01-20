@@ -1,5 +1,4 @@
 use std::{
-    marker::PhantomData,
     mem::MaybeUninit,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -9,10 +8,8 @@ use std::{
 
 pub struct SpscBuf<T, B> {
     _buf: B,
-    _element: PhantomData<T>,
-
-    buf_ptr: *mut MaybeUninit<T>,
-    buf_cap: usize,
+    ptr: *mut MaybeUninit<T>,
+    cap: usize,
 
     /// the index of the next slot to write to.
     /// in the rage 0 <= w_idx < buf_cap
@@ -28,50 +25,58 @@ pub struct SpscBuf<T, B> {
 }
 
 pub struct Producer<T, B> {
-    inner: Arc<SpscBuf<T, B>>,
+    buf: Arc<SpscBuf<T, B>>,
 }
 
 pub struct Consumer<T, B> {
-    inner: Arc<SpscBuf<T, B>>,
+    buf: Arc<SpscBuf<T, B>>,
 }
 
-impl<T, B> SpscBuf<T, B> {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(mut buf: B) -> (Producer<T, B>, Consumer<T, B>)
-    where
-        B: AsMut<[MaybeUninit<T>]>,
-    {
-        let slice = buf.as_mut();
-        let buf_ptr = slice.as_mut_ptr();
-        let buf_cap = slice.len();
+impl<T> SpscBuf<T, ()> {}
 
+impl<T, B> SpscBuf<T, B> {
+    pub unsafe fn from_raw_parts(
+        buf: B,
+        ptr: *mut MaybeUninit<T>,
+        cap: usize,
+    ) -> (Producer<T, B>, Consumer<T, B>) {
         let inner = Self {
             _buf: buf,
-            _element: PhantomData,
+            ptr,
+            cap,
 
-            buf_ptr,
-            buf_cap,
-
-            r_idx: AtomicUsize::default(),
-            w_idx: AtomicUsize::default(),
-            trailing_write: AtomicBool::default(),
+            w_idx: Default::default(),
+            r_idx: Default::default(),
+            trailing_write: Default::default(),
         };
 
         let inner_ref = Arc::new(inner);
         (Producer::from(inner_ref.clone()), Consumer::from(inner_ref))
     }
 
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(mut buf: B) -> (Producer<T, B>, Consumer<T, B>)
+    where
+        B: AsMut<[MaybeUninit<T>]>,
+    {
+        let slice = buf.as_mut();
+        let ptr = slice.as_mut_ptr();
+        let cap = slice.len();
+
+        unsafe { Self::from_raw_parts(buf, ptr, cap) }
+    }
+
     unsafe fn drop_elements(&self, start: usize, end: usize) {
-        let mut ptr: *mut T = self.buf_ptr.add(start).cast();
-        let end_ptr: *mut T = self.buf_ptr.add(end).cast();
-        let wrap_ptr: *mut T = self.buf_ptr.add(self.buf_cap).cast();
+        let mut ptr: *mut T = self.ptr.add(start).cast();
+        let end_ptr: *mut T = self.ptr.add(end).cast();
+        let wrap_ptr: *mut T = self.ptr.add(self.cap).cast();
 
         loop {
             ptr.drop_in_place();
             ptr = ptr.add(1);
 
             if ptr == wrap_ptr {
-                ptr = self.buf_ptr.cast();
+                ptr = self.ptr.cast();
             }
 
             if ptr == end_ptr {
@@ -83,24 +88,24 @@ impl<T, B> SpscBuf<T, B> {
 
 impl<T, B> From<Arc<SpscBuf<T, B>>> for Producer<T, B> {
     fn from(inner: Arc<SpscBuf<T, B>>) -> Self {
-        Self { inner }
+        Self { buf: inner }
     }
 }
 
 impl<T, B> From<Arc<SpscBuf<T, B>>> for Consumer<T, B> {
     fn from(inner: Arc<SpscBuf<T, B>>) -> Self {
-        Self { inner }
+        Self { buf: inner }
     }
 }
 
 impl<T, B> Producer<T, B> {
     pub fn slots(&mut self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let w_idx = self.inner.w_idx.load(Ordering::Relaxed);
-        let r_idx = self.inner.r_idx.load(Ordering::Acquire);
+        let w_idx = self.buf.w_idx.load(Ordering::Relaxed);
+        let r_idx = self.buf.r_idx.load(Ordering::Acquire);
 
         if w_idx < r_idx {
             let slots = unsafe {
-                let slot_ptr = self.inner.buf_ptr.add(w_idx);
+                let slot_ptr = self.buf.ptr.add(w_idx);
                 let n_slots = r_idx - w_idx;
 
                 std::slice::from_raw_parts_mut(slot_ptr, n_slots)
@@ -109,17 +114,17 @@ impl<T, B> Producer<T, B> {
             return (slots, &mut []);
         }
 
-        if w_idx == r_idx && self.inner.trailing_write.load(Ordering::SeqCst) {
+        if w_idx == r_idx && self.buf.trailing_write.load(Ordering::SeqCst) {
             return (&mut [], &mut []);
         }
 
         let trailing_slots = unsafe {
-            let slot_ptr = self.inner.buf_ptr.add(w_idx);
-            std::slice::from_raw_parts_mut(slot_ptr, self.inner.buf_cap - w_idx)
+            let slot_ptr = self.buf.ptr.add(w_idx);
+            std::slice::from_raw_parts_mut(slot_ptr, self.buf.cap - w_idx)
         };
 
         let leading_slots = unsafe {
-            let slot_ptr = self.inner.buf_ptr;
+            let slot_ptr = self.buf.ptr;
             std::slice::from_raw_parts_mut(slot_ptr, r_idx)
         };
 
@@ -127,26 +132,40 @@ impl<T, B> Producer<T, B> {
     }
 
     pub fn commit(&mut self, n: usize) {
-        let w_idx = self.inner.w_idx.load(Ordering::Relaxed);
-        let end_idx = w_idx + n % self.inner.buf_cap;
+        let w_idx = self.buf.w_idx.load(Ordering::Relaxed);
+        let end_idx = w_idx + n % self.buf.cap;
 
-        self.inner.w_idx.store(end_idx, Ordering::Relaxed);
-        self.inner.trailing_write.store(true, Ordering::SeqCst);
+        self.buf.w_idx.store(end_idx, Ordering::Relaxed);
+        self.buf.trailing_write.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let w_idx = self.buf.w_idx.load(Ordering::Relaxed);
+        let r_idx = self.buf.r_idx.load(Ordering::Acquire);
+
+        w_idx == r_idx && !self.buf.trailing_write.load(Ordering::SeqCst)
+    }
+
+    pub fn is_full(&self) -> bool {
+        let w_idx = self.buf.w_idx.load(Ordering::Relaxed);
+        let r_idx = self.buf.r_idx.load(Ordering::Acquire);
+
+        w_idx == r_idx && self.buf.trailing_write.load(Ordering::SeqCst)
     }
 
     pub fn is_abandoned(&self) -> bool {
-        Arc::strong_count(&self.inner) < 2
+        Arc::strong_count(&self.buf) < 2
     }
 }
 
 impl<T, B> Consumer<T, B> {
     pub fn elements(&self) -> (&[T], &[T]) {
-        let w_idx = self.inner.w_idx.load(Ordering::Acquire);
-        let r_idx = self.inner.r_idx.load(Ordering::Relaxed);
+        let w_idx = self.buf.w_idx.load(Ordering::Acquire);
+        let r_idx = self.buf.r_idx.load(Ordering::Relaxed);
 
         if r_idx < w_idx {
             let elements = unsafe {
-                let slot_ptr = self.inner.buf_ptr.add(r_idx);
+                let slot_ptr = self.buf.ptr.add(r_idx);
                 let element_ptr = slot_ptr.cast();
                 let n_elements = w_idx - r_idx;
 
@@ -156,20 +175,20 @@ impl<T, B> Consumer<T, B> {
             return (elements, &[]);
         }
 
-        if r_idx == w_idx && !self.inner.trailing_write.load(Ordering::SeqCst) {
+        if r_idx == w_idx && !self.buf.trailing_write.load(Ordering::SeqCst) {
             return (&[], &[]);
         }
 
         let trailing_elements = unsafe {
-            let slot_ptr = self.inner.buf_ptr.add(r_idx);
+            let slot_ptr = self.buf.ptr.add(r_idx);
             let element_ptr = slot_ptr.cast();
-            let n_elements = self.inner.buf_cap - r_idx;
+            let n_elements = self.buf.cap - r_idx;
 
             std::slice::from_raw_parts(element_ptr, n_elements)
         };
 
         let leading_elements = unsafe {
-            let slot_ptr = self.inner.buf_ptr;
+            let slot_ptr = self.buf.ptr;
             let element_ptr = slot_ptr.cast();
             let n_elements = w_idx;
 
@@ -179,25 +198,39 @@ impl<T, B> Consumer<T, B> {
         (trailing_elements, leading_elements)
     }
 
-    pub fn commit(&mut self, n: usize) {
+    pub fn consume(&mut self, n: usize) {
         if n == 0 {
             // this check is necessary because drop_elements assumes the buffer is always full when
             // start == end
             return;
         }
 
-        let r_idx = self.inner.r_idx.load(Ordering::Relaxed);
-        let end_idx = r_idx + n % self.inner.buf_cap;
+        let r_idx = self.buf.r_idx.load(Ordering::Relaxed);
+        let end_idx = r_idx + n % self.buf.cap;
 
-        unsafe { self.inner.drop_elements(r_idx, end_idx) };
+        unsafe { self.buf.drop_elements(r_idx, end_idx) };
 
-        self.inner.r_idx.store(end_idx, Ordering::Relaxed);
-        self.inner.trailing_write.store(false, Ordering::SeqCst);
+        self.buf.r_idx.store(end_idx, Ordering::Relaxed);
+        self.buf.trailing_write.store(false, Ordering::SeqCst);
         // TODO: can trailing write interactions be relaxed to Acquire/Release ordering?
     }
 
+    pub fn is_empty(&self) -> bool {
+        let w_idx = self.buf.w_idx.load(Ordering::Acquire);
+        let r_idx = self.buf.r_idx.load(Ordering::Relaxed);
+
+        r_idx == w_idx && !self.buf.trailing_write.load(Ordering::SeqCst)
+    }
+
+    pub fn is_full(&self) -> bool {
+        let w_idx = self.buf.w_idx.load(Ordering::Acquire);
+        let r_idx = self.buf.r_idx.load(Ordering::Relaxed);
+
+        r_idx == w_idx && self.buf.trailing_write.load(Ordering::SeqCst)
+    }
+
     pub fn is_abandoned(&self) -> bool {
-        Arc::strong_count(&self.inner) < 2
+        Arc::strong_count(&self.buf) < 2
     }
 }
 

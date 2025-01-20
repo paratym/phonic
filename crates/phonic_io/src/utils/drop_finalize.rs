@@ -1,5 +1,6 @@
 use crate::{delegate_format, FormatWriter};
 
+#[repr(transparent)]
 pub struct DropFinalize<T: FormatWriter>(pub T);
 
 delegate_format! {
@@ -14,6 +15,5 @@ delegate_format! {
 impl<T: FormatWriter> Drop for DropFinalize<T> {
     fn drop(&mut self) {
         let _ = self.finalize();
-        let _ = self.flush();
     }
 }

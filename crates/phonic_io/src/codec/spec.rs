@@ -65,10 +65,6 @@ impl<C: CodecTag> StreamSpec<C> {
         Duration::from_secs_f64(seconds)
     }
 
-    // pub fn known_sample_type(&self) -> PhonicResult<KnownSampleType> {
-    //     KnownSampleType::try_from(self.sample_type)
-    // }
-
     pub fn merge<T>(&mut self, other: &StreamSpec<T>) -> PhonicResult<()>
     where
         T: CodecTag + TryInto<C>,

@@ -9,7 +9,7 @@ use phonic::{
         match_tagged_signal,
         utils::{FormatIdentifier, FormatUtilsExt},
     },
-    sync::spsc::SignalBuf,
+    sync::spsc::SpscSignal,
     utils::SignalUtilsExt,
     BlockingSignal, PhonicError, PhonicResult, SignalExt, SignalReader,
 };
@@ -37,7 +37,7 @@ where
 {
     let spec = signal.spec();
     const BUF_DURATION: Duration = Duration::from_millis(200);
-    let (mut producer, consumer) = SignalBuf::default_duration(*spec, BUF_DURATION);
+    let (mut producer, consumer) = SpscSignal::default_duration(*spec, BUF_DURATION);
 
     let output = cpal::default_host()
         .default_output_device()

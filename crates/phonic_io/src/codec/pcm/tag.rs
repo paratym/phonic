@@ -1,24 +1,30 @@
 use crate::{
-    codec::pcm::PcmCodec, match_tagged_signal, utils::PollIo, CodecTag, Decoder, Encoder,
-    StreamSpec, StreamSpecBuilder,
+    codec::pcm::{Endianess, PcmCodec},
+    utils::{PollIo, UnWriteable},
+    CodecFromSignal, CodecFromStream, CodecTag, StreamSpec, StreamSpecBuilder,
 };
-use phonic_signal::{Channels, PhonicError, PhonicResult, SignalSpec};
+use phonic_signal::{utils::Poll, Channels, PhonicError, PhonicResult, SignalSpec};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct PcmCodecTag;
+pub enum PcmCodecTag {
+    LE,
+    BE,
+}
 
 impl PcmCodecTag {
     pub fn infer_tagged_spec<C>(spec: StreamSpecBuilder<C>) -> PhonicResult<StreamSpec<C>>
     where
-        C: CodecTag,
+        C: CodecTag + TryInto<PcmCodecTag>,
         PcmCodecTag: TryInto<C>,
+        PhonicError: From<<C as TryInto<PcmCodecTag>>::Error>,
         PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
     {
-        let expected_codec = PcmCodecTag.try_into()?;
-        let codec = spec.codec.unwrap_or(expected_codec);
-        if codec != expected_codec {
-            return Err(PhonicError::InvalidInput);
-        }
+        let codec = spec
+            .codec
+            .map(TryInto::<PcmCodecTag>::try_into)
+            .transpose()?
+            .unwrap_or_default()
+            .try_into()?;
 
         let Some(sample_layout) = spec.sample_layout else {
             return Err(PhonicError::MissingData);
@@ -79,49 +85,68 @@ impl PcmCodecTag {
     }
 
     #[cfg(feature = "dyn-io")]
-    pub fn dyn_encoder<C: CodecTag>(
+    pub fn from_dyn_signal<C>(
+        tag: C,
         signal: crate::dyn_io::TaggedSignal,
     ) -> PhonicResult<Box<dyn crate::dyn_io::DynStream<Tag = C>>>
     where
+        C: CodecTag + TryInto<PcmCodecTag> + 'static,
         PcmCodecTag: TryInto<C>,
+        PhonicError: From<<C as TryInto<PcmCodecTag>>::Error>,
         PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
     {
-        // match_tagged_signal!(signal, inner => Ok(Box::new(PollIo(PcmCodec::encoder(inner)))))
-        todo!()
+        crate::match_tagged_signal!(signal, inner => Ok(Box::new(PollIo(UnWriteable(PcmCodec::from_signal(tag, inner)?)))))
     }
 
     #[cfg(feature = "dyn-io")]
-    pub fn dyn_decoder<C: CodecTag>(
+    pub fn from_dyn_stream<C>(
         stream: Box<dyn crate::dyn_io::DynStream<Tag = C>>,
-    ) -> PhonicResult<crate::dyn_io::TaggedSignal> {
-        todo!()
-        // use crate::dyn_io::{KnownSampleType, TaggedSignal};
-        //
-        // macro_rules! dyn_construct_branch {
-        //     ($sample:ident, $inner:ident) => {{
-        //         // TODO: figure out why CodecConstructor needs explicit generics here
-        //         let codec = <PcmCodec<_, _, _> as Decoder<S, S::Tag>>::decoder($inner)?;
-        //         TaggedSignal::$sample(Box::new(Poll(codec)))
-        //     }};
-        // }
-        //
-        // let sample_type = stream.stream_spec().sample_layout.id().try_into()?;
-        // let signal = match sample_type {
-        //     KnownSampleType::I8 => dyn_construct_branch!(I8, stream),
-        //     KnownSampleType::I16 => dyn_construct_branch!(I16, stream),
-        //     KnownSampleType::I32 => dyn_construct_branch!(I32, stream),
-        //     KnownSampleType::I64 => dyn_construct_branch!(I64, stream),
-        //
-        //     KnownSampleType::U8 => dyn_construct_branch!(U8, stream),
-        //     KnownSampleType::U16 => dyn_construct_branch!(U16, stream),
-        //     KnownSampleType::U32 => dyn_construct_branch!(U32, stream),
-        //     KnownSampleType::U64 => dyn_construct_branch!(U64, stream),
-        //
-        //     KnownSampleType::F32 => dyn_construct_branch!(F32, stream),
-        //     KnownSampleType::F64 => dyn_construct_branch!(F64, stream),
-        // };
-        //
-        // Ok(signal)
+    ) -> PhonicResult<crate::dyn_io::TaggedSignal>
+    where
+        C: CodecTag + TryInto<PcmCodecTag> + 'static,
+        PcmCodecTag: TryInto<C>,
+        PhonicError: From<<C as TryInto<PcmCodecTag>>::Error>,
+        PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
+    {
+        use crate::dyn_io::{KnownSampleType, TaggedSignal};
+
+        let sample_type = KnownSampleType::try_from(stream.stream_spec().sample_layout.id())?;
+        let signal = match sample_type {
+            KnownSampleType::I8 => TaggedSignal::I8(Box::new(Poll(PcmCodec::from_stream(stream)?))),
+            KnownSampleType::I16 => {
+                TaggedSignal::I16(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::I32 => {
+                TaggedSignal::I32(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::I64 => {
+                TaggedSignal::I64(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::U8 => TaggedSignal::U8(Box::new(Poll(PcmCodec::from_stream(stream)?))),
+            KnownSampleType::U16 => {
+                TaggedSignal::U16(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::U32 => {
+                TaggedSignal::U32(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::U64 => {
+                TaggedSignal::U64(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::F32 => {
+                TaggedSignal::F32(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+            KnownSampleType::F64 => {
+                TaggedSignal::F64(Box::new(Poll(PcmCodec::from_stream(stream)?)))
+            }
+        };
+
+        Ok(signal)
+    }
+}
+
+impl Default for PcmCodecTag {
+    fn default() -> Self {
+        Self::from(Endianess::default())
     }
 }
 
@@ -133,8 +158,13 @@ impl CodecTag for PcmCodecTag {
 
 #[cfg(feature = "dyn-io")]
 impl From<PcmCodecTag> for crate::dyn_io::KnownCodec {
-    fn from(_: PcmCodecTag) -> Self {
-        Self::Pcm
+    fn from(tag: PcmCodecTag) -> Self {
+        use crate::dyn_io::KnownCodec;
+
+        match tag {
+            PcmCodecTag::LE => KnownCodec::PcmLE,
+            PcmCodecTag::BE => KnownCodec::PcmBE,
+        }
     }
 }
 
@@ -143,8 +173,11 @@ impl TryFrom<crate::dyn_io::KnownCodec> for PcmCodecTag {
     type Error = PhonicError;
 
     fn try_from(codec: crate::dyn_io::KnownCodec) -> Result<Self, Self::Error> {
+        use crate::dyn_io::KnownCodec;
+
         match codec {
-            crate::dyn_io::KnownCodec::Pcm => Ok(Self),
+            KnownCodec::PcmLE => Ok(Self::LE),
+            KnownCodec::PcmBE => Ok(Self::BE),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
@@ -152,14 +185,158 @@ impl TryFrom<crate::dyn_io::KnownCodec> for PcmCodecTag {
     }
 }
 
-//
-// pub fn pcm_codec_from_dyn_signal<C>(
-//     signal: TaggedSignal,
-// ) -> PhonicResult<Box<dyn DynStream<Tag = C>>>
-// where
-//     C: CodecTag + 'static,
-//     PcmCodecTag: TryInto<C>,
-//     PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
-// {
-//     match_tagged_signal!(signal, inner => Ok(Box::new(PollIo(PcmCodec::encoder(inner)?))))
-// }
+#[cfg(test)]
+mod tests {
+    use crate::{codec::pcm::PcmCodecTag, StreamSpec};
+    use phonic_signal::PhonicError;
+
+    #[test]
+    fn infer_can_fill_any_single_missing_data_point() {
+        todo!()
+    }
+
+    #[test]
+    fn infer_properly_rejects_missing_data() {
+        macro_rules! impl_test {
+            (
+                $spec:ident = $specDef:expr;
+                $mutLayout:stmt;
+                $mutSampleRate:stmt;
+                $mutChannels:stmt;
+                $mutByteRate:stmt;
+            ) => {
+                impl_test!($spec = $specDef; $mutLayout);
+                impl_test!($spec = $specDef; $mutSampleRate);
+                impl_test!($spec = $specDef; $mutChannels);
+                impl_test!($spec = $specDef; $mutByteRate);
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutLayout;
+                    $mutSampleRate
+                );
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutLayout;
+                    $mutChannels
+                );
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutLayout;
+                    $mutByteRate
+                );
+
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutSampleRate;
+                    $mutChannels
+                );
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutSampleRate;
+                    $mutByteRate
+                );
+
+                impl_test!(
+                    $spec = $specDef;
+                    $mutChannels;
+                    $mutByteRate
+                );
+            };
+            (
+                $spec:ident = $specDef:expr;
+                $($mutation:stmt);*
+            ) => {
+                let mut $spec = $specDef;
+                $($mutation)*
+                match PcmCodecTag::infer_tagged_spec($spec) {
+                    Err(PhonicError::MissingData) => (),
+                    result => panic!("expected PhonicError::MissingData found: {result:?}"),
+                }
+            }
+        }
+
+        impl_test!(
+                spec = StreamSpec::<PcmCodecTag>::builder();
+                spec = spec.with_sample_type::<f32>();
+                spec.decoded_spec.sample_rate = Some(48000);
+                spec.decoded_spec.channels = Some(2.into());
+                spec.avg_byte_rate = Some(4 * 48000 * 2);
+        );
+    }
+
+    #[test]
+    fn infer_properly_rejects_invalid_data() {
+        todo!()
+    }
+
+    #[cfg(feature = "dyn-io")]
+    mod dyn_construct {
+        macro_rules! impl_test {
+            ($name:ident, $sample:ty, $tag:ident) => {
+                #[test]
+                fn $name() {
+                    let spec = SignalSpec {
+                        sample_rate: 48000,
+                        channels: 2.into(),
+                    };
+
+                    let signal = Poll(Infinite(UnSeekable(Indexed::new(
+                        NullSignal::<$sample>::new(spec),
+                    ))));
+
+                    let dyn_signal = TaggedSignal::from(
+                        Box::new(signal) as Box<dyn DynSignal<Sample = $sample>>
+                    );
+
+                    let signal_codec = PcmCodecTag::from_dyn_signal(PcmCodecTag::$tag, dyn_signal)
+                        .expect("failed to construct signal codec");
+
+                    assert_eq!(
+                        signal_codec.stream_spec().sample_layout.id(),
+                        TypeId::of::<$sample>()
+                    );
+
+                    let stream_codec = PcmCodecTag::from_dyn_stream(signal_codec)
+                        .expect("failed to construct stream codec");
+
+                    assert_eq!(stream_codec.sample_type().id(), TypeId::of::<$sample>())
+                }
+            };
+            ($name:ident, $sample:ty) => {
+                mod $name {
+                    use crate::{
+                        codec::pcm::PcmCodecTag,
+                        dyn_io::{DynSignal, TaggedSignal},
+                        utils::{Infinite, UnSeekable},
+                    };
+                    use phonic_signal::{
+                        utils::{Indexed, NullSignal, Poll},
+                        SignalSpec,
+                    };
+                    use std::any::TypeId;
+
+                    impl_test!(little_endian, $sample, LE);
+                    impl_test!(big_endian, $sample, BE);
+                }
+            };
+        }
+
+        impl_test!(from_u8, u8);
+        impl_test!(from_u16, u16);
+        impl_test!(from_u32, u32);
+        impl_test!(from_u64, u64);
+
+        impl_test!(from_i8, i8);
+        impl_test!(from_i16, i16);
+        impl_test!(from_i32, i32);
+        impl_test!(from_i64, i64);
+
+        impl_test!(from_f32, f32);
+        impl_test!(from_f64, f64);
+    }
+}

@@ -38,7 +38,22 @@ pub enum TaggedSignal {
 }
 
 impl KnownSampleType {
-    pub fn byte_size(self) -> usize {
+    pub fn id(self) -> TypeId {
+        match self {
+            KnownSampleType::I8 => TypeId::of::<i8>(),
+            KnownSampleType::I16 => TypeId::of::<i16>(),
+            KnownSampleType::I32 => TypeId::of::<i32>(),
+            KnownSampleType::I64 => TypeId::of::<i64>(),
+            KnownSampleType::U8 => TypeId::of::<u8>(),
+            KnownSampleType::U16 => TypeId::of::<u16>(),
+            KnownSampleType::U32 => TypeId::of::<u32>(),
+            KnownSampleType::U64 => TypeId::of::<u64>(),
+            KnownSampleType::F32 => TypeId::of::<f32>(),
+            KnownSampleType::F64 => TypeId::of::<f64>(),
+        }
+    }
+
+    pub fn size(self) -> usize {
         match self {
             Self::I8 => size_of::<i8>(),
             Self::I16 => size_of::<i16>(),
@@ -50,6 +65,21 @@ impl KnownSampleType {
             Self::U64 => size_of::<u64>(),
             Self::F32 => size_of::<f32>(),
             Self::F64 => size_of::<f64>(),
+        }
+    }
+
+    pub fn align(self) -> usize {
+        match self {
+            Self::I8 => align_of::<i8>(),
+            Self::I16 => align_of::<i16>(),
+            Self::I32 => align_of::<i32>(),
+            Self::I64 => align_of::<i64>(),
+            Self::U8 => align_of::<u8>(),
+            Self::U16 => align_of::<u16>(),
+            Self::U32 => align_of::<u32>(),
+            Self::U64 => align_of::<u64>(),
+            Self::F32 => align_of::<f32>(),
+            Self::F64 => align_of::<f64>(),
         }
     }
 }
@@ -76,18 +106,7 @@ impl TryFrom<TypeId> for KnownSampleType {
 
 impl From<KnownSampleType> for TypeId {
     fn from(value: KnownSampleType) -> Self {
-        match value {
-            KnownSampleType::I8 => TypeId::of::<i8>(),
-            KnownSampleType::I16 => TypeId::of::<i16>(),
-            KnownSampleType::I32 => TypeId::of::<i32>(),
-            KnownSampleType::I64 => TypeId::of::<i64>(),
-            KnownSampleType::U8 => TypeId::of::<u8>(),
-            KnownSampleType::U16 => TypeId::of::<u16>(),
-            KnownSampleType::U32 => TypeId::of::<u32>(),
-            KnownSampleType::U64 => TypeId::of::<u64>(),
-            KnownSampleType::F32 => TypeId::of::<f32>(),
-            KnownSampleType::F64 => TypeId::of::<f64>(),
-        }
+        value.id()
     }
 }
 

@@ -1,12 +1,12 @@
 use crate::spsc::{Consumer, Producer, SpscBuf};
 use phonic_signal::{
-    utils::copy_to_uninit_slice, BlockingSignal, BufferedSignalReader, BufferedSignalWriter,
-    DefaultDynamicBuf, DefaultSizedBuf, DynamicBuf, NSamples, OwnedBuf, PhonicError, PhonicResult,
-    Sample, Signal, SignalDuration, SignalReader, SignalSpec, SignalWriter, SizedBuf,
+    utils::copy_to_uninit_slice, BufferedSignalReader, BufferedSignalWriter, DefaultDynamicBuf,
+    DefaultSizedBuf, DynamicBuf, NSamples, OwnedBuf, PhonicError, PhonicResult, Sample, Signal,
+    SignalDuration, SignalReader, SignalSpec, SignalWriter, SizedBuf,
 };
-use std::mem::MaybeUninit;
+use std::{mem::MaybeUninit, sync::atomic::Ordering};
 
-pub struct SignalBuf;
+pub struct SpscSignal;
 
 pub struct SignalProducer<T, B> {
     spec: SignalSpec,
@@ -18,15 +18,17 @@ pub struct SignalConsumer<T, B> {
     consumer: Consumer<T, B>,
 }
 
-pub type SignalBufPair<T, B> = (SignalProducer<T, B>, SignalConsumer<T, B>);
+pub type SpscSignalPair<T, B> = (SignalProducer<T, B>, SignalConsumer<T, B>);
 
-impl SignalBuf {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new<T, B>(spec: SignalSpec, buf: B) -> SignalBufPair<T, B>
-    where
-        B: AsMut<[MaybeUninit<T>]>,
-    {
-        let (producer, consumer) = SpscBuf::new(buf);
+impl SpscSignal {
+    pub unsafe fn from_raw_parts<T, B>(
+        spec: SignalSpec,
+        buf: B,
+        ptr: *mut MaybeUninit<T>,
+        cap: usize,
+    ) -> SpscSignalPair<T, B> {
+        let aligned_cap = cap - cap % spec.channels.count() as usize;
+        let (producer, consumer) = SpscBuf::from_raw_parts(buf, ptr, aligned_cap);
 
         (
             SignalProducer { spec, producer },
@@ -34,7 +36,19 @@ impl SignalBuf {
         )
     }
 
-    pub fn new_sized<B>(spec: SignalSpec) -> SignalBufPair<B::Item, B::Uninit>
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new<T, B>(spec: SignalSpec, mut buf: B) -> SpscSignalPair<T, B>
+    where
+        B: AsMut<[MaybeUninit<T>]>,
+    {
+        let slice = buf.as_mut();
+        let ptr = slice.as_mut_ptr();
+        let cap = slice.len();
+
+        unsafe { Self::from_raw_parts(spec, buf, ptr, cap) }
+    }
+
+    pub fn new_sized<B>(spec: SignalSpec) -> SpscSignalPair<B::Item, B::Uninit>
     where
         B: SizedBuf,
         B::Uninit: AsMut<[<B::Uninit as OwnedBuf>::Item]>,
@@ -45,7 +59,7 @@ impl SignalBuf {
 
     pub fn default_sized<T>(
         spec: SignalSpec,
-    ) -> SignalBufPair<T, <DefaultSizedBuf<T> as OwnedBuf>::Uninit> {
+    ) -> SpscSignalPair<T, <DefaultSizedBuf<T> as OwnedBuf>::Uninit> {
         let buf = DefaultSizedBuf::<T>::uninit();
         Self::new(spec, buf)
     }
@@ -53,7 +67,7 @@ impl SignalBuf {
     pub fn new_duration<B>(
         spec: SignalSpec,
         duration: impl SignalDuration,
-    ) -> SignalBufPair<B::Item, B::Uninit>
+    ) -> SpscSignalPair<B::Item, B::Uninit>
     where
         B: DynamicBuf,
         B::Uninit: AsMut<[MaybeUninit<B::Item>]>,
@@ -67,7 +81,7 @@ impl SignalBuf {
     pub fn default_duration<T>(
         spec: SignalSpec,
         duration: impl SignalDuration,
-    ) -> SignalBufPair<T, <DefaultDynamicBuf<T> as OwnedBuf>::Uninit> {
+    ) -> SpscSignalPair<T, <DefaultDynamicBuf<T> as OwnedBuf>::Uninit> {
         let NSamples { n_samples } = duration.into_duration(&spec);
         let buf = DefaultDynamicBuf::<T>::uninit(n_samples as usize);
 
@@ -83,46 +97,61 @@ impl<T: Sample, B> Signal for SignalConsumer<T, B> {
     }
 }
 
-impl<T: Sample, B> BlockingSignal for SignalConsumer<T, B> {
-    fn block(&self) {
-        todo!()
-    }
-}
-
 impl<T: Sample, B> SignalReader for SignalConsumer<T, B> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let (trailing, leading) = self.consumer.elements();
         if trailing.is_empty() {
             if self.consumer.is_abandoned() {
+                std::sync::atomic::fence(Ordering::Acquire);
                 return Ok(0);
             }
 
             return Err(PhonicError::NotReady);
         }
 
-        let trailing_len = trailing.len().min(buf.len());
-        let leading_len = leading.len().min(buf.len() - trailing_len);
+        let n_channels = self.spec.channels.count() as usize;
+        let buf_len = buf.len() - buf.len() % n_channels;
+
+        let trailing_len = trailing.len().min(buf_len);
+        debug_assert_eq!(trailing_len % n_channels, 0);
+        copy_to_uninit_slice(&trailing[..trailing_len], &mut buf[..trailing_len]);
+
+        let leading_len = leading.len().min(buf_len - trailing_len);
+        debug_assert_eq!(leading_len % n_channels, 0);
         let n_samples = trailing_len + leading_len;
 
-        copy_to_uninit_slice(&trailing[..trailing_len], &mut buf[..trailing_len]);
-        copy_to_uninit_slice(&leading[..leading_len], &mut buf[trailing_len..n_samples]);
-        self.consumer.commit(n_samples);
+        if leading_len > 0 {
+            copy_to_uninit_slice(&leading[..leading_len], &mut buf[trailing_len..n_samples]);
+        }
 
+        self.consumer.consume(n_samples);
         Ok(n_samples)
     }
 }
 
 impl<T: Sample, B> BufferedSignalReader for SignalConsumer<T, B> {
     fn fill(&mut self) -> PhonicResult<&[Self::Sample]> {
-        todo!()
+        let (trailing, _) = self.consumer.elements();
+        if trailing.is_empty() && !self.consumer.is_abandoned() {
+            std::sync::atomic::fence(Ordering::Acquire);
+            return Err(PhonicError::NotReady);
+        }
+
+        Ok(trailing)
     }
 
     fn buffer(&self) -> Option<&[Self::Sample]> {
-        todo!()
+        let (trailing, _) = self.consumer.elements();
+        if trailing.is_empty() && self.consumer.is_abandoned() {
+            std::sync::atomic::fence(Ordering::Acquire);
+            return None;
+        }
+
+        Some(trailing)
     }
 
     fn consume(&mut self, n_samples: usize) {
-        todo!()
+        self.consumer.consume(n_samples)
     }
 }
 
@@ -134,41 +163,61 @@ impl<T: Sample, B> Signal for SignalProducer<T, B> {
     }
 }
 
-impl<T: Sample, B> BlockingSignal for SignalProducer<T, B> {
-    fn block(&self) {
-        todo!()
-    }
-}
-
 impl<T: Sample, B> SignalWriter for SignalProducer<T, B> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         if self.producer.is_abandoned() {
+            std::sync::atomic::fence(Ordering::Acquire);
             return Err(PhonicError::Terminated);
         }
 
         let (trailing, leading) = self.producer.slots();
-        let trailing_len = trailing.len().min(buf.len());
-        let leading_len = trailing.len().min(buf.len() - trailing_len);
+        if trailing.is_empty() {
+            return Err(PhonicError::NotReady);
+        }
+
+        let n_channels = self.spec.channels.count() as usize;
+        let buf_len = buf.len() - buf.len() % n_channels;
+
+        let trailing_len = trailing.len().min(buf_len);
+        debug_assert_eq!(trailing_len % n_channels, 0);
+        copy_to_uninit_slice(&buf[..trailing_len], &mut trailing[..trailing_len]);
+
+        let leading_len = leading.len().min(buf_len - trailing_len);
+        debug_assert_eq!(leading_len % n_channels, 0);
         let n_samples = trailing_len + leading_len;
 
-        copy_to_uninit_slice(&buf[..trailing_len], &mut trailing[..trailing_len]);
-        copy_to_uninit_slice(&buf[trailing_len..n_samples], &mut leading[..leading_len]);
-        self.producer.commit(n_samples);
+        if leading_len > 0 {
+            copy_to_uninit_slice(&buf[trailing_len..n_samples], &mut leading[..leading_len]);
+        }
 
+        self.producer.commit(n_samples);
         Ok(n_samples)
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        todo!()
+        if self.producer.is_empty() {
+            Ok(())
+        } else if self.producer.is_abandoned() {
+            std::sync::atomic::fence(Ordering::Acquire);
+            Err(PhonicError::Terminated)
+        } else {
+            Err(PhonicError::NotReady)
+        }
     }
 }
 
 impl<T: Sample, B> BufferedSignalWriter for SignalProducer<T, B> {
     fn buffer_mut(&mut self) -> Option<&mut [MaybeUninit<Self::Sample>]> {
-        todo!()
+        if self.producer.is_abandoned() {
+            std::sync::atomic::fence(Ordering::Acquire);
+            return None;
+        }
+
+        let (trailing, _) = self.producer.slots();
+        Some(trailing)
     }
 
     fn commit(&mut self, n_samples: usize) {
-        todo!()
+        self.producer.commit(n_samples)
     }
 }

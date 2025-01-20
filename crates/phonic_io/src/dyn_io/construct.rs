@@ -18,5 +18,5 @@ pub trait DynFormatConstructor: FormatTag {
 pub trait DynCodecConstructor: CodecTag {
     fn encoder(&self, signal: TaggedSignal) -> PhonicResult<Box<dyn DynStream<Tag = Self>>>;
 
-    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> PhonicResult<TaggedSignal>;
+    fn decoder(stream: Box<dyn DynStream<Tag = Self>>) -> PhonicResult<TaggedSignal>;
 }

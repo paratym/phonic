@@ -9,7 +9,10 @@ use std::hash::Hash;
 #[non_exhaustive]
 pub enum KnownCodec {
     #[cfg(feature = "pcm")]
-    Pcm,
+    PcmLE,
+
+    #[cfg(feature = "pcm")]
+    PcmBE,
 }
 
 impl CodecTag for KnownCodec {
@@ -18,7 +21,7 @@ impl CodecTag for KnownCodec {
 
         match spec.codec {
             #[cfg(feature = "pcm")]
-            Some(Self::Pcm) => pcm::PcmCodecTag::infer_tagged_spec(spec),
+            Some(Self::PcmLE | Self::PcmBE) => pcm::PcmCodecTag::infer_tagged_spec(spec),
 
             None => Err(PhonicError::MissingData),
         }
@@ -31,19 +34,19 @@ impl DynCodecConstructor for KnownCodec {
 
         match self {
             #[cfg(feature = "pcm")]
-            Self::Pcm => pcm::PcmCodecTag::dyn_encoder(signal),
+            Self::PcmLE | Self::PcmBE => pcm::PcmCodecTag::from_dyn_signal(*self, signal),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
         }
     }
 
-    fn decoder<S: DynStream<Tag = Self> + 'static>(stream: S) -> PhonicResult<TaggedSignal> {
+    fn decoder(stream: Box<dyn DynStream<Tag = Self>>) -> PhonicResult<TaggedSignal> {
         use crate::codec::*;
 
         match stream.stream_spec().codec {
             #[cfg(feature = "pcm")]
-            Self::Pcm => pcm::PcmCodecTag::dyn_decoder(Box::new(stream)),
+            Self::PcmLE | Self::PcmBE => pcm::PcmCodecTag::from_dyn_stream(stream),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),

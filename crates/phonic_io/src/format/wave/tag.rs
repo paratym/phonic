@@ -14,7 +14,7 @@ pub struct WaveFormatTag;
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum WaveSupportedCodec {
     #[cfg(feature = "pcm")]
-    Pcm,
+    PcmLE,
 }
 
 impl FormatTag for WaveFormatTag {
@@ -25,18 +25,29 @@ impl CodecTag for WaveSupportedCodec {
     fn infer_spec(spec: StreamSpecBuilder<Self>) -> PhonicResult<StreamSpec<Self>> {
         match spec.codec {
             #[cfg(feature = "pcm")]
-            Some(Self::Pcm) => crate::codec::pcm::PcmCodecTag::infer_tagged_spec(spec),
+            Some(Self::PcmLE) => crate::codec::pcm::PcmCodecTag::infer_tagged_spec(spec),
 
             None => Err(PhonicError::MissingData),
         }
     }
 }
 
+impl Default for WaveSupportedCodec {
+    fn default() -> Self {
+        Self::PcmLE
+    }
+}
+
 #[cfg(feature = "pcm")]
-impl From<crate::codec::pcm::PcmCodecTag> for WaveSupportedCodec {
-    fn from(tag: crate::codec::pcm::PcmCodecTag) -> Self {
+impl TryFrom<crate::codec::pcm::PcmCodecTag> for WaveSupportedCodec {
+    type Error = PhonicError;
+
+    fn try_from(tag: crate::codec::pcm::PcmCodecTag) -> Result<Self, Self::Error> {
+        use crate::codec::pcm::PcmCodecTag;
+
         match tag {
-            crate::codec::pcm::PcmCodecTag => Self::Pcm,
+            PcmCodecTag::LE => Ok(Self::PcmLE),
+            PcmCodecTag::BE => Err(PhonicError::Unsupported),
         }
     }
 }
@@ -47,7 +58,10 @@ impl TryFrom<WaveSupportedCodec> for crate::codec::pcm::PcmCodecTag {
 
     fn try_from(codec: WaveSupportedCodec) -> Result<Self, Self::Error> {
         match codec {
-            WaveSupportedCodec::Pcm => Ok(Self),
+            WaveSupportedCodec::PcmLE => Ok(Self::LE),
+
+            #[allow(unreachable_patterns)]
+            _ => Err(PhonicError::Unsupported),
         }
     }
 }
@@ -82,7 +96,7 @@ impl TryFrom<WaveSupportedCodec> for crate::dyn_io::KnownCodec {
     fn try_from(codec: crate::format::wave::WaveSupportedCodec) -> Result<Self, Self::Error> {
         match codec {
             #[cfg(feature = "pcm")]
-            crate::format::wave::WaveSupportedCodec::Pcm => Ok(Self::Pcm),
+            crate::format::wave::WaveSupportedCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
@@ -97,7 +111,7 @@ impl TryFrom<crate::dyn_io::KnownCodec> for WaveSupportedCodec {
     fn try_from(codec: crate::dyn_io::KnownCodec) -> Result<Self, Self::Error> {
         match codec {
             #[cfg(feature = "pcm")]
-            crate::dyn_io::KnownCodec::Pcm => Ok(Self::Pcm),
+            crate::dyn_io::KnownCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),

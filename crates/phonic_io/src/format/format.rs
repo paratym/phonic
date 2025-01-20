@@ -20,37 +20,37 @@ delegate_group! {
         }
     }
 
-    pub trait BlockingFormat: Format {
+    pub trait BlockingFormat: crate::Format {
         fn block(&self);
     }
 
-    pub trait IndexedFormat: Format {
+    pub trait IndexedFormat: crate::Format {
         fn pos(&self) -> u64;
         fn stream_pos(&self, stream: usize) -> u64;
     }
 
-    pub trait FiniteFormat: Format {
+    pub trait FiniteFormat: crate::Format {
         fn len(&self) -> u64;
         fn stream_len(&self, stream: usize) -> u64;
     }
 
-    #[subgroup(Mut, Read)]
-    pub trait FormatReader: Format {
+    #[subgroup(Mut)]
+    pub trait FormatReader: crate::Format {
         fn read(
             &mut self,
             buf: &mut [std::mem::MaybeUninit<u8>]
         ) -> phonic_signal::PhonicResult<(usize, usize)>;
     }
 
-    #[subgroup(Mut, Write)]
-    pub trait FormatWriter: Format {
+    #[subgroup(Mut)]
+    pub trait FormatWriter: crate::Format {
         fn write(&mut self, stream: usize, buf: &[u8]) -> phonic_signal::PhonicResult<usize>;
         fn flush(&mut self) -> phonic_signal::PhonicResult<()>;
         fn finalize(&mut self) -> phonic_signal::PhonicResult<()>;
     }
 
 
-    pub trait FormatSeeker: Format {
+    pub trait FormatSeeker: crate::Format {
         fn seek(&mut self, stream: usize, offset: i64) -> phonic_signal::PhonicResult<()>;
     }
 }

@@ -148,7 +148,7 @@ where
 
     fn try_from(header: WaveHeader) -> Result<Self, Self::Error> {
         let codec = match header.fmt.format_tag {
-            1 | 3 => WaveSupportedCodec::Pcm.try_into(),
+            1 | 3 => WaveSupportedCodec::PcmLE.try_into(),
             _ => return Err(PhonicError::Unsupported),
         }?;
 

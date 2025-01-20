@@ -54,7 +54,7 @@ pub trait DynStream:
         Self: Sized + 'static,
         Self::Tag: DynCodecConstructor,
     {
-        Self::Tag::decoder(self)
+        Self::Tag::decoder(Box::new(self))
     }
 }
 

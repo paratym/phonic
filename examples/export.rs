@@ -1,12 +1,12 @@
 use phonic::{
     dsp::{gen::Osc, utils::DspUtilsExt},
     io::{
-        codecs::pcm::PcmCodec,
-        formats::wave::WaveFormat,
+        pcm::PcmCodec,
         utils::{FormatUtilsExt, StreamUtilsExt},
-        CodecConstructor, Format, FormatConstructor, FormatWriter, Stream,
+        wave::WaveFormat,
+        CodecFromSignal, FormatConstructor, Stream,
     },
-    PhonicError, PhonicResult, SignalReader, SignalSpec,
+    PhonicResult, SignalReader, SignalSpec,
 };
 use std::{
     fs::{remove_file, File},
@@ -35,7 +35,7 @@ fn export(
     signal: &mut impl SignalReader<Sample = f32>,
     writer: &mut impl std::io::Write,
 ) -> PhonicResult<()> {
-    let mut codec = PcmCodec::encoder(signal)?.polled();
+    let mut codec = PcmCodec::default_from_signal(signal)?.polled();
     let mut format = <WaveFormat<_>>::write_index(writer, [*codec.stream_spec()])?;
     let mut buf = [MaybeUninit::<u8>::uninit(); 4096];
 
