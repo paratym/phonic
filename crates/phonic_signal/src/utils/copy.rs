@@ -1,13 +1,14 @@
 use crate::{
-    BlockingSignal, BufferedSignalWriter, IntoDuration, NSamples, PhonicError, PhonicResult,
-    Signal, SignalDuration, SignalExt, SignalReader, SignalWriter,
+    utils::{IntoDuration, NSamples},
+    BlockingSignal, BufferedSignalWriter, PhonicError, PhonicResult, Signal, SignalExt,
+    SignalReader, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
 pub fn copy_exact<R, W>(
     reader: &mut R,
     writer: &mut W,
-    duration: impl SignalDuration,
+    duration: impl IntoDuration<NSamples>,
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
 where
@@ -37,7 +38,7 @@ where
 pub fn copy_exact_buffered<R, W>(
     reader: &mut R,
     writer: &mut W,
-    duration: impl SignalDuration,
+    duration: impl IntoDuration<NSamples>,
 ) -> PhonicResult<()>
 where
     R: BlockingSignal + SignalReader,

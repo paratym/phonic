@@ -1,5 +1,5 @@
 use crate::{
-    codec::pcm::{ArbitrarySample, Endianess, PcmCodecTag},
+    codecs::pcm::{ArbitrarySample, Endianess, PcmCodecTag},
     CodecFromSignal, CodecFromStream, CodecTag, FiniteStream, IndexedStream, Stream, StreamReader,
     StreamSeeker, StreamSpec, StreamSpecBuilder, StreamWriter,
 };

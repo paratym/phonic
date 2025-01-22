@@ -1,18 +1,52 @@
 use crate::{
     utils::{
-        copy_all, copy_all_buffered, copy_exact, copy_exact_buffered, Cursor, Indexed, Observer,
-        Poll, SignalEvent,
+        copy_all, copy_all_buffered, copy_exact, copy_exact_buffered, Cursor, DynamicBuf, Indexed,
+        IntoDuration, NFrames, NSamples, Observer, Poll, ResizeBuf, SignalEvent, SizedBuf,
     },
-    BlockingSignal, BufferedSignalWriter, DynamicBuf, PhonicResult, ResizeBuf, Signal,
-    SignalDuration, SignalReader, SignalWriter, SizedBuf,
+    BlockingSignal, BufferedSignalWriter, FiniteSignal, IndexedSignal, PhonicError, PhonicResult,
+    Signal, SignalExt, SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
 pub trait SignalUtilsExt: Sized + Signal {
+    fn read_into<T>(&mut self) -> PhonicResult<T>
+    where
+        Self: Sized + SignalReader,
+        T: DynamicBuf<Item = Self::Sample>,
+        T::Uninit: ResizeBuf,
+    {
+        T::read(self)
+    }
+
+    fn read_into_sized<T>(&mut self) -> PhonicResult<T>
+    where
+        Self: Sized + BlockingSignal + SignalReader,
+        T: SizedBuf<Item = Self::Sample>,
+    {
+        T::read(self)
+    }
+
+    fn read_into_exact<T>(&mut self, duration: impl IntoDuration<NSamples>) -> PhonicResult<T>
+    where
+        Self: Sized + BlockingSignal + SignalReader,
+        T: DynamicBuf<Item = Self::Sample>,
+    {
+        T::read_exact(self, duration)
+    }
+
+    fn read_all_into<T>(&mut self) -> PhonicResult<T>
+    where
+        Self: Sized + BlockingSignal + SignalReader,
+        T: DynamicBuf<Item = Self::Sample>,
+        T::Uninit: ResizeBuf,
+    {
+        T::read_all(self)
+    }
+
     fn copy_exact<R>(
         &mut self,
         reader: &mut R,
-        duration: impl SignalDuration,
+        duration: impl IntoDuration<NSamples>,
         buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()>
     where
@@ -25,7 +59,7 @@ pub trait SignalUtilsExt: Sized + Signal {
     fn copy_exact_buffered<R>(
         &mut self,
         reader: &mut R,
-        duration: impl SignalDuration,
+        duration: impl IntoDuration<NSamples>,
     ) -> PhonicResult<()>
     where
         Self: BlockingSignal + BufferedSignalWriter,
@@ -75,7 +109,7 @@ pub trait SignalUtilsExt: Sized + Signal {
     where
         Self: BlockingSignal + SignalReader,
         T: DynamicBuf<Item = Self::Sample>,
-        D: SignalDuration,
+        D: IntoDuration<NSamples>,
     {
         Cursor::read_exact(self, duration)
     }
@@ -87,6 +121,80 @@ pub trait SignalUtilsExt: Sized + Signal {
         T::Uninit: ResizeBuf,
     {
         Cursor::read_all(self)
+    }
+
+    fn pos_duration<D>(&self) -> D
+    where
+        Self: IndexedSignal,
+        NFrames: IntoDuration<D>,
+    {
+        NFrames::from(self.pos()).into_duration(self.spec())
+    }
+
+    fn len_duration<D>(&self) -> D
+    where
+        Self: FiniteSignal,
+        NFrames: IntoDuration<D>,
+    {
+        NFrames::from(self.len()).into_duration(self.spec())
+    }
+
+    fn rem_duration<D>(&self) -> D
+    where
+        Self: IndexedSignal + FiniteSignal,
+        NFrames: IntoDuration<D>,
+    {
+        NFrames::from(self.rem()).into_duration(self.spec())
+    }
+
+    fn seek_forward<D>(&mut self, duration: D) -> PhonicResult<()>
+    where
+        Self: SignalSeeker,
+        D: IntoDuration<NFrames>,
+    {
+        let NFrames { n_frames } = duration.into_duration(self.spec());
+        self.seek(n_frames as i64)
+    }
+
+    fn seek_backward<D>(&mut self, duration: D) -> PhonicResult<()>
+    where
+        Self: SignalSeeker,
+        D: IntoDuration<NFrames>,
+    {
+        let NFrames { n_frames } = duration.into_duration(self.spec());
+        self.seek(-(n_frames as i64))
+    }
+
+    fn seek_from_start<D>(&mut self, duration: D) -> PhonicResult<()>
+    where
+        Self: IndexedSignal + SignalSeeker,
+        D: IntoDuration<NFrames>,
+    {
+        let NFrames { n_frames: pos } = self.pos_duration();
+        let NFrames { n_frames: new_pos } = duration.into_duration(self.spec());
+
+        let offset = if new_pos >= pos {
+            (new_pos - pos) as i64
+        } else {
+            -((pos - new_pos) as i64)
+        };
+
+        self.seek(offset)
+    }
+
+    fn seek_from_end<D>(&mut self, duration: D) -> PhonicResult<()>
+    where
+        Self: IndexedSignal + FiniteSignal + SignalSeeker,
+        D: IntoDuration<NFrames>,
+    {
+        let NFrames { n_frames } = duration.into_duration(self.spec());
+        let new_pos: NFrames = self
+            .len()
+            .checked_sub(n_frames)
+            .ok_or(PhonicError::OutOfBounds)?
+            .into();
+
+        self.seek_from_start(new_pos)
     }
 
     fn indexed(self) -> Indexed<Self> {

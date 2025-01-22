@@ -1,6 +1,7 @@
 use crate::utils::{Concat, Delay, Repeat, Slice, Split};
 use phonic_signal::{
-    DefaultSizedBuf, FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalDuration, SizedBuf,
+    utils::{DefaultSizedBuf, IntoDuration, NFrames, SizedBuf},
+    FiniteSignal, IndexedSignal, PhonicResult, Signal,
 };
 
 pub trait DspUtilsExt: Sized + Signal {
@@ -11,14 +12,14 @@ pub trait DspUtilsExt: Sized + Signal {
         Concat::new((self, other))
     }
 
-    fn delay<D: SignalDuration>(self, duration: D) -> Delay<Self>
+    fn delay<D: IntoDuration<NFrames>>(self, duration: D) -> Delay<Self>
     where
         Self: IndexedSignal,
     {
         Delay::new(self, duration)
     }
 
-    fn delay_seeked<D: SignalDuration>(self, duration: D) -> Delay<Self> {
+    fn delay_seeked<D: IntoDuration<NFrames>>(self, duration: D) -> Delay<Self> {
         Delay::new_seeked(self, duration)
     }
 
@@ -30,36 +31,40 @@ pub trait DspUtilsExt: Sized + Signal {
         Repeat::new(self, u32::MAX)
     }
 
-    fn slice<D: SignalDuration>(self, start: D, end: D) -> Slice<Self> {
+    fn slice(
+        self,
+        start: impl IntoDuration<NFrames>,
+        end: impl IntoDuration<NFrames>,
+    ) -> Slice<Self> {
         Slice::range(self, start, end)
     }
 
-    fn slice_from_start<D: SignalDuration>(self, end: D) -> Slice<Self> {
+    fn slice_from_start(self, end: impl IntoDuration<NFrames>) -> Slice<Self> {
         Slice::from_start(self, end)
     }
 
-    fn slice_from_current<D: SignalDuration>(self, end: D) -> Slice<Self>
+    fn slice_from_current(self, end: impl IntoDuration<NFrames>) -> Slice<Self>
     where
         Self: IndexedSignal,
     {
         Slice::from_current(self, end)
     }
 
-    fn slice_from_current_offset<D: SignalDuration>(self, offset: D) -> Slice<Self>
+    fn slice_from_current_offset(self, offset: impl IntoDuration<NFrames>) -> Slice<Self>
     where
         Self: IndexedSignal,
     {
         Slice::from_current_offset(self, offset)
     }
 
-    fn slice_to_end<D: SignalDuration>(self, start: D) -> Slice<Self>
+    fn slice_to_end(self, start: impl IntoDuration<NFrames>) -> Slice<Self>
     where
         Self: FiniteSignal,
     {
         Slice::to_end(self, start)
     }
 
-    fn slice_to_end_offset<D: SignalDuration>(self, start: D) -> Slice<Self>
+    fn slice_to_end_offset(self, start: impl IntoDuration<NFrames>) -> Slice<Self>
     where
         Self: FiniteSignal,
     {

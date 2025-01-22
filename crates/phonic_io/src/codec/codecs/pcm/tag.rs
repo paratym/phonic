@@ -1,5 +1,5 @@
 use crate::{
-    codec::pcm::{Endianess, PcmCodec},
+    codecs::pcm::{Endianess, PcmCodec},
     utils::{PollIo, UnWriteable},
     CodecFromSignal, CodecFromStream, CodecTag, StreamSpec, StreamSpecBuilder,
 };
@@ -187,7 +187,7 @@ impl TryFrom<crate::dyn_io::KnownCodec> for PcmCodecTag {
 
 #[cfg(test)]
 mod tests {
-    use crate::{codec::pcm::PcmCodecTag, StreamSpec};
+    use crate::{codecs::pcm::PcmCodecTag, StreamSpec};
     use phonic_signal::PhonicError;
 
     #[test]
@@ -310,7 +310,7 @@ mod tests {
             ($name:ident, $sample:ty) => {
                 mod $name {
                     use crate::{
-                        codec::pcm::PcmCodecTag,
+                        codecs::pcm::PcmCodecTag,
                         dyn_io::{DynSignal, TaggedSignal},
                         utils::{Infinite, UnSeekable},
                     };

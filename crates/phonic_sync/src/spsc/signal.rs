@@ -1,8 +1,11 @@
 use crate::spsc::{Consumer, Producer, SpscBuf};
 use phonic_signal::{
-    utils::copy_to_uninit_slice, BufferedSignalReader, BufferedSignalWriter, DefaultDynamicBuf,
-    DefaultSizedBuf, DynamicBuf, NSamples, OwnedBuf, PhonicError, PhonicResult, Sample, Signal,
-    SignalDuration, SignalReader, SignalSpec, SignalWriter, SizedBuf,
+    utils::{
+        copy_to_uninit_slice, DefaultDynamicBuf, DefaultSizedBuf, DynamicBuf, IntoDuration,
+        NSamples, OwnedBuf, SizedBuf,
+    },
+    BufferedSignalReader, BufferedSignalWriter, PhonicError, PhonicResult, Sample, Signal,
+    SignalReader, SignalSpec, SignalWriter,
 };
 use std::{mem::MaybeUninit, sync::atomic::Ordering};
 
@@ -66,7 +69,7 @@ impl SpscSignal {
 
     pub fn new_duration<B>(
         spec: SignalSpec,
-        duration: impl SignalDuration,
+        duration: impl IntoDuration<NSamples>,
     ) -> SpscSignalPair<B::Item, B::Uninit>
     where
         B: DynamicBuf,
@@ -80,7 +83,7 @@ impl SpscSignal {
 
     pub fn default_duration<T>(
         spec: SignalSpec,
-        duration: impl SignalDuration,
+        duration: impl IntoDuration<NSamples>,
     ) -> SpscSignalPair<T, <DefaultDynamicBuf<T> as OwnedBuf>::Uninit> {
         let NSamples { n_samples } = duration.into_duration(&spec);
         let buf = DefaultDynamicBuf::<T>::uninit(n_samples as usize);

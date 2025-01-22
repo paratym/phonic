@@ -1,5 +1,7 @@
+mod buf;
 mod copy;
 mod cursor;
+mod duration;
 mod ext;
 mod indexed;
 mod iter;
@@ -8,8 +10,10 @@ mod observe;
 mod poll;
 mod uninit;
 
+pub use buf::*;
 pub use copy::*;
 pub use cursor::*;
+pub use duration::*;
 pub use ext::*;
 pub use indexed::*;
 pub use iter::*;

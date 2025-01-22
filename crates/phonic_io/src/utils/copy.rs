@@ -1,4 +1,7 @@
-use crate::{BlockingStream, NBytes, StreamDuration, StreamExt, StreamReader, StreamWriter};
+use crate::{
+    utils::{IntoStreamDuration, NBytes},
+    BlockingStream, StreamExt, StreamReader, StreamWriter,
+};
 use phonic_signal::{PhonicError, PhonicResult};
 use std::mem::MaybeUninit;
 
@@ -11,7 +14,7 @@ pub fn copy_stream_exact<R, W, D>(
 where
     R: BlockingStream + StreamReader,
     W: BlockingStream + StreamWriter,
-    D: StreamDuration,
+    D: IntoStreamDuration<NBytes>,
     W::Tag: TryInto<R::Tag>,
     PhonicError: From<<W::Tag as TryInto<R::Tag>>::Error>,
 {

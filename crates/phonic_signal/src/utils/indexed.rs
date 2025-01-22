@@ -1,6 +1,8 @@
 use crate::{
-    delegate_signal, BufferedSignalReader, BufferedSignalWriter, IndexedSignal, IntoDuration,
-    NFrames, NSamples, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker, SignalWriter,
+    delegate_signal,
+    utils::{IntoDuration, NFrames, NSamples},
+    BufferedSignalReader, BufferedSignalWriter, IndexedSignal, PhonicError, PhonicResult, Signal,
+    SignalReader, SignalSeeker, SignalWriter,
 };
 use std::mem::MaybeUninit;
 

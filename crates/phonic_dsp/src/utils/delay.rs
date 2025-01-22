@@ -1,6 +1,7 @@
 use phonic_signal::{
-    DefaultSizedBuf, FiniteSignal, IndexedSignal, NFrames, PhonicError, PhonicResult, Sample,
-    Signal, SignalDuration, SignalReader, SignalSeeker, SignalSpec, SignalWriter, SizedBuf,
+    utils::{DefaultSizedBuf, IntoDuration, NFrames, SizedBuf},
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Sample, Signal, SignalReader,
+    SignalSeeker, SignalSpec, SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -11,7 +12,7 @@ pub struct Delay<T> {
 }
 
 impl<T: Signal> Delay<T> {
-    pub fn new<D: SignalDuration>(inner: T, delay: D) -> Self
+    pub fn new<D: IntoDuration<NFrames>>(inner: T, delay: D) -> Self
     where
         T: IndexedSignal,
     {
@@ -25,7 +26,7 @@ impl<T: Signal> Delay<T> {
         }
     }
 
-    pub fn new_seeked<D: SignalDuration>(inner: T, delay: D) -> Self {
+    pub fn new_seeked<D: IntoDuration<NFrames>>(inner: T, delay: D) -> Self {
         let NFrames { n_frames } = delay.into_duration(inner.spec());
 
         Self {

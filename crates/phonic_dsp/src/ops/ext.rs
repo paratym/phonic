@@ -2,7 +2,10 @@ use crate::ops::{
     ClipSample, Complement, ComplementSample, Convert, DbRatio, Gain, GainSample, Limit, Mix,
     Reciprocal,
 };
-use phonic_signal::{DefaultSizedBuf, IndexedSignal, PhonicResult, Sample, Signal, SizedBuf};
+use phonic_signal::{
+    utils::{DefaultSizedBuf, SizedBuf},
+    IndexedSignal, PhonicResult, Sample, Signal,
+};
 
 pub trait DspOpsExt: Sized + Signal {
     fn complement(self) -> Complement<Self> {

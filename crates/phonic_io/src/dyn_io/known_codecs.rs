@@ -17,7 +17,7 @@ pub enum KnownCodec {
 
 impl CodecTag for KnownCodec {
     fn infer_spec(spec: StreamSpecBuilder<Self>) -> PhonicResult<StreamSpec<Self>> {
-        use crate::codec::*;
+        use crate::codecs::*;
 
         match spec.codec {
             #[cfg(feature = "pcm")]
@@ -30,7 +30,7 @@ impl CodecTag for KnownCodec {
 
 impl DynCodecConstructor for KnownCodec {
     fn encoder(&self, signal: TaggedSignal) -> PhonicResult<Box<dyn DynStream<Tag = Self>>> {
-        use crate::codec::*;
+        use crate::codecs::*;
 
         match self {
             #[cfg(feature = "pcm")]
@@ -42,7 +42,7 @@ impl DynCodecConstructor for KnownCodec {
     }
 
     fn decoder(stream: Box<dyn DynStream<Tag = Self>>) -> PhonicResult<TaggedSignal> {
-        use crate::codec::*;
+        use crate::codecs::*;
 
         match stream.stream_spec().codec {
             #[cfg(feature = "pcm")]

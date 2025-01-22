@@ -1,5 +1,5 @@
 use crate::{CodecTag, StreamSpec};
-use phonic_signal::{FromDuration, NFrames, NSamples};
+use phonic_signal::utils::{FromDuration, NFrames, NSamples};
 use std::{
     ops::{Add, Div, Mul, Sub},
     time::Duration,
@@ -21,26 +21,6 @@ pub trait FromStreamDuration<T> {
 
 pub trait IntoStreamDuration<T> {
     fn into_stream_duration<C: CodecTag>(self, spec: &StreamSpec<C>) -> T;
-}
-
-pub trait StreamDuration:
-    Sized
-    + Copy
-    + PartialEq
-    + PartialOrd
-    + FromStreamDuration<NFrames>
-    + FromStreamDuration<NSamples>
-    + FromStreamDuration<NBytes>
-    + FromStreamDuration<NBlocks>
-    + FromStreamDuration<Duration>
-    + IntoStreamDuration<NFrames>
-    + IntoStreamDuration<NSamples>
-    + IntoStreamDuration<NBytes>
-    + IntoStreamDuration<NBlocks>
-    + IntoStreamDuration<Duration>
-    + Add<Output = Self>
-    + Sub<Output = Self>
-{
 }
 
 macro_rules! impl_ops {
@@ -183,24 +163,4 @@ impl FromStreamDuration<NBlocks> for Duration {
         let seconds = duration.n_blocks as f64 / spec.avg_block_rate();
         Duration::from_secs_f64(seconds)
     }
-}
-
-impl<T> StreamDuration for T where
-    T: Sized
-        + Copy
-        + PartialEq
-        + PartialOrd
-        + FromStreamDuration<NFrames>
-        + FromStreamDuration<NSamples>
-        + FromStreamDuration<NBytes>
-        + FromStreamDuration<NBlocks>
-        + FromStreamDuration<Duration>
-        + IntoStreamDuration<NFrames>
-        + IntoStreamDuration<NSamples>
-        + IntoStreamDuration<NBytes>
-        + IntoStreamDuration<NBlocks>
-        + IntoStreamDuration<Duration>
-        + Add<Output = Self>
-        + Sub<Output = Self>
-{
 }

@@ -1,11 +1,33 @@
 use crate::{
-    utils::{copy_stream_all, copy_stream_exact, DropFinalize, PollIo, StreamSelector},
-    BlockingStream, Format, FormatWriter, Stream, StreamDuration, StreamReader, StreamWriter,
+    utils::{
+        copy_stream_all, copy_stream_exact, DropFinalize, IntoStreamDuration, NBytes, PollIo,
+        StreamSelector,
+    },
+    BlockingStream, FiniteFormat, FiniteStream, Format, FormatWriter, IndexedFormat, IndexedStream,
+    Stream, StreamExt, StreamReader, StreamWriter,
 };
 use phonic_signal::{PhonicError, PhonicResult};
 use std::mem::MaybeUninit;
 
 pub trait FormatUtilsExt: Sized + Format {
+    fn stream_pos_duration<D>(&self, stream: usize) -> D
+    where
+        Self: IndexedFormat,
+        NBytes: IntoStreamDuration<D>,
+    {
+        let spec = &self.streams()[stream];
+        NBytes::from(self.stream_pos(stream)).into_stream_duration(spec)
+    }
+
+    fn stream_len_duration<D>(&self, stream: usize) -> D
+    where
+        Self: FiniteFormat,
+        NBytes: IntoStreamDuration<D>,
+    {
+        let spec = &self.streams()[stream];
+        NBytes::from(self.stream_len(stream)).into_stream_duration(spec)
+    }
+
     fn into_stream(self, stream: usize) -> StreamSelector<Self>
     where
         Self: Sized,
@@ -51,7 +73,7 @@ pub trait StreamUtilsExt: Sized + Stream {
     where
         Self: BlockingStream + StreamWriter,
         R: BlockingStream + StreamReader,
-        D: StreamDuration,
+        D: IntoStreamDuration<NBytes>,
         Self::Tag: TryInto<R::Tag>,
         PhonicError: From<<Self::Tag as TryInto<R::Tag>>::Error>,
     {
@@ -92,6 +114,31 @@ pub trait StreamUtilsExt: Sized + Stream {
     //     // self.copy_all_buffered(reader, &mut buf)
     //     todo!()
     // }
+    //
+
+    fn pos_duration<D>(&self) -> D
+    where
+        Self: IndexedStream,
+        NBytes: IntoStreamDuration<D>,
+    {
+        NBytes::from(self.pos()).into_stream_duration(self.stream_spec())
+    }
+
+    fn len_duration<D>(&self) -> D
+    where
+        Self: FiniteStream,
+        NBytes: IntoStreamDuration<D>,
+    {
+        NBytes::from(self.len()).into_stream_duration(self.stream_spec())
+    }
+
+    fn rem_duration<D>(&self) -> D
+    where
+        Self: IndexedStream + FiniteStream,
+        NBytes: IntoStreamDuration<D>,
+    {
+        NBytes::from(self.rem()).into_stream_duration(self.stream_spec())
+    }
 
     fn polled(self) -> PollIo<Self> {
         PollIo(self)

@@ -1,6 +1,6 @@
 use crate::{
-    utils::copy_to_uninit_slice, FiniteSignal, IntoDuration, NFrames, NSamples, PhonicResult,
-    Sample, Signal, SignalReader, SignalSpec, SignalWriter,
+    utils::{copy_to_uninit_slice, IntoDuration, NFrames, NSamples},
+    FiniteSignal, PhonicResult, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
 use std::{
     borrow::{Borrow, BorrowMut},

@@ -1,5 +1,5 @@
 use crate::{
-    format::wave::{WaveFormatTag, WaveHeader},
+    formats::wave::{WaveFormatTag, WaveHeader},
     FiniteFormat, FiniteStream, Format, FormatConstructor, FormatReader, FormatSeeker, FormatTag,
     FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
     StreamWriter,

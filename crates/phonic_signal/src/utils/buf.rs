@@ -1,5 +1,6 @@
 use crate::{
-    BlockingSignal, NSamples, PhonicResult, Sample, SignalDuration, SignalExt, SignalReader,
+    utils::{IntoDuration, NSamples},
+    BlockingSignal, FiniteSignal, PhonicError, PhonicResult, Sample, SignalExt, SignalReader,
 };
 use std::{
     mem::{transmute, MaybeUninit},
@@ -68,12 +69,12 @@ pub trait DynamicBuf: OwnedBuf {
     {
         let mut buf = Self::uninit(DEFAULT_BUF_LEN);
         let n_samples = reader.read(buf._as_mut_slice())?;
-        unsafe { buf._resize(n_samples) }
+        unsafe { buf.resize(n_samples) }
 
         Ok(unsafe { Self::from_uninit(buf) })
     }
 
-    fn read_exact<R>(reader: &mut R, duration: impl SignalDuration) -> PhonicResult<Self>
+    fn read_exact<R>(reader: &mut R, duration: impl IntoDuration<NSamples>) -> PhonicResult<Self>
     where
         R: BlockingSignal + SignalReader<Sample = Self::Item>,
     {
@@ -91,12 +92,39 @@ pub trait DynamicBuf: OwnedBuf {
         R: BlockingSignal + SignalReader<Sample = Self::Item>,
         Self::Uninit: ResizeBuf,
     {
-        todo!()
+        let mut buf = Self::uninit(DEFAULT_BUF_LEN);
+        let mut i = 0;
+
+        loop {
+            let slice = buf._as_mut_slice();
+            match reader.read(&mut slice[i..]) {
+                Ok(0) => break,
+                Ok(n) => i += n,
+                Err(PhonicError::Interrupted) => continue,
+                Err(PhonicError::NotReady) => {
+                    reader.block();
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+
+            if slice.len() - i < DEFAULT_BUF_LEN {
+                let len = slice.len() + DEFAULT_BUF_LEN;
+                unsafe { buf.resize(len) };
+            }
+        }
+
+        let init_buf = unsafe {
+            buf.resize(i);
+            Self::from_uninit(buf)
+        };
+
+        Ok(init_buf)
     }
 }
 
-pub trait ResizeBuf {
-    unsafe fn _resize(&mut self, len: usize);
+pub trait ResizeBuf: OwnedBuf {
+    unsafe fn resize(&mut self, len: usize);
 }
 
 impl<T, const N: usize> OwnedBuf for [T; N] {
@@ -153,10 +181,11 @@ impl<T> OwnedBuf for Box<[T]> {
 
 impl<T> OwnedBuf for Rc<[T]> {
     type Item = T;
-    type Uninit = Rc<[MaybeUninit<T>]>;
+    type Uninit = Vec<MaybeUninit<T>>;
 
     unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
-        transmute(uninit)
+        let rc_uninit: Rc<[MaybeUninit<T>]> = uninit.into();
+        transmute(rc_uninit)
     }
 
     fn _as_slice(&self) -> &[T] {
@@ -170,10 +199,11 @@ impl<T> OwnedBuf for Rc<[T]> {
 
 impl<T> OwnedBuf for Arc<[T]> {
     type Item = T;
-    type Uninit = Arc<[MaybeUninit<T>]>;
+    type Uninit = Vec<MaybeUninit<T>>;
 
     unsafe fn from_uninit(uninit: Self::Uninit) -> Self {
-        transmute(uninit)
+        let arc_uninit: Arc<[MaybeUninit<T>]> = uninit.into();
+        transmute(arc_uninit)
     }
 
     fn _as_slice(&self) -> &[T] {
@@ -187,7 +217,7 @@ impl<T> OwnedBuf for Arc<[T]> {
 
 impl<S: Sized, const N: usize> SizedBuf for [S; N] {
     fn uninit() -> Self::Uninit {
-        unsafe { MaybeUninit::uninit().assume_init() }
+        [const { MaybeUninit::uninit() }; N]
     }
 }
 
@@ -208,12 +238,18 @@ impl<S> DynamicBuf for Box<[S]> {
 
 impl<S> DynamicBuf for Rc<[S]> {
     fn uninit(len: usize) -> Self::Uninit {
-        Rc::new_uninit_slice(len)
+        Vec::uninit(len)
     }
 }
 
 impl<S> DynamicBuf for Arc<[S]> {
     fn uninit(len: usize) -> Self::Uninit {
-        Arc::new_uninit_slice(len)
+        Vec::uninit(len)
+    }
+}
+
+impl<S> ResizeBuf for Vec<MaybeUninit<S>> {
+    unsafe fn resize(&mut self, len: usize) {
+        Vec::resize_with(self, len, MaybeUninit::uninit)
     }
 }

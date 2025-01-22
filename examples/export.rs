@@ -1,9 +1,9 @@
 use phonic::{
     dsp::{gen::Osc, utils::DspUtilsExt},
     io::{
-        pcm::PcmCodec,
+        codecs::pcm::PcmCodec,
+        formats::wave::WaveFormat,
         utils::{FormatUtilsExt, StreamUtilsExt},
-        wave::WaveFormat,
         CodecFromSignal, FormatConstructor, Stream,
     },
     PhonicResult, SignalReader, SignalSpec,

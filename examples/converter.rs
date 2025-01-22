@@ -5,8 +5,8 @@ use phonic::{
         utils::{FormatIdentifier, FormatUtilsExt},
         StreamSpec,
     },
-    utils::SignalUtilsExt,
-    DefaultSizedBuf, PhonicError, PhonicResult, SizedBuf,
+    utils::{DefaultSizedBuf, SignalUtilsExt, SizedBuf},
+    PhonicError, PhonicResult,
 };
 use std::{
     fs::{create_dir_all, File},

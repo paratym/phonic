@@ -52,7 +52,7 @@ impl DynFormatConstructor for KnownFormat {
     where
         T: StdIoSource + 'static,
     {
-        use crate::format::*;
+        use crate::formats::*;
 
         Ok(match self {
             #[cfg(feature = "wave")]
@@ -68,7 +68,7 @@ impl DynFormatConstructor for KnownFormat {
         T: StdIoSource + 'static,
         I: IntoIterator<Item = StreamSpec<Self::Codec>>,
     {
-        use crate::format::*;
+        use crate::formats::*;
 
         Ok(match self {
             #[cfg(feature = "wave")]

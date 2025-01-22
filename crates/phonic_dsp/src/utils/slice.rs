@@ -1,9 +1,8 @@
 use phonic_signal::{
     delegate_signal,
-    utils::{copy_exact, NullSignal},
-    DefaultSizedBuf, FiniteSignal, IndexedSignal, IntoDuration, NFrames, NSamples, PhonicError,
-    PhonicResult, Signal, SignalDuration, SignalExt, SignalReader, SignalSeeker, SignalWriter,
-    SizedBuf,
+    utils::{DefaultSizedBuf, IntoDuration, NFrames, NSamples, SignalUtilsExt, SizedBuf},
+    FiniteSignal, IndexedSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
+    SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -14,51 +13,64 @@ pub struct Slice<T> {
 }
 
 impl<T: Signal> Slice<T> {
-    pub fn range<D: SignalDuration>(inner: T, start: D, end: D) -> Self {
+    pub fn range(
+        inner: T,
+        start: impl IntoDuration<NFrames>,
+        end: impl IntoDuration<NFrames>,
+    ) -> Self {
         let NFrames { n_frames: start } = start.into_duration(inner.spec());
         let NFrames { n_frames: end } = end.into_duration(inner.spec());
 
         Self { inner, start, end }
     }
 
-    pub fn offset<D: SignalDuration>(inner: T, start: D, offset: D) -> Self {
+    pub fn offset(
+        inner: T,
+        start: impl IntoDuration<NFrames>,
+        offset: impl IntoDuration<NFrames>,
+    ) -> Self {
+        let start: NFrames = start.into_duration(inner.spec());
+        let offset: NFrames = offset.into_duration(inner.spec());
+
         Self::range(inner, start, start + offset)
     }
 
-    pub fn from_start<D: SignalDuration>(inner: T, end: D) -> Self {
-        let start = NFrames::from(0).into_duration(inner.spec());
+    pub fn from_start(inner: T, end: impl IntoDuration<NFrames>) -> Self {
+        let start = NFrames::from(0);
         Self::range(inner, start, end)
     }
 
-    pub fn from_current<D: SignalDuration>(inner: T, end: D) -> Self
+    pub fn from_current(inner: T, end: impl IntoDuration<NFrames>) -> Self
     where
         T: IndexedSignal,
     {
-        let start = inner.pos_duration();
+        let start: NFrames = inner.pos_duration();
         Self::range(inner, start, end)
     }
 
-    pub fn from_current_offset<D: SignalDuration>(inner: T, offset: D) -> Self
+    pub fn from_current_offset(inner: T, offset: impl IntoDuration<NFrames>) -> Self
     where
         T: IndexedSignal,
     {
-        let start = inner.pos_duration();
+        let start: NFrames = inner.pos_duration();
         Self::offset(inner, start, offset)
     }
 
-    pub fn to_end<D: SignalDuration>(inner: T, start: D) -> Self
+    pub fn to_end(inner: T, start: impl IntoDuration<NFrames>) -> Self
     where
         T: FiniteSignal,
     {
-        let end = inner.len_duration();
+        let end: NFrames = inner.len_duration();
         Self::range(inner, start, end)
     }
 
-    pub fn to_end_offset<D: SignalDuration>(inner: T, offset: D) -> Self
+    pub fn to_end_offset(inner: T, offset: impl IntoDuration<NFrames>) -> Self
     where
         T: FiniteSignal,
     {
-        let end: D = inner.len_duration();
+        let end: NFrames = inner.len_duration();
+        let offset: NFrames = offset.into_duration(inner.spec());
+
         Self::range(inner, end - offset, end)
     }
 }

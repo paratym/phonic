@@ -22,22 +22,6 @@ pub trait IntoDuration<T> {
     fn into_duration(self, spec: &SignalSpec) -> T;
 }
 
-pub trait SignalDuration:
-    Sized
-    + Copy
-    + PartialEq
-    + PartialOrd
-    + IntoDuration<NFrames>
-    + IntoDuration<NSamples>
-    + IntoDuration<Duration>
-    + FromDuration<NFrames>
-    + FromDuration<NSamples>
-    + FromDuration<Duration>
-    + Add<Output = Self>
-    + Sub<Output = Self>
-{
-}
-
 macro_rules! impl_ops {
     ($unit:ty, $inner:ident) => {
         impl From<u64> for $unit {
@@ -143,6 +127,7 @@ impl FromDuration<Duration> for NSamples {
 
 impl FromDuration<NFrames> for Duration {
     fn from_duration(duration: NFrames, spec: &SignalSpec) -> Self {
+        // TODO: this could probably be more precise
         let seconds = duration.n_frames as f64 / spec.sample_rate as f64;
         Self::from_secs_f64(seconds)
     }
@@ -153,20 +138,4 @@ impl FromDuration<NSamples> for Duration {
         let n_frames = NFrames::from_duration(duration, spec);
         Self::from_duration(n_frames, spec)
     }
-}
-
-impl<T> SignalDuration for T where
-    T: Sized
-        + Copy
-        + PartialEq
-        + PartialOrd
-        + IntoDuration<NFrames>
-        + IntoDuration<NSamples>
-        + IntoDuration<Duration>
-        + FromDuration<NFrames>
-        + FromDuration<NSamples>
-        + FromDuration<Duration>
-        + Add<Output = Self>
-        + Sub<Output = Self>
-{
 }

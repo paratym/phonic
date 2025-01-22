@@ -1,6 +1,6 @@
 use crate::{
     block_on_format, BlockingFormat, FiniteFormat, Format, FormatReader, FormatSeeker, FormatTag,
-    FormatWriter, IndexedFormat, IntoStreamDuration, NBytes, StreamDuration, StreamSpec,
+    FormatWriter, IndexedFormat, StreamSpec,
 };
 use phonic_signal::{utils::slice_as_init_mut, PhonicResult};
 use std::mem::MaybeUninit;
@@ -13,22 +13,6 @@ pub trait FormatExt: Format {
 
     fn primary_stream_spec(&self) -> Option<&StreamSpec<<Self::Tag as FormatTag>::Codec>> {
         self.primary_stream().and_then(|i| self.streams().get(i))
-    }
-
-    fn stream_pos_duration<D: StreamDuration>(&self, stream: usize) -> D
-    where
-        Self: IndexedFormat,
-    {
-        let spec = &self.streams()[stream];
-        NBytes::from(self.stream_pos(stream)).into_stream_duration(spec)
-    }
-
-    fn stream_len_duration<D: StreamDuration>(&self, stream: usize) -> D
-    where
-        Self: FiniteFormat,
-    {
-        let spec = &self.streams()[stream];
-        NBytes::from(self.stream_len(stream)).into_stream_duration(spec)
     }
 
     fn is_empty(&self) -> bool

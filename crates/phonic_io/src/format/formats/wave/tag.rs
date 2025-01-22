@@ -25,7 +25,7 @@ impl CodecTag for WaveSupportedCodec {
     fn infer_spec(spec: StreamSpecBuilder<Self>) -> PhonicResult<StreamSpec<Self>> {
         match spec.codec {
             #[cfg(feature = "pcm")]
-            Some(Self::PcmLE) => crate::codec::pcm::PcmCodecTag::infer_tagged_spec(spec),
+            Some(Self::PcmLE) => crate::codecs::pcm::PcmCodecTag::infer_tagged_spec(spec),
 
             None => Err(PhonicError::MissingData),
         }
@@ -39,11 +39,11 @@ impl Default for WaveSupportedCodec {
 }
 
 #[cfg(feature = "pcm")]
-impl TryFrom<crate::codec::pcm::PcmCodecTag> for WaveSupportedCodec {
+impl TryFrom<crate::codecs::pcm::PcmCodecTag> for WaveSupportedCodec {
     type Error = PhonicError;
 
-    fn try_from(tag: crate::codec::pcm::PcmCodecTag) -> Result<Self, Self::Error> {
-        use crate::codec::pcm::PcmCodecTag;
+    fn try_from(tag: crate::codecs::pcm::PcmCodecTag) -> Result<Self, Self::Error> {
+        use crate::codecs::pcm::PcmCodecTag;
 
         match tag {
             PcmCodecTag::LE => Ok(Self::PcmLE),
@@ -53,7 +53,7 @@ impl TryFrom<crate::codec::pcm::PcmCodecTag> for WaveSupportedCodec {
 }
 
 #[cfg(feature = "pcm")]
-impl TryFrom<WaveSupportedCodec> for crate::codec::pcm::PcmCodecTag {
+impl TryFrom<WaveSupportedCodec> for crate::codecs::pcm::PcmCodecTag {
     type Error = PhonicError;
 
     fn try_from(codec: WaveSupportedCodec) -> Result<Self, Self::Error> {
@@ -93,10 +93,10 @@ impl TryFrom<crate::dyn_io::KnownFormat> for WaveFormatTag {
 impl TryFrom<WaveSupportedCodec> for crate::dyn_io::KnownCodec {
     type Error = PhonicError;
 
-    fn try_from(codec: crate::format::wave::WaveSupportedCodec) -> Result<Self, Self::Error> {
+    fn try_from(codec: crate::formats::wave::WaveSupportedCodec) -> Result<Self, Self::Error> {
         match codec {
             #[cfg(feature = "pcm")]
-            crate::format::wave::WaveSupportedCodec::PcmLE => Ok(Self::PcmLE),
+            crate::formats::wave::WaveSupportedCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),

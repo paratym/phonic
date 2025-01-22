@@ -1,5 +1,6 @@
 mod copy;
 mod drop_finalize;
+mod duration;
 mod ext;
 mod format_identifier;
 mod poll;
@@ -9,6 +10,7 @@ mod unsupported;
 
 pub use copy::*;
 pub use drop_finalize::*;
+pub use duration::*;
 pub use ext::*;
 pub use format_identifier::*;
 pub use poll::*;

@@ -1,7 +1,8 @@
 use crate::ops::ClipSample;
 use phonic_signal::{
-    delegate_signal, utils::slice_as_init, DefaultSizedBuf, PhonicResult, Sample, Signal,
-    SignalExt, SignalReader, SignalSpec, SignalWriter,
+    delegate_signal,
+    utils::{slice_as_init, DefaultSizedBuf},
+    PhonicResult, Sample, Signal, SignalExt, SignalReader, SignalSpec, SignalWriter,
 };
 use std::{marker::PhantomData, mem::MaybeUninit};
 

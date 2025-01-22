@@ -1,4 +1,4 @@
-use crate::codec::pcm::PcmCodecTag;
+use crate::codecs::pcm::PcmCodecTag;
 
 pub(super) enum Endianess {
     Little,

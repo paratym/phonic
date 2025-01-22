@@ -1,37 +1,16 @@
 use crate::{
-    block_on_stream, BlockingStream, FiniteStream, IndexedStream, IntoStreamDuration, NBytes,
-    Stream, StreamDuration, StreamReader, StreamWriter,
+    block_on_stream, BlockingStream, FiniteStream, IndexedStream, Stream, StreamReader,
+    StreamWriter,
 };
 use phonic_signal::{utils::slice_as_init_mut, PhonicError, PhonicResult};
-use std::{mem::MaybeUninit, time::Duration};
+use std::mem::MaybeUninit;
 
 pub trait StreamExt: Stream {
-    fn pos_duration<D: StreamDuration>(&self) -> D
-    where
-        Self: IndexedStream,
-    {
-        NBytes::from(self.pos()).into_stream_duration(self.stream_spec())
-    }
-
-    fn len_duration<D: StreamDuration>(&self) -> D
-    where
-        Self: FiniteStream,
-    {
-        NBytes::from(self.len()).into_stream_duration(self.stream_spec())
-    }
-
     fn rem(&self) -> u64
     where
         Self: IndexedStream + FiniteStream,
     {
         self.len() - self.pos()
-    }
-
-    fn rem_duration(&self) -> Duration
-    where
-        Self: IndexedStream + FiniteStream,
-    {
-        NBytes::from(self.rem()).into_stream_duration(self.stream_spec())
     }
 
     fn is_empty(&self) -> bool

@@ -1,9 +1,11 @@
 use crate::{
-    utils::{copy_to_uninit_slice, slice_as_uninit_mut},
-    BlockingSignal, BufferedSignalReader, BufferedSignalWriter, DynamicBuf, FiniteSignal,
-    IndexedSignal, IntoDuration, NFrames, NSamples, OwnedBuf, PhonicError, PhonicResult, ResizeBuf,
-    Sample, Signal, SignalDuration, SignalExt, SignalReader, SignalSeeker, SignalSpec,
-    SignalWriter, SizedBuf,
+    utils::{
+        copy_to_uninit_slice, slice_as_uninit_mut, DynamicBuf, IntoDuration, NFrames, NSamples,
+        OwnedBuf, ResizeBuf, SignalUtilsExt, SizedBuf,
+    },
+    BlockingSignal, BufferedSignalReader, BufferedSignalWriter, FiniteSignal, IndexedSignal,
+    PhonicError, PhonicResult, Sample, Signal, SignalReader, SignalSeeker, SignalSpec,
+    SignalWriter,
 };
 use std::{
     borrow::{Borrow, BorrowMut},
@@ -31,7 +33,7 @@ impl<B, S> Cursor<B, S> {
     pub fn uninit<D>(spec: SignalSpec, duration: D) -> Cursor<B::Uninit, MaybeUninit<S>>
     where
         B: DynamicBuf,
-        D: SignalDuration,
+        D: IntoDuration<NSamples>,
     {
         let NSamples { n_samples } = duration.into_duration(&spec);
         debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
@@ -54,7 +56,7 @@ impl<B, S> Cursor<B, S> {
     where
         B: DynamicBuf,
         B::Item: Sample,
-        D: SignalDuration,
+        D: IntoDuration<NSamples>,
     {
         let NSamples { n_samples } = duration.into_duration(&spec);
         debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
@@ -103,7 +105,7 @@ impl<B, S> Cursor<B, S> {
     where
         B: DynamicBuf,
         R: BlockingSignal + SignalReader<Sample = B::Item>,
-        D: SignalDuration,
+        D: IntoDuration<NSamples>,
     {
         let spec = *reader.spec();
         let buf = reader.read_into_exact(duration)?;

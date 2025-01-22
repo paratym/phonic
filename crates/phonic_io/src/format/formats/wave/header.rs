@@ -1,5 +1,5 @@
 use crate::{
-    format::wave::{WaveFormatTag, WaveSupportedCodec},
+    formats::wave::{WaveFormatTag, WaveSupportedCodec},
     CodecTag, FormatTag, StreamSpec, TypeLayout,
 };
 use phonic_signal::{

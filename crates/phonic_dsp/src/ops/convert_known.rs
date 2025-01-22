@@ -3,7 +3,10 @@ use phonic_io::{
     dyn_io::{DynSignal, TaggedSignal},
     match_tagged_signal,
 };
-use phonic_signal::{DefaultSizedBuf, Sample, SizedBuf};
+use phonic_signal::{
+    utils::{DefaultSizedBuf, SizedBuf},
+    Sample,
+};
 
 pub trait FromKnownSample:
     Sample
