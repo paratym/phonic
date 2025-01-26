@@ -6,5 +6,4 @@ pub use ext::*;
 pub use format::*;
 pub use tag::*;
 
-#[cfg(feature = "wave")]
-pub mod wave;
+pub mod formats;

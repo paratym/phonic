@@ -49,7 +49,6 @@ delegate_group! {
         fn finalize(&mut self) -> phonic_signal::PhonicResult<()>;
     }
 
-
     pub trait FormatSeeker: crate::Format {
         fn seek(&mut self, stream: usize, offset: i64) -> phonic_signal::PhonicResult<()>;
     }

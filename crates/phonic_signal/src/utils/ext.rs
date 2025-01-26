@@ -44,8 +44,8 @@ pub trait SignalUtilsExt: Sized + Signal {
     }
 
     fn copy_exact<R>(
-        &mut self,
-        reader: &mut R,
+        self,
+        reader: R,
         duration: impl IntoDuration<NSamples>,
         buf: &mut [MaybeUninit<Self::Sample>],
     ) -> PhonicResult<()>
@@ -57,8 +57,8 @@ pub trait SignalUtilsExt: Sized + Signal {
     }
 
     fn copy_exact_buffered<R>(
-        &mut self,
-        reader: &mut R,
+        self,
+        reader: R,
         duration: impl IntoDuration<NSamples>,
     ) -> PhonicResult<()>
     where
@@ -68,11 +68,7 @@ pub trait SignalUtilsExt: Sized + Signal {
         copy_exact_buffered(reader, self, duration)
     }
 
-    fn copy_all<R>(
-        &mut self,
-        reader: &mut R,
-        buf: &mut [MaybeUninit<Self::Sample>],
-    ) -> PhonicResult<()>
+    fn copy_all<R>(self, reader: R, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<()>
     where
         Self: BlockingSignal + SignalWriter,
         R: BlockingSignal + SignalReader<Sample = Self::Sample>,
@@ -80,7 +76,7 @@ pub trait SignalUtilsExt: Sized + Signal {
         copy_all(reader, self, buf)
     }
 
-    fn copy_all_buffered<R>(&mut self, reader: &mut R) -> PhonicResult<()>
+    fn copy_all_buffered<R>(self, reader: R) -> PhonicResult<()>
     where
         Self: BlockingSignal + BufferedSignalWriter,
         R: BlockingSignal + SignalReader<Sample = Self::Sample>,

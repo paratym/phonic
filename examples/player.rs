@@ -5,9 +5,9 @@ use cpal::{
 use phonic::{
     cpal::DeviceExt,
     io::{
-        dyn_io::{DynFormatConstructor, DynStream, KnownFormat, KnownSample},
+        dyn_io::{DynFormatConstructor, DynStream, FormatIdentifier, KnownSample},
         match_tagged_signal,
-        utils::{FormatIdentifier, FormatUtilsExt},
+        utils::FormatUtilsExt,
     },
     sync::spsc::SpscSignal,
     utils::SignalUtilsExt,
@@ -17,16 +17,16 @@ use std::{fs::File, path::Path, time::Duration};
 
 fn main() -> PhonicResult<()> {
     // let path_arg = std::env::args().nth(1).expect("missing file arg");
-    let path_arg = "/home/ben/Desktop/phonic/examples/export/sine.wav";
+    let path_arg = "/home/ben/Downloads/file_example_WAV_1MG.wav";
     let path = Path::new(path_arg);
     let file = File::open(path)?;
 
-    let format = KnownFormat::try_from(FormatIdentifier::try_from(path)?)?;
-    let signal = format
-        .read_index(file)?
-        .into_primary_stream()?
-        .into_decoder()?;
+    let format = FormatIdentifier::try_from(path)?
+        .known_format()
+        .ok_or(PhonicError::Unsupported)?
+        .read_index(file)?;
 
+    let signal = format.into_primary_stream()?.into_decoder()?;
     match_tagged_signal!(signal, inner => play(inner))
 }
 
@@ -41,7 +41,7 @@ where
 
     let output = cpal::default_host()
         .default_output_device()
-        .ok_or(PhonicError::NotFound)?
+        .expect("no default output device")
         .build_output_stream_from_signal(
             consumer,
             |e| panic!("output error: {e}"),
@@ -50,6 +50,6 @@ where
         );
 
     output.unwrap().play().unwrap();
-    producer.copy_all_buffered(&mut signal)?;
-    producer.flush_blocking()
+    (&mut producer).polled().copy_all_buffered(&mut signal)?;
+    producer.polled().flush_blocking()
 }

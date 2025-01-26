@@ -1,8 +1,12 @@
+mod chunks;
 mod format;
-mod header;
+mod identifiers;
+mod riff;
 mod tag;
 
-pub use format::*;
-pub use header::*;
-pub use tag::*;
+use chunks::*;
+use riff::*;
 
+pub use format::*;
+pub use identifiers::*;
+pub use tag::*;

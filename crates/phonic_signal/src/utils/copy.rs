@@ -6,8 +6,8 @@ use crate::{
 use std::mem::MaybeUninit;
 
 pub fn copy_exact<R, W>(
-    reader: &mut R,
-    writer: &mut W,
+    mut reader: R,
+    mut writer: W,
     duration: impl IntoDuration<NSamples>,
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
@@ -36,8 +36,8 @@ where
 }
 
 pub fn copy_exact_buffered<R, W>(
-    reader: &mut R,
-    writer: &mut W,
+    mut reader: R,
+    mut writer: W,
     duration: impl IntoDuration<NSamples>,
 ) -> PhonicResult<()>
 where
@@ -75,8 +75,8 @@ where
 }
 
 pub fn copy_all<R, W>(
-    reader: &mut R,
-    writer: &mut W,
+    mut reader: R,
+    mut writer: W,
     buf: &mut [MaybeUninit<R::Sample>],
 ) -> PhonicResult<()>
 where
@@ -103,7 +103,7 @@ where
     Ok(())
 }
 
-pub fn copy_all_buffered<R, W>(reader: &mut R, writer: &mut W) -> PhonicResult<()>
+pub fn copy_all_buffered<R, W>(mut reader: R, mut writer: W) -> PhonicResult<()>
 where
     R: BlockingSignal + SignalReader,
     W: BlockingSignal + BufferedSignalWriter<Sample = R::Sample>,

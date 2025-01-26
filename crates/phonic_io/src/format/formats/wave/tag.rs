@@ -1,11 +1,5 @@
-use crate::{utils::FormatIdentifiers, CodecTag, FormatTag, StreamSpec, StreamSpecBuilder};
+use crate::{CodecTag, FormatTag, StreamSpec, StreamSpecBuilder};
 use phonic_signal::{PhonicError, PhonicResult};
-
-pub static WAVE_IDENTIFIERS: FormatIdentifiers = FormatIdentifiers {
-    file_extensions: &["wav", "wave"],
-    mime_types: &["audio/vnd.wave", "audio/x-wav", "audio/wav", "audio/wave"],
-    markers: &[b"RIFF", b"WAVE"],
-};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct WaveFormatTag;

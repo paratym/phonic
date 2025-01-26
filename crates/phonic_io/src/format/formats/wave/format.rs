@@ -1,8 +1,10 @@
 use crate::{
-    formats::wave::{WaveFormatTag, WaveHeader},
-    FiniteFormat, FiniteStream, Format, FormatConstructor, FormatReader, FormatSeeker, FormatTag,
-    FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamSpec,
-    StreamWriter,
+    formats::wave::{
+        update_nested_chunk_header, FmtChunk, RiffChunk, WaveFormatTag, WaveSupportedCodec,
+    },
+    FiniteFormat, FiniteStream, Format, FormatFromReader, FormatFromWriter, FormatReader,
+    FormatSeeker, FormatTag, FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader,
+    StreamSeeker, StreamSpec, StreamSpecBuilder, StreamWriter,
 };
 use phonic_signal::{utils::slice_as_init_mut, PhonicError, PhonicResult};
 use std::{
@@ -11,73 +13,123 @@ use std::{
 };
 
 pub struct WaveFormat<T, F: FormatTag = WaveFormatTag> {
-    inner: T,
+    tag: F,
     spec: StreamSpec<F::Codec>,
-    pos: u64,
-}
-
-impl<T, F: FormatTag> FormatConstructor<T, F> for WaveFormat<T, F>
-where
-    StreamSpec<F::Codec>: TryInto<WaveHeader, Error = PhonicError>,
-    WaveHeader: TryInto<StreamSpec<F::Codec>, Error = PhonicError>,
-{
-    fn read_index(mut inner: T) -> PhonicResult<Self>
-    where
-        Self: Format<Tag = F>,
-        T: Read,
-    {
-        let header = WaveHeader::read(&mut inner)?;
-        let spec = header.try_into()?;
-
-        Ok(Self {
-            inner,
-            spec,
-            pos: 0,
-        })
-    }
-
-    fn write_index<I>(mut inner: T, index: I) -> PhonicResult<Self>
-    where
-        Self: Format<Tag = F>,
-        T: Write,
-        I: IntoIterator<Item = StreamSpec<F::Codec>>,
-    {
-        let mut streams = index.into_iter();
-        let spec = streams.next().ok_or(PhonicError::MissingData)?;
-        if streams.next().is_some() {
-            return Err(PhonicError::Unsupported);
-        }
-
-        let header: WaveHeader = spec.try_into()?;
-        header.write(&mut inner)?;
-
-        Ok(Self {
-            inner,
-            spec,
-            pos: 0,
-        })
-    }
+    data: RiffChunk<RiffChunk<T>>,
 }
 
 impl<T, F: FormatTag> WaveFormat<T, F> {
-    pub fn as_inner(&self) -> &T {
-        &self.inner
-    }
+    const RIFF_CHUNK_ID: [u8; 4] = *b"RIFF";
+    const WAVE_ID: [u8; 4] = *b"WAVE";
+    const DATA_CHUNK_ID: [u8; 4] = *b"data";
 
     pub fn into_inner(self) -> T {
-        self.inner
+        self.data.into_inner().into_inner()
+    }
+
+    fn read_header(
+        reader: T,
+        spec: &mut StreamSpecBuilder<F::Codec>,
+    ) -> PhonicResult<RiffChunk<RiffChunk<T>>>
+    where
+        T: Read,
+        WaveSupportedCodec: TryInto<F::Codec>,
+        PhonicError: From<<WaveSupportedCodec as TryInto<F::Codec>>::Error>,
+    {
+        let mut riff_chunk = RiffChunk::read_new(reader)?;
+        if riff_chunk.id() != Self::RIFF_CHUNK_ID {
+            return Err(PhonicError::InvalidData);
+        }
+
+        let mut wave_id = [0u8; 4];
+        riff_chunk.read_exact(&mut wave_id)?;
+        if wave_id != Self::WAVE_ID {
+            return Err(PhonicError::InvalidData);
+        }
+
+        loop {
+            let mut chunk = RiffChunk::read_new(riff_chunk)?;
+            match chunk.id() {
+                FmtChunk::CHUNK_ID => FmtChunk::read_riff_chunk(&mut chunk)
+                    .map_err(Into::into)
+                    .and_then(|fmt| fmt.apply_to_spec(spec))?,
+
+                Self::DATA_CHUNK_ID => break Ok(chunk),
+                _ => chunk.skip_remaining()?,
+            };
+
+            riff_chunk = chunk.into_inner();
+        }
+    }
+
+    fn write_header(writer: T, spec: StreamSpec<F::Codec>) -> PhonicResult<RiffChunk<RiffChunk<T>>>
+    where
+        T: Write + Seek,
+        F::Codec: TryInto<WaveSupportedCodec>,
+        PhonicError: From<<F::Codec as TryInto<WaveSupportedCodec>>::Error>,
+    {
+        let mut riff_chunk = RiffChunk::write_new(writer, Self::RIFF_CHUNK_ID)?;
+        riff_chunk.write_all(&Self::WAVE_ID)?;
+
+        let fmt = FmtChunk::try_from_spec(spec)?;
+        fmt.write_riff_chunk(&mut riff_chunk)?;
+
+        RiffChunk::write_new(riff_chunk, Self::DATA_CHUNK_ID).map_err(Into::into)
     }
 }
 
-impl<T, F> Format for WaveFormat<T, F>
+impl<T, F> FormatFromReader<T, F> for WaveFormat<T, F>
 where
+    T: Read,
     F: FormatTag,
-    WaveFormatTag: Into<F>,
+    WaveFormatTag: TryInto<F>,
+    WaveSupportedCodec: TryInto<F::Codec>,
+    PhonicError: From<<WaveFormatTag as TryInto<F>>::Error>,
+    PhonicError: From<<WaveSupportedCodec as TryInto<F::Codec>>::Error>,
 {
+    fn read_index(reader: T) -> PhonicResult<Self> {
+        let tag = WaveFormatTag.try_into()?;
+
+        let mut spec_builder = StreamSpec::builder();
+        let data = Self::read_header(reader, &mut spec_builder)?;
+        let spec = spec_builder.build()?;
+
+        Ok(Self { tag, spec, data })
+    }
+}
+
+impl<T, F> FormatFromWriter<T, F> for WaveFormat<T, F>
+where
+    T: Write + Seek,
+    F: FormatTag,
+    WaveFormatTag: TryInto<F>,
+    F::Codec: TryInto<WaveSupportedCodec>,
+    PhonicError: From<<WaveFormatTag as TryInto<F>>::Error>,
+    PhonicError: From<<F::Codec as TryInto<WaveSupportedCodec>>::Error>,
+{
+    fn write_index<I>(writer: T, index: I) -> PhonicResult<Self>
+    where
+        I: IntoIterator<Item = StreamSpec<F::Codec>>,
+    {
+        let tag = WaveFormatTag.try_into()?;
+
+        let mut index_iter = index.into_iter();
+        let spec = index_iter.next().ok_or(PhonicError::MissingData)?;
+        if index_iter.next().is_some() {
+            return Err(PhonicError::Unsupported);
+        }
+
+        let data = Self::write_header(writer, spec)?;
+
+        Ok(Self { tag, spec, data })
+    }
+}
+
+impl<T, F: FormatTag> Format for WaveFormat<T, F> {
     type Tag = F;
 
     fn format(&self) -> Self::Tag {
-        WaveFormatTag.into()
+        self.tag
     }
 
     fn streams(&self) -> &[StreamSpec<<Self::Tag as FormatTag>::Codec>] {
@@ -141,14 +193,14 @@ where
 
 impl<T, F> FormatWriter for WaveFormat<T, F>
 where
-    T: Write,
+    T: Write + Seek,
     F: FormatTag,
     Self: Format<Tag = F> + StreamWriter<Tag = F::Codec>,
 {
     fn write(&mut self, stream: usize, buf: &[u8]) -> PhonicResult<usize> {
         match stream {
             0 => StreamWriter::write(self, buf),
-            _ => Err(PhonicError::NotFound),
+            _ => Err(PhonicError::InvalidInput),
         }
     }
 
@@ -157,8 +209,7 @@ where
     }
 
     fn finalize(&mut self) -> PhonicResult<()> {
-        // TODO
-        Ok(())
+        update_nested_chunk_header(&mut self.data).map_err(Into::into)
     }
 }
 
@@ -169,7 +220,10 @@ where
     Self: Format<Tag = F> + StreamSeeker<Tag = F::Codec>,
 {
     fn seek(&mut self, stream: usize, offset: i64) -> PhonicResult<()> {
-        todo!()
+        match stream {
+            0 => StreamSeeker::seek(self, offset),
+            _ => Err(PhonicError::InvalidInput),
+        }
     }
 }
 
@@ -183,13 +237,13 @@ impl<T, F: FormatTag> Stream for WaveFormat<T, F> {
 
 impl<T, F: FormatTag> IndexedStream for WaveFormat<T, F> {
     fn pos(&self) -> u64 {
-        self.pos
+        self.data.pos() as u64
     }
 }
 
 impl<T, F: FormatTag> FiniteStream for WaveFormat<T, F> {
     fn len(&self) -> u64 {
-        todo!()
+        self.data.len() as u64
     }
 }
 
@@ -198,56 +252,59 @@ impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
         let mut len = buf.len();
         len -= len % self.stream_spec().block_align;
 
+        // TODO: this is probably bad. run in miri eventually...
         let uninit_buf = &mut buf[..len];
         let init_buf = unsafe { slice_as_init_mut(uninit_buf) };
 
-        let mut n_samples = 0;
+        let mut n_bytes = 0;
         loop {
-            match self.inner.read(&mut init_buf[n_samples..])? {
-                0 if n_samples == 0 => break,
+            match self.data.read(&mut init_buf[n_bytes..])? {
+                0 if n_bytes == 0 => break,
                 0 => return Err(PhonicError::InvalidState),
-                n_read => n_samples += n_read,
+                n_read => n_bytes += n_read,
             }
 
-            if n_samples % self.spec.block_align == 0 {
+            if n_bytes % self.spec.block_align == 0 {
                 break;
             }
         }
 
-        self.pos += n_samples as u64;
-        Ok(n_samples)
+        Ok(n_bytes)
     }
 }
 
-impl<T: Write, F: FormatTag> StreamWriter for WaveFormat<T, F> {
+impl<T: Write + Seek, F: FormatTag> StreamWriter for WaveFormat<T, F> {
     fn write(&mut self, buf: &[u8]) -> PhonicResult<usize> {
         let mut len = buf.len();
         len -= len % self.stream_spec().block_align;
 
-        let mut n = 0;
+        let mut n_bytes = 0;
         loop {
-            match self.inner.write(&buf[n..len])? {
-                0 if n == 0 => break,
-                0 => return Err(PhonicError::InvalidData),
-                n_written => n += n_written,
+            match self.data.write(&buf[n_bytes..len])? {
+                0 if n_bytes == 0 => break,
+                0 => return Err(PhonicError::InvalidState),
+                n_written => n_bytes += n_written,
             }
 
-            if n % self.spec.block_align == 0 {
+            if n_bytes % self.spec.block_align == 0 {
                 break;
             }
         }
 
-        self.pos += n as u64;
-        Ok(n)
+        Ok(n_bytes)
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        self.inner.flush().map_err(Into::into)
+        self.data.flush().map_err(Into::into)
     }
 }
 
 impl<T: Seek, F: FormatTag> StreamSeeker for WaveFormat<T, F> {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
-        todo!()
+        if offset % self.spec.block_align as i64 != 0 {
+            return Err(PhonicError::InvalidInput);
+        }
+
+        self.data.seek_relative(offset).map_err(Into::into)
     }
 }

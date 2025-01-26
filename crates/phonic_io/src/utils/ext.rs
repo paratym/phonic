@@ -65,8 +65,8 @@ pub trait FormatUtilsExt: Sized + Format {
 
 pub trait StreamUtilsExt: Sized + Stream {
     fn copy_exact<R, D>(
-        &mut self,
-        reader: &mut R,
+        self,
+        reader: R,
         duration: D,
         buf: &mut [MaybeUninit<u8>],
     ) -> PhonicResult<()>
@@ -93,7 +93,7 @@ pub trait StreamUtilsExt: Sized + Stream {
     //     todo!()
     // }
 
-    fn copy_all<R>(&mut self, reader: &mut R, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<()>
+    fn copy_all<R>(self, reader: R, buf: &mut [MaybeUninit<u8>]) -> PhonicResult<()>
     where
         Self: BlockingStream + StreamWriter,
         R: BlockingStream + StreamReader,

@@ -6,8 +6,8 @@ use phonic_signal::{PhonicError, PhonicResult};
 use std::mem::MaybeUninit;
 
 pub fn copy_stream_exact<R, W, D>(
-    reader: &mut R,
-    writer: &mut W,
+    mut reader: R,
+    mut writer: W,
     duration: D,
     buf: &mut [MaybeUninit<u8>],
 ) -> PhonicResult<()>
@@ -43,8 +43,8 @@ where
 }
 
 pub fn copy_stream_all<R, W>(
-    reader: &mut R,
-    writer: &mut W,
+    mut reader: R,
+    mut writer: W,
     buf: &mut [MaybeUninit<u8>],
 ) -> PhonicResult<()>
 where
