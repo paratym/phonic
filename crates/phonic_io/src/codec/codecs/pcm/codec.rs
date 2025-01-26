@@ -114,14 +114,14 @@ where
 
         let aligned_len = aligned.len() - aligned.len() % self.spec.block_align;
         if aligned_len == 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         let mut n_bytes = 0;
         loop {
             match self.inner.read(&mut aligned[n_bytes..aligned_len]) {
                 Ok(0) if n_bytes == 0 => break,
-                Ok(0) => return Err(PhonicError::InvalidState),
+                Ok(0) => return Err(PhonicError::invalid_state()),
                 Ok(n) => n_bytes += n,
                 Err(e) => return Err(e),
             };
@@ -150,7 +150,7 @@ where
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         if !self.endianess.is_native() {
-            return Err(PhonicError::Unsupported);
+            return Err(PhonicError::unsupported());
         }
 
         let (prefix, aligned, suffix) = unsafe { buf.align_to::<u8>() };
@@ -158,14 +158,14 @@ where
 
         let aligned_len = aligned.len() - aligned.len() % self.spec.block_align;
         if aligned_len == 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         let mut n_bytes = 0;
         loop {
             match self.inner.write(&aligned[n_bytes..aligned_len]) {
                 Ok(0) if n_bytes == 0 => break,
-                Ok(0) => return Err(PhonicError::InvalidState),
+                Ok(0) => return Err(PhonicError::invalid_state()),
                 Ok(n) => n_bytes += n,
                 Err(e) => return Err(e),
             }
@@ -233,14 +233,14 @@ where
         debug_assert_eq!(aligned_byte_len % size_of::<S>(), 0);
         let aligned_len = aligned_byte_len / size_of::<S>();
         if aligned_len == 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         let mut n_samples = 0;
         loop {
             match self.inner.read(&mut aligned[n_samples..aligned_len]) {
                 Ok(0) if n_samples == 0 => break,
-                Ok(0) => return Err(PhonicError::InvalidState),
+                Ok(0) => return Err(PhonicError::invalid_state()),
                 Ok(n) => n_samples += n,
                 Err(e) => return Err(e),
             }

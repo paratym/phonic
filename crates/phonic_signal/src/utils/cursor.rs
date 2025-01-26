@@ -144,10 +144,10 @@ impl<B, S> Cursor<B, S> {
         let new_pos = self
             ._pos()
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .ok_or(PhonicError::out_of_bounds())?;
 
         if new_pos > len as u64 {
-            return Err(PhonicError::OutOfBounds);
+            return Err(PhonicError::out_of_bounds());
         }
 
         let NSamples { n_samples } = NFrames::from(new_pos).into_duration(&self.spec);

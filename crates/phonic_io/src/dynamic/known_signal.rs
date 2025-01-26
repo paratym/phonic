@@ -99,7 +99,7 @@ impl TryFrom<TypeId> for KnownSampleType {
             id if id == TypeId::of::<u64>() => Self::U64,
             id if id == TypeId::of::<f32>() => Self::F32,
             id if id == TypeId::of::<f64>() => Self::F64,
-            _ => return Err(PhonicError::Unsupported),
+            _ => return Err(PhonicError::unsupported()),
         })
     }
 }

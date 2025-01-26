@@ -27,17 +27,17 @@ impl PcmCodecTag {
             .try_into()?;
 
         let Some(sample_layout) = spec.sample_layout else {
-            return Err(PhonicError::MissingData);
+            return Err(PhonicError::missing_data());
         };
 
         let sample_rate = if let Some(sample_rate) = spec.decoded_spec.sample_rate {
             sample_rate
         } else {
-            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::MissingData)?;
+            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::missing_data())?;
             let n_channels = spec
                 .decoded_spec
                 .channels
-                .ok_or(PhonicError::MissingData)?
+                .ok_or(PhonicError::missing_data())?
                 .count();
 
             byte_rate / sample_layout.size() as u32 / n_channels
@@ -46,10 +46,10 @@ impl PcmCodecTag {
         let channels = if let Some(channels) = spec.decoded_spec.channels {
             channels
         } else {
-            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::MissingData)?;
+            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::missing_data())?;
             let interleaved_sample_rate = byte_rate / sample_layout.size() as u32;
             if interleaved_sample_rate % sample_rate != 0 {
-                return Err(PhonicError::InvalidInput);
+                return Err(PhonicError::invalid_input());
             }
 
             Channels::Count(interleaved_sample_rate / sample_rate)
@@ -58,13 +58,13 @@ impl PcmCodecTag {
         let calculated_byte_rate = sample_layout.size() as u32 * sample_rate * channels.count();
         let avg_byte_rate = spec.avg_byte_rate.unwrap_or(calculated_byte_rate);
         if avg_byte_rate != calculated_byte_rate {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         let min_block_align = sample_layout.size() * channels.count() as usize;
         let block_align = if let Some(block_align) = spec.block_align {
             if block_align % min_block_align != 0 {
-                return Err(PhonicError::InvalidInput);
+                return Err(PhonicError::invalid_input());
             }
 
             block_align
@@ -180,7 +180,7 @@ impl TryFrom<crate::dynamic::KnownCodec> for PcmCodecTag {
             KnownCodec::PcmBE => Ok(Self::BE),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }
@@ -254,7 +254,7 @@ mod tests {
                 let mut $spec = $specDef;
                 $($mutation)*
                 match PcmCodecTag::infer_tagged_spec($spec) {
-                    Err(PhonicError::MissingData) => (),
+                    Err(PhonicError::MissingData { .. }) => (),
                     result => panic!("expected PhonicError::MissingData found: {result:?}"),
                 }
             }

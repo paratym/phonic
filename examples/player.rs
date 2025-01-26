@@ -23,7 +23,7 @@ fn main() -> PhonicResult<()> {
 
     let format = FormatIdentifier::try_from(path)?
         .known_format()
-        .ok_or(PhonicError::Unsupported)?
+        .ok_or(PhonicError::unsupported())?
         .read_index(file)?;
 
     let signal = format.into_primary_stream()?.into_decoder()?;

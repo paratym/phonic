@@ -92,7 +92,7 @@ impl<T: SignalSeeker> SignalSeeker for Indexed<T> {
         let pos = self
             .pos
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .ok_or(PhonicError::out_of_bounds())?;
 
         self.inner.seek(offset)?;
         self.pos = pos;

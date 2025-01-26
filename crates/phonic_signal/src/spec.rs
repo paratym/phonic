@@ -44,7 +44,7 @@ impl SignalSpec {
 
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if self.sample_rate != other.sample_rate {
-            return Err(PhonicError::ParamMismatch);
+            return Err(PhonicError::param_mismatch());
         }
 
         self.channels.merge(&other.channels)?;
@@ -106,7 +106,7 @@ impl SignalSpecBuilder {
     pub fn merge(&mut self, other: &Self) -> PhonicResult<()> {
         if let Some(sample_rate) = other.sample_rate {
             if self.sample_rate.get_or_insert(sample_rate) != &sample_rate {
-                return Err(PhonicError::ParamMismatch);
+                return Err(PhonicError::param_mismatch());
             }
         }
 
@@ -134,8 +134,8 @@ impl TryFrom<SignalSpecBuilder> for SignalSpec {
 
     fn try_from(builder: SignalSpecBuilder) -> Result<Self, Self::Error> {
         Ok(Self {
-            channels: builder.channels.ok_or(PhonicError::MissingData)?,
-            sample_rate: builder.sample_rate.ok_or(PhonicError::MissingData)?,
+            channels: builder.channels.ok_or(PhonicError::missing_data())?,
+            sample_rate: builder.sample_rate.ok_or(PhonicError::missing_data())?,
         })
     }
 }

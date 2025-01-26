@@ -109,7 +109,7 @@ impl<T: Sample, B> SignalReader for SignalConsumer<T, B> {
                 return Ok(0);
             }
 
-            return Err(PhonicError::NotReady);
+            return Err(PhonicError::not_ready());
         }
 
         let n_channels = self.spec.channels.count() as usize;
@@ -137,7 +137,7 @@ impl<T: Sample, B> BufferedSignalReader for SignalConsumer<T, B> {
         let (trailing, _) = self.consumer.elements();
         if trailing.is_empty() && !self.consumer.is_abandoned() {
             std::sync::atomic::fence(Ordering::Acquire);
-            return Err(PhonicError::NotReady);
+            return Err(PhonicError::not_ready());
         }
 
         Ok(trailing)
@@ -170,12 +170,12 @@ impl<T: Sample, B> SignalWriter for SignalProducer<T, B> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         if self.producer.is_abandoned() {
             std::sync::atomic::fence(Ordering::Acquire);
-            return Err(PhonicError::Terminated);
+            return Err(PhonicError::terminated());
         }
 
         let (trailing, leading) = self.producer.slots();
         if trailing.is_empty() {
-            return Err(PhonicError::NotReady);
+            return Err(PhonicError::not_ready());
         }
 
         let n_channels = self.spec.channels.count() as usize;
@@ -202,9 +202,9 @@ impl<T: Sample, B> SignalWriter for SignalProducer<T, B> {
             Ok(())
         } else if self.producer.is_abandoned() {
             std::sync::atomic::fence(Ordering::Acquire);
-            Err(PhonicError::Terminated)
+            Err(PhonicError::terminated())
         } else {
-            Err(PhonicError::NotReady)
+            Err(PhonicError::not_ready())
         }
     }
 }

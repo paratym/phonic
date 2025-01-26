@@ -38,13 +38,13 @@ impl<T, F: FormatTag> WaveFormat<T, F> {
     {
         let mut riff_chunk = RiffChunk::read_new(reader)?;
         if riff_chunk.id() != Self::RIFF_CHUNK_ID {
-            return Err(PhonicError::InvalidData);
+            return Err(PhonicError::invalid_data());
         }
 
         let mut wave_id = [0u8; 4];
         riff_chunk.read_exact(&mut wave_id)?;
         if wave_id != Self::WAVE_ID {
-            return Err(PhonicError::InvalidData);
+            return Err(PhonicError::invalid_data());
         }
 
         loop {
@@ -114,9 +114,9 @@ where
         let tag = WaveFormatTag.try_into()?;
 
         let mut index_iter = index.into_iter();
-        let spec = index_iter.next().ok_or(PhonicError::MissingData)?;
+        let spec = index_iter.next().ok_or(PhonicError::missing_data())?;
         if index_iter.next().is_some() {
-            return Err(PhonicError::Unsupported);
+            return Err(PhonicError::unsupported());
         }
 
         let data = Self::write_header(writer, spec)?;
@@ -200,7 +200,7 @@ where
     fn write(&mut self, stream: usize, buf: &[u8]) -> PhonicResult<usize> {
         match stream {
             0 => StreamWriter::write(self, buf),
-            _ => Err(PhonicError::InvalidInput),
+            _ => Err(PhonicError::invalid_input()),
         }
     }
 
@@ -222,7 +222,7 @@ where
     fn seek(&mut self, stream: usize, offset: i64) -> PhonicResult<()> {
         match stream {
             0 => StreamSeeker::seek(self, offset),
-            _ => Err(PhonicError::InvalidInput),
+            _ => Err(PhonicError::invalid_input()),
         }
     }
 }
@@ -260,7 +260,7 @@ impl<T: Read, F: FormatTag> StreamReader for WaveFormat<T, F> {
         loop {
             match self.data.read(&mut init_buf[n_bytes..])? {
                 0 if n_bytes == 0 => break,
-                0 => return Err(PhonicError::InvalidState),
+                0 => return Err(PhonicError::invalid_state()),
                 n_read => n_bytes += n_read,
             }
 
@@ -282,7 +282,7 @@ impl<T: Write + Seek, F: FormatTag> StreamWriter for WaveFormat<T, F> {
         loop {
             match self.data.write(&buf[n_bytes..len])? {
                 0 if n_bytes == 0 => break,
-                0 => return Err(PhonicError::InvalidState),
+                0 => return Err(PhonicError::invalid_state()),
                 n_written => n_bytes += n_written,
             }
 
@@ -302,7 +302,7 @@ impl<T: Write + Seek, F: FormatTag> StreamWriter for WaveFormat<T, F> {
 impl<T: Seek, F: FormatTag> StreamSeeker for WaveFormat<T, F> {
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         if offset % self.spec.block_align as i64 != 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         self.data.seek_relative(offset).map_err(Into::into)

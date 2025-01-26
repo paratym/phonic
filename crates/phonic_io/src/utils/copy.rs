@@ -29,9 +29,9 @@ where
     while n < n_bytes {
         let len = buf.len().min((n_bytes - n) as usize);
         let samples = match reader.read_init_blocking(&mut buf[..len]) {
-            Err(PhonicError::Interrupted | PhonicError::NotReady) => continue,
+            Err(PhonicError::Interrupted { .. } | PhonicError::NotReady { .. }) => continue,
             Err(e) => return Err(e),
-            Ok([]) => return Err(PhonicError::OutOfBounds),
+            Ok([]) => return Err(PhonicError::out_of_bounds()),
             Ok(samples) => samples,
         };
 
@@ -57,7 +57,7 @@ where
 
     loop {
         let samples = match reader.read_init_blocking(buf) {
-            Err(PhonicError::Interrupted | PhonicError::NotReady) => continue,
+            Err(PhonicError::Interrupted { .. } | PhonicError::NotReady { .. }) => continue,
             Err(e) => return Err(e),
             Ok([]) => break,
             Ok(samples) => samples,
@@ -65,7 +65,7 @@ where
 
         match writer.write_exact(samples) {
             Ok(()) => continue,
-            Err(PhonicError::OutOfBounds) => break,
+            Err(PhonicError::OutOfBounds { .. }) => break,
             Err(e) => return Err(e),
         };
     }

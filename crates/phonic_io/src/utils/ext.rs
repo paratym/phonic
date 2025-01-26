@@ -47,7 +47,7 @@ pub trait FormatUtilsExt: Sized + Format {
     where
         Self: Sized,
     {
-        let i = self.primary_stream().ok_or(PhonicError::MissingData)?;
+        let i = self.primary_stream().ok_or(PhonicError::missing_data())?;
         Ok(self.into_stream(i))
     }
 

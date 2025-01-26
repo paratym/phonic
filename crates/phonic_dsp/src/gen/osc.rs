@@ -142,7 +142,7 @@ impl<S: Sample> SignalSeeker for Osc<S> {
         self.pos = self
             .pos
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .ok_or(PhonicError::out_of_bounds())?;
 
         Ok(())
     }

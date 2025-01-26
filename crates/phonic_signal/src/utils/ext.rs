@@ -187,7 +187,7 @@ pub trait SignalUtilsExt: Sized + Signal {
         let new_pos: NFrames = self
             .len()
             .checked_sub(n_frames)
-            .ok_or(PhonicError::OutOfBounds)?
+            .ok_or(PhonicError::out_of_bounds())?
             .into();
 
         self.seek_from_start(new_pos)

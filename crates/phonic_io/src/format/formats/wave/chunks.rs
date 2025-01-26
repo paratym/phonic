@@ -149,7 +149,7 @@ impl FmtChunk {
             WaveSupportedCodec::PcmLE if sample_layout.is::<i32>() => 0x0001,
             WaveSupportedCodec::PcmLE if sample_layout.is::<f32>() => 0x0003,
             WaveSupportedCodec::PcmLE if sample_layout.is::<f64>() => 0x0003,
-            _ => return Err(PhonicError::Unsupported),
+            _ => return Err(PhonicError::unsupported()),
         };
 
         Ok(Self {

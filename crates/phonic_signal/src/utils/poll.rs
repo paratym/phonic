@@ -9,8 +9,8 @@ macro_rules! block_on_signal {
     ($self:expr, $func:expr, $result:pat => $return:expr) => {
         loop {
             match $func {
-                ::std::result::Result::Err($crate::PhonicError::Interrupted) => continue,
-                ::std::result::Result::Err($crate::PhonicError::NotReady) => $crate::BlockingSignal::block($self),
+                ::std::result::Result::Err($crate::PhonicError::Interrupted { .. }) => continue,
+                ::std::result::Result::Err($crate::PhonicError::NotReady { .. }) => $crate::BlockingSignal::block($self),
                 $result => break $return,
             }
         }

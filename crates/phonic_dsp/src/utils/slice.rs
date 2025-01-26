@@ -168,7 +168,7 @@ impl<T: IndexedSignal + SignalSeeker> SignalSeeker for Slice<T> {
             .checked_add_signed(offset)
             .is_none_or(|pos| pos > self.len())
         {
-            return Err(PhonicError::OutOfBounds);
+            return Err(PhonicError::out_of_bounds());
         }
 
         self.inner.seek(offset)

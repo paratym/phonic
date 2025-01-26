@@ -131,7 +131,7 @@ impl<T: IndexedSignal + SignalSeeker> SignalSeeker for Delay<T> {
         let pos = self
             .pos()
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .ok_or(PhonicError::out_of_bounds())?;
 
         let inner_pos = pos.saturating_sub(self.delay);
         let inner_offset = inner_pos as i64 - self.inner.pos() as i64;

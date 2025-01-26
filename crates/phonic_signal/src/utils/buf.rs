@@ -100,8 +100,8 @@ pub trait DynamicBuf: OwnedBuf {
             match reader.read(&mut slice[i..]) {
                 Ok(0) => break,
                 Ok(n) => i += n,
-                Err(PhonicError::Interrupted) => continue,
-                Err(PhonicError::NotReady) => {
+                Err(PhonicError::Interrupted(..)) => continue,
+                Err(PhonicError::NotReady(..)) => {
                     reader.block();
                     continue;
                 }

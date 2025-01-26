@@ -78,7 +78,7 @@ impl<C: CodecTag> StreamSpec<C> {
             || self.sample_layout != other.sample_layout
             || max_align % min_align != 0
         {
-            return Err(PhonicError::ParamMismatch);
+            return Err(PhonicError::param_mismatch());
         }
 
         self.block_align = max_align;
@@ -163,14 +163,14 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
             .codec
             .is_some_and(|codec| *self.codec.get_or_insert(codec) != codec)
         {
-            return Err(PhonicError::ParamMismatch);
+            return Err(PhonicError::param_mismatch());
         }
 
         if other
             .avg_byte_rate
             .is_some_and(|rate| *self.avg_byte_rate.get_or_insert(rate) != rate)
         {
-            return Err(PhonicError::ParamMismatch);
+            return Err(PhonicError::param_mismatch());
         }
 
         if let Some(align) = other.block_align {
@@ -179,7 +179,7 @@ impl<C: CodecTag> StreamSpecBuilder<C> {
             let max = align.max(self_align);
 
             if max % min != 0 {
-                return Err(PhonicError::ParamMismatch);
+                return Err(PhonicError::param_mismatch());
             }
 
             self.block_align = Some(max);
@@ -219,10 +219,10 @@ impl<C: CodecTag> TryFrom<StreamSpecBuilder<C>> for StreamSpec<C> {
 
     fn try_from(spec: StreamSpecBuilder<C>) -> Result<StreamSpec<C>, Self::Error> {
         Ok(StreamSpec {
-            codec: spec.codec.ok_or(PhonicError::MissingData)?,
-            avg_byte_rate: spec.avg_byte_rate.ok_or(PhonicError::MissingData)?,
-            block_align: spec.block_align.ok_or(PhonicError::MissingData)?,
-            sample_layout: spec.sample_layout.ok_or(PhonicError::MissingData)?,
+            codec: spec.codec.ok_or(PhonicError::missing_data())?,
+            avg_byte_rate: spec.avg_byte_rate.ok_or(PhonicError::missing_data())?,
+            block_align: spec.block_align.ok_or(PhonicError::missing_data())?,
+            sample_layout: spec.sample_layout.ok_or(PhonicError::missing_data())?,
             decoded_spec: spec.decoded_spec.build()?,
         })
     }

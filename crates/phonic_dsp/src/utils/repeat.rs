@@ -71,10 +71,10 @@ impl<T: IndexedSignal + FiniteSignal + SignalSeeker> SignalSeeker for Repeat<T> 
         let pos = self
             .pos()
             .checked_add_signed(offset)
-            .ok_or(PhonicError::OutOfBounds)?;
+            .ok_or(PhonicError::out_of_bounds())?;
 
         if pos > self.len() {
-            return Err(PhonicError::OutOfBounds);
+            return Err(PhonicError::out_of_bounds());
         }
 
         let inner_pos = NFrames::from(pos % self.inner.len());

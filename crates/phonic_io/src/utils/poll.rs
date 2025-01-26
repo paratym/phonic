@@ -27,8 +27,8 @@ macro_rules! block_on_format {
     ($self:expr, $func:expr, $result:pat => $return:expr) => {
         loop {
             match $func {
-                ::std::result::Result::Err(::phonic_signal::PhonicError::Interrupted) => continue,
-                ::std::result::Result::Err(::phonic_signal::PhonicError::NotReady) => {
+                ::std::result::Result::Err(::phonic_signal::PhonicError::Interrupted { .. }) => continue,
+                ::std::result::Result::Err(::phonic_signal::PhonicError::NotReady { .. }) => {
                     $crate::BlockingFormat::block($self)
                 }
 
@@ -46,8 +46,8 @@ macro_rules! block_on_stream {
     ($self:expr, $func:expr, $result:pat => $return:expr) => {
         loop {
             match $func {
-                ::std::result::Result::Err(::phonic_signal::PhonicError::Interrupted) => continue,
-                ::std::result::Result::Err(::phonic_signal::PhonicError::NotReady) => {
+                ::std::result::Result::Err(::phonic_signal::PhonicError::Interrupted { .. }) => continue,
+                ::std::result::Result::Err(::phonic_signal::PhonicError::NotReady { .. }) => {
                     $crate::BlockingStream::block($self)
                 }
 

@@ -62,15 +62,15 @@ pub trait StreamExt: Stream {
         Self: BlockingStream + StreamReader,
     {
         if buf.len() % self.stream_spec().block_align != 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         while !buf.is_empty() {
             match self.read(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
+                Ok(0) => return Err(PhonicError::out_of_bounds()),
                 Ok(n) => buf = &mut buf[n..],
-                Err(PhonicError::Interrupted) => continue,
-                Err(PhonicError::NotReady) => self.block(),
+                Err(PhonicError::Interrupted { .. }) => continue,
+                Err(PhonicError::NotReady { .. }) => self.block(),
                 Err(e) => return Err(e),
             }
         }
@@ -105,15 +105,15 @@ pub trait StreamExt: Stream {
         Self: BlockingStream + StreamWriter,
     {
         if buf.len() % self.stream_spec().block_align != 0 {
-            return Err(PhonicError::InvalidInput);
+            return Err(PhonicError::invalid_input());
         }
 
         while !buf.is_empty() {
             match self.write_blocking(buf) {
-                Ok(0) => return Err(PhonicError::OutOfBounds),
+                Ok(0) => return Err(PhonicError::out_of_bounds()),
                 Ok(n) => buf = &buf[n..],
-                Err(PhonicError::Interrupted) => continue,
-                Err(PhonicError::NotReady) => self.block(),
+                Err(PhonicError::Interrupted { .. }) => continue,
+                Err(PhonicError::NotReady { .. }) => self.block(),
                 Err(e) => return Err(e),
             };
         }

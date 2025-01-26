@@ -116,7 +116,7 @@ impl<B> SpmcRingBuf<B> {
         };
 
         if n > available {
-            return Err(PhonicError::OutOfBounds);
+            return Err(PhonicError::out_of_bounds());
         }
 
         self.end += n;
@@ -151,7 +151,7 @@ impl<B> SpmcRingBuf<B> {
 
     pub fn advance_instance(&mut self, id: &usize, n: usize) -> PhonicResult<()> {
         let Some(cursor) = self.cursor.get_mut(id) else {
-            return Err(PhonicError::NotFound);
+            return Err(PhonicError::not_found());
         };
 
         let buf_wraps = self.end > cursor.pos
@@ -164,7 +164,7 @@ impl<B> SpmcRingBuf<B> {
         };
 
         if n > available {
-            return Err(PhonicError::OutOfBounds);
+            return Err(PhonicError::out_of_bounds());
         }
 
         cursor.pos += n;

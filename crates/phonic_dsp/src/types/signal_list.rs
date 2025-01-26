@@ -69,7 +69,7 @@ impl<T: Signal, const N: usize> SignalList for [T; N] {
 
     fn spec(&self) -> Result<SignalSpec, PhonicError> {
         let mut iter = self.iter().map(Signal::spec);
-        let mut spec = *iter.next().ok_or(PhonicError::NotFound)?;
+        let mut spec = *iter.next().ok_or(PhonicError::not_found())?;
         for other in iter {
             spec.merge(other)?;
         }
@@ -123,7 +123,7 @@ macro_rules! impl_slice_list {
 
             fn spec(&self) -> Result<SignalSpec, PhonicError> {
                 let mut iter = self.iter().map(Signal::spec);
-                let mut spec = *iter.next().ok_or(PhonicError::NotFound)?;
+                let mut spec = *iter.next().ok_or(PhonicError::not_found())?;
                 for other in iter {
                     spec.merge(other)?;
                 }
@@ -239,7 +239,7 @@ macro_rules! impl_tuple_list {
                 match i {
                     $first_i => self.$first_i.read(buf),
                     $($rest_i => self.$rest_i.read(buf)),+,
-                    _ => Err(PhonicError::NotFound)
+                    _ => Err(PhonicError::not_found())
                 }
             }
         }
@@ -252,7 +252,7 @@ macro_rules! impl_tuple_list {
                 match i {
                     $first_i => self.$first_i.write(buf),
                     $($rest_i => self.$rest_i.write(buf)),+,
-                    _ => Err(PhonicError::NotFound)
+                    _ => Err(PhonicError::not_found())
                 }
             }
 
@@ -260,7 +260,7 @@ macro_rules! impl_tuple_list {
                 match i {
                     $first_i => self.$first_i.flush(),
                     $($rest_i => self.$rest_i.flush()),+,
-                    _ => Err(PhonicError::NotFound)
+                    _ => Err(PhonicError::not_found())
                 }
             }
         }
@@ -273,7 +273,7 @@ macro_rules! impl_tuple_list {
                 match i {
                     $first_i => self.$first_i.seek(offset),
                     $($rest_i => self.$rest_i.seek(offset)),+,
-                    _ => Err(PhonicError::NotFound)
+                    _ => Err(PhonicError::not_found())
                 }
             }
         }

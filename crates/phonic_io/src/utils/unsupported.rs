@@ -80,7 +80,7 @@ delegate_format! {
 
 impl<T: Format> FormatReader for UnReadable<T> {
     fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<(usize, usize)> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }
 
@@ -95,7 +95,7 @@ delegate_stream! {
 
 impl<T: Stream> StreamReader for UnReadable<T> {
     fn read(&mut self, _buf: &mut [MaybeUninit<u8>]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }
 
@@ -110,7 +110,7 @@ delegate_signal! {
 
 impl<T: Signal> SignalReader for UnReadable<T> {
     fn read(&mut self, _buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }
 
@@ -125,15 +125,15 @@ delegate_format! {
 
 impl<T: Format> FormatWriter for UnWriteable<T> {
     fn write(&mut self, _stream: usize, _buf: &[u8]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Ok(())
     }
 
     fn finalize(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Ok(())
     }
 }
 
@@ -148,11 +148,11 @@ delegate_stream! {
 
 impl<T: Stream> StreamWriter for UnWriteable<T> {
     fn write(&mut self, _buf: &[u8]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Ok(())
     }
 }
 
@@ -167,11 +167,11 @@ delegate_signal! {
 
 impl<T: Signal> SignalWriter for UnWriteable<T> {
     fn write(&mut self, _buf: &[Self::Sample]) -> PhonicResult<usize> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Ok(())
     }
 }
 
@@ -186,7 +186,7 @@ delegate_format! {
 
 impl<T: Format> FormatSeeker for UnSeekable<T> {
     fn seek(&mut self, _stream: usize, _offset: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }
 
@@ -201,7 +201,7 @@ delegate_stream! {
 
 impl<T: Stream> StreamSeeker for UnSeekable<T> {
     fn seek(&mut self, _offset: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }
 
@@ -216,6 +216,6 @@ delegate_signal! {
 
 impl<T: Signal> SignalSeeker for UnSeekable<T> {
     fn seek(&mut self, _n_frames: i64) -> PhonicResult<()> {
-        Err(PhonicError::Unsupported)
+        Err(PhonicError::unsupported())
     }
 }

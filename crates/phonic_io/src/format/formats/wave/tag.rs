@@ -21,7 +21,7 @@ impl CodecTag for WaveSupportedCodec {
             #[cfg(feature = "pcm")]
             Some(Self::PcmLE) => crate::codecs::pcm::PcmCodecTag::infer_tagged_spec(spec),
 
-            None => Err(PhonicError::MissingData),
+            None => Err(PhonicError::missing_data()),
         }
     }
 }
@@ -41,7 +41,7 @@ impl TryFrom<crate::codecs::pcm::PcmCodecTag> for WaveSupportedCodec {
 
         match tag {
             PcmCodecTag::LE => Ok(Self::PcmLE),
-            PcmCodecTag::BE => Err(PhonicError::Unsupported),
+            PcmCodecTag::BE => Err(PhonicError::unsupported()),
         }
     }
 }
@@ -55,7 +55,7 @@ impl TryFrom<WaveSupportedCodec> for crate::codecs::pcm::PcmCodecTag {
             WaveSupportedCodec::PcmLE => Ok(Self::LE),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }
@@ -78,7 +78,7 @@ impl TryFrom<crate::dynamic::KnownFormat> for WaveFormatTag {
             crate::dynamic::KnownFormat::Wave => Ok(Self),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }
@@ -93,7 +93,7 @@ impl TryFrom<WaveSupportedCodec> for crate::dynamic::KnownCodec {
             crate::formats::wave::WaveSupportedCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }
@@ -108,7 +108,7 @@ impl TryFrom<crate::dynamic::KnownCodec> for WaveSupportedCodec {
             crate::dynamic::KnownCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }

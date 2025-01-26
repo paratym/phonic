@@ -23,7 +23,7 @@ impl CodecTag for KnownCodec {
             #[cfg(feature = "pcm")]
             Some(Self::PcmLE | Self::PcmBE) => pcm::PcmCodecTag::infer_tagged_spec(spec),
 
-            None => Err(PhonicError::MissingData),
+            None => Err(PhonicError::missing_data()),
         }
     }
 }
@@ -37,7 +37,7 @@ impl DynCodecConstructor for KnownCodec {
             Self::PcmLE | Self::PcmBE => pcm::PcmCodecTag::from_dyn_signal(*self, signal),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 
@@ -49,7 +49,7 @@ impl DynCodecConstructor for KnownCodec {
             Self::PcmLE | Self::PcmBE => pcm::PcmCodecTag::from_dyn_stream(stream),
 
             #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::Unsupported),
+            _ => Err(PhonicError::unsupported()),
         }
     }
 }

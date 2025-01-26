@@ -55,7 +55,7 @@ impl<'a> TryFrom<&'a Path> for FormatIdentifier<'a> {
         path.extension()
             .and_then(OsStr::to_str)
             .map(FormatIdentifier::FileExtension)
-            .ok_or(PhonicError::MissingData)
+            .ok_or(PhonicError::missing_data())
     }
 }
 
@@ -63,6 +63,6 @@ impl<'a> TryFrom<FormatIdentifier<'a>> for KnownFormat {
     type Error = PhonicError;
 
     fn try_from(id: FormatIdentifier<'a>) -> Result<Self, Self::Error> {
-        id.known_format().ok_or(PhonicError::NotFound)
+        id.known_format().ok_or(PhonicError::not_found())
     }
 }

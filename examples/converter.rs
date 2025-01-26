@@ -19,7 +19,7 @@ fn main() -> PhonicResult<()> {
 
     let src_fmt = FormatIdentifier::try_from(src_path)?
         .known_format()
-        .ok_or(PhonicError::Unsupported)?
+        .ok_or(PhonicError::unsupported())?
         .read_index(src_file)?
         .finalize_on_drop();
 
@@ -30,12 +30,12 @@ fn main() -> PhonicResult<()> {
         .inferred()?;
 
     let dst_path = Path::new("sine_i16.wav");
-    create_dir_all(dst_path.parent().ok_or(PhonicError::NotFound)?)?;
+    create_dir_all(dst_path.parent().ok_or(PhonicError::not_found())?)?;
     let dst_file = File::create(dst_path)?;
 
     let dst_fmt = FormatIdentifier::try_from(dst_path)?
         .known_format()
-        .ok_or(PhonicError::Unsupported)?
+        .ok_or(PhonicError::unsupported())?
         .write_index(dst_file, [spec])?
         .finalize_on_drop();
 
