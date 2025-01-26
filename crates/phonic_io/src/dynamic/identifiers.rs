@@ -1,4 +1,4 @@
-use crate::dyn_io::KnownFormat;
+use crate::dynamic::KnownFormat;
 use phonic_signal::PhonicError;
 use std::{collections::HashMap, ffi::OsStr, path::Path, sync::LazyLock};
 

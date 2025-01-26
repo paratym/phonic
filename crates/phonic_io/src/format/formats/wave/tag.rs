@@ -60,8 +60,8 @@ impl TryFrom<WaveSupportedCodec> for crate::codecs::pcm::PcmCodecTag {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl From<WaveFormatTag> for crate::dyn_io::KnownFormat {
+#[cfg(feature = "dynamic")]
+impl From<WaveFormatTag> for crate::dynamic::KnownFormat {
     fn from(tag: WaveFormatTag) -> Self {
         match tag {
             WaveFormatTag => Self::Wave,
@@ -69,13 +69,13 @@ impl From<WaveFormatTag> for crate::dyn_io::KnownFormat {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl TryFrom<crate::dyn_io::KnownFormat> for WaveFormatTag {
+#[cfg(feature = "dynamic")]
+impl TryFrom<crate::dynamic::KnownFormat> for WaveFormatTag {
     type Error = PhonicError;
 
-    fn try_from(format: crate::dyn_io::KnownFormat) -> Result<Self, Self::Error> {
+    fn try_from(format: crate::dynamic::KnownFormat) -> Result<Self, Self::Error> {
         match format {
-            crate::dyn_io::KnownFormat::Wave => Ok(Self),
+            crate::dynamic::KnownFormat::Wave => Ok(Self),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),
@@ -83,8 +83,8 @@ impl TryFrom<crate::dyn_io::KnownFormat> for WaveFormatTag {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl TryFrom<WaveSupportedCodec> for crate::dyn_io::KnownCodec {
+#[cfg(feature = "dynamic")]
+impl TryFrom<WaveSupportedCodec> for crate::dynamic::KnownCodec {
     type Error = PhonicError;
 
     fn try_from(codec: crate::formats::wave::WaveSupportedCodec) -> Result<Self, Self::Error> {
@@ -98,14 +98,14 @@ impl TryFrom<WaveSupportedCodec> for crate::dyn_io::KnownCodec {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl TryFrom<crate::dyn_io::KnownCodec> for WaveSupportedCodec {
+#[cfg(feature = "dynamic")]
+impl TryFrom<crate::dynamic::KnownCodec> for WaveSupportedCodec {
     type Error = PhonicError;
 
-    fn try_from(codec: crate::dyn_io::KnownCodec) -> Result<Self, Self::Error> {
+    fn try_from(codec: crate::dynamic::KnownCodec) -> Result<Self, Self::Error> {
         match codec {
             #[cfg(feature = "pcm")]
-            crate::dyn_io::KnownCodec::PcmLE => Ok(Self::PcmLE),
+            crate::dynamic::KnownCodec::PcmLE => Ok(Self::PcmLE),
 
             #[allow(unreachable_patterns)]
             _ => Err(PhonicError::Unsupported),

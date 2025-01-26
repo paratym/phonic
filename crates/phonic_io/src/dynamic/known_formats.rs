@@ -1,5 +1,5 @@
 use crate::{
-    dyn_io::{DynFormat, DynFormatConstructor, KnownCodec, StdIoSource},
+    dynamic::{DynFormat, DynFormatConstructor, KnownCodec, StdIoSource},
     utils::PollIo,
     FormatFromReader, FormatFromWriter, FormatTag, StreamSpec,
 };

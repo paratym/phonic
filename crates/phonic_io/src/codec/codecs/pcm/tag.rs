@@ -84,11 +84,11 @@ impl PcmCodecTag {
         })
     }
 
-    #[cfg(feature = "dyn-io")]
+    #[cfg(feature = "dynamic")]
     pub fn from_dyn_signal<C>(
         tag: C,
-        signal: crate::dyn_io::TaggedSignal,
-    ) -> PhonicResult<Box<dyn crate::dyn_io::DynStream<Tag = C>>>
+        signal: crate::dynamic::TaggedSignal,
+    ) -> PhonicResult<Box<dyn crate::dynamic::DynStream<Tag = C>>>
     where
         C: CodecTag + TryInto<PcmCodecTag> + 'static,
         PcmCodecTag: TryInto<C>,
@@ -98,17 +98,17 @@ impl PcmCodecTag {
         crate::match_tagged_signal!(signal, inner => Ok(Box::new(PollIo(UnWriteable(PcmCodec::from_signal(tag, inner)?)))))
     }
 
-    #[cfg(feature = "dyn-io")]
+    #[cfg(feature = "dynamic")]
     pub fn from_dyn_stream<C>(
-        stream: Box<dyn crate::dyn_io::DynStream<Tag = C>>,
-    ) -> PhonicResult<crate::dyn_io::TaggedSignal>
+        stream: Box<dyn crate::dynamic::DynStream<Tag = C>>,
+    ) -> PhonicResult<crate::dynamic::TaggedSignal>
     where
         C: CodecTag + TryInto<PcmCodecTag> + 'static,
         PcmCodecTag: TryInto<C>,
         PhonicError: From<<C as TryInto<PcmCodecTag>>::Error>,
         PhonicError: From<<PcmCodecTag as TryInto<C>>::Error>,
     {
-        use crate::dyn_io::{KnownSampleType, TaggedSignal};
+        use crate::dynamic::{KnownSampleType, TaggedSignal};
 
         let sample_type = KnownSampleType::try_from(stream.stream_spec().sample_layout.id())?;
         let signal = match sample_type {
@@ -156,10 +156,10 @@ impl CodecTag for PcmCodecTag {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl From<PcmCodecTag> for crate::dyn_io::KnownCodec {
+#[cfg(feature = "dynamic")]
+impl From<PcmCodecTag> for crate::dynamic::KnownCodec {
     fn from(tag: PcmCodecTag) -> Self {
-        use crate::dyn_io::KnownCodec;
+        use crate::dynamic::KnownCodec;
 
         match tag {
             PcmCodecTag::LE => KnownCodec::PcmLE,
@@ -168,12 +168,12 @@ impl From<PcmCodecTag> for crate::dyn_io::KnownCodec {
     }
 }
 
-#[cfg(feature = "dyn-io")]
-impl TryFrom<crate::dyn_io::KnownCodec> for PcmCodecTag {
+#[cfg(feature = "dynamic")]
+impl TryFrom<crate::dynamic::KnownCodec> for PcmCodecTag {
     type Error = PhonicError;
 
-    fn try_from(codec: crate::dyn_io::KnownCodec) -> Result<Self, Self::Error> {
-        use crate::dyn_io::KnownCodec;
+    fn try_from(codec: crate::dynamic::KnownCodec) -> Result<Self, Self::Error> {
+        use crate::dynamic::KnownCodec;
 
         match codec {
             KnownCodec::PcmLE => Ok(Self::LE),
@@ -274,7 +274,7 @@ mod tests {
         todo!()
     }
 
-    #[cfg(feature = "dyn-io")]
+    #[cfg(feature = "dynamic")]
     mod dyn_construct {
         macro_rules! impl_test {
             ($name:ident, $sample:ty, $tag:ident) => {
@@ -311,7 +311,7 @@ mod tests {
                 mod $name {
                     use crate::{
                         codecs::pcm::PcmCodecTag,
-                        dyn_io::{DynSignal, TaggedSignal},
+                        dynamic::{DynSignal, TaggedSignal},
                         utils::{Infinite, UnSeekable},
                     };
                     use phonic_signal::{

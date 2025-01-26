@@ -1,4 +1,4 @@
-use crate::dyn_io::DynSignal;
+use crate::dynamic::DynSignal;
 use phonic_signal::{PhonicError, Sample, Signal, SignalSpec};
 use std::{any::TypeId, mem::size_of};
 
@@ -133,16 +133,16 @@ impl_known_sample!(f64, F64);
 macro_rules! match_tagged_signal {
     ($signal:ident, $inner:pat => $rhs:expr) => {
         match $signal {
-            $crate::dyn_io::TaggedSignal::I8($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::I16($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::I32($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::I64($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::U8($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::U16($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::U32($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::U64($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::F32($inner) => $rhs,
-            $crate::dyn_io::TaggedSignal::F64($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::I8($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::I16($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::I32($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::I64($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::U8($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::U16($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::U32($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::U64($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::F32($inner) => $rhs,
+            $crate::dynamic::TaggedSignal::F64($inner) => $rhs,
         }
     };
 }

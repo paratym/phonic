@@ -1,5 +1,5 @@
 use crate::{
-    dyn_io::{DynCodecConstructor, TaggedSignal},
+    dynamic::{DynCodecConstructor, TaggedSignal},
     BlockingFormat, BlockingStream, FiniteFormat, FiniteStream, Format, FormatReader, FormatSeeker,
     FormatWriter, IndexedFormat, IndexedStream, Stream, StreamReader, StreamSeeker, StreamWriter,
 };

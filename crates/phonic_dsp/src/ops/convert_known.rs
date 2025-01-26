@@ -1,6 +1,6 @@
 use crate::ops::{Convert, FromSample, IntoSample};
 use phonic_io::{
-    dyn_io::{DynSignal, TaggedSignal},
+    dynamic::{DynSignal, TaggedSignal},
     match_tagged_signal,
 };
 use phonic_signal::{

@@ -5,7 +5,7 @@ use cpal::{
 use phonic::{
     cpal::DeviceExt,
     io::{
-        dyn_io::{DynFormatConstructor, DynStream, FormatIdentifier, KnownSample},
+        dynamic::{DynFormatConstructor, DynStream, FormatIdentifier, KnownSample},
         match_tagged_signal,
         utils::FormatUtilsExt,
     },

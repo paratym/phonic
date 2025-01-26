@@ -1,5 +1,5 @@
 use crate::{
-    dyn_io::{DynCodecConstructor, DynStream, TaggedSignal},
+    dynamic::{DynCodecConstructor, DynStream, TaggedSignal},
     CodecTag, StreamSpec, StreamSpecBuilder,
 };
 use phonic_signal::{PhonicError, PhonicResult};

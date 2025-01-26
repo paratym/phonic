@@ -1,7 +1,7 @@
 use phonic::{
     dsp::ops::TaggedSignalExt,
     io::{
-        dyn_io::{DynFormatConstructor, DynStream, FormatIdentifier, KnownFormat},
+        dynamic::{DynFormatConstructor, DynStream, FormatIdentifier},
         utils::FormatUtilsExt,
         StreamSpec,
     },

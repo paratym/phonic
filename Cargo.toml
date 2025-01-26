@@ -36,7 +36,7 @@ gen = ["dsp", "phonic_dsp/gen"]
 
 io = ["dep:phonic_io", "phonic_dsp?/io"]
 io-full = ["io", "dyn-io", "all-formats", "all-codecs"]
-dyn-io = ["io", "phonic_io/dyn-io"]
+dyn-io = ["io", "phonic_io/dynamic"]
 
 all-formats = ["io", "phonic_io/all-formats"]
 wave = ["io", "phonic_io/wave"]

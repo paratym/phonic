@@ -4,7 +4,7 @@ mod format;
 pub use codec::*;
 pub use format::*;
 
-#[cfg(feature = "dyn-io")]
-pub mod dyn_io;
+#[cfg(feature = "dynamic")]
+pub mod dynamic;
 
 pub mod utils;

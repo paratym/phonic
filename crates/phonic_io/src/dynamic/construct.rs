@@ -1,5 +1,5 @@
 use crate::{
-    dyn_io::{DynFormat, DynStream, StdIoSource, TaggedSignal},
+    dynamic::{DynFormat, DynStream, StdIoSource, TaggedSignal},
     CodecTag, FormatTag, StreamSpec,
 };
 use phonic_signal::PhonicResult;
