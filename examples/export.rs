@@ -1,5 +1,5 @@
 use phonic::{
-    dsp::{gen::Osc, utils::DspUtilsExt},
+    dsp::utils::{DspUtilsExt, Osc},
     io::{
         codecs::pcm::PcmCodec,
         formats::wave::WaveFormat,
@@ -17,8 +17,10 @@ use std::{
 };
 
 fn main() -> PhonicResult<()> {
-    let spec = SignalSpec::new(48000, 1);
-    let sine = Osc::sin(spec, 440.0, 0.6, 0.0).slice_from_start(Duration::from_secs(1));
+    let spec = SignalSpec::stereo(48000);
+    let sine = Osc::hz(440.0)
+        .sin(spec)
+        .slice_from_start(Duration::from_secs(1));
 
     let path = Path::new("sine.wav");
     let mut file = File::create(path)?;

@@ -1,5 +1,5 @@
 use std::{
-    mem::MaybeUninit,
+    mem::{needs_drop, MaybeUninit},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
@@ -32,14 +32,10 @@ pub struct Consumer<T, B> {
     buf: Arc<SpscBuf<T, B>>,
 }
 
-impl<T> SpscBuf<T, ()> {}
+type SpscPair<T, B> = (Producer<T, B>, Consumer<T, B>);
 
 impl<T, B> SpscBuf<T, B> {
-    pub unsafe fn from_raw_parts(
-        buf: B,
-        ptr: *mut MaybeUninit<T>,
-        cap: usize,
-    ) -> (Producer<T, B>, Consumer<T, B>) {
+    pub unsafe fn from_raw_parts(buf: B, ptr: *mut MaybeUninit<T>, cap: usize) -> SpscPair<T, B> {
         let inner = Self {
             _buf: buf,
             ptr,
@@ -51,11 +47,22 @@ impl<T, B> SpscBuf<T, B> {
         };
 
         let inner_ref = Arc::new(inner);
-        (Producer::from(inner_ref.clone()), Consumer::from(inner_ref))
+        (Producer::new(inner_ref.clone()), Consumer::new(inner_ref))
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(mut buf: B) -> (Producer<T, B>, Consumer<T, B>)
+    pub fn new(mut buf: B) -> SpscPair<T, B>
+    where
+        B: AsMut<[T]>,
+    {
+        let slice = buf.as_mut();
+        let ptr = slice.as_mut_ptr().cast();
+        let cap = slice.len();
+
+        unsafe { Self::from_raw_parts(buf, ptr, cap) }
+    }
+
+    pub fn new_uninit(mut buf: B) -> SpscPair<T, B>
     where
         B: AsMut<[MaybeUninit<T>]>,
     {
@@ -67,6 +74,10 @@ impl<T, B> SpscBuf<T, B> {
     }
 
     unsafe fn drop_elements(&self, start: usize, end: usize) {
+        if !needs_drop::<T>() {
+            return;
+        }
+
         let mut ptr: *mut T = self.ptr.add(start).cast();
         let end_ptr: *mut T = self.ptr.add(end).cast();
         let wrap_ptr: *mut T = self.ptr.add(self.cap).cast();
@@ -86,19 +97,11 @@ impl<T, B> SpscBuf<T, B> {
     }
 }
 
-impl<T, B> From<Arc<SpscBuf<T, B>>> for Producer<T, B> {
-    fn from(inner: Arc<SpscBuf<T, B>>) -> Self {
-        Self { buf: inner }
-    }
-}
-
-impl<T, B> From<Arc<SpscBuf<T, B>>> for Consumer<T, B> {
-    fn from(inner: Arc<SpscBuf<T, B>>) -> Self {
-        Self { buf: inner }
-    }
-}
-
 impl<T, B> Producer<T, B> {
+    fn new(buf: Arc<SpscBuf<T, B>>) -> Self {
+        Self { buf }
+    }
+
     pub fn slots(&mut self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let w_idx = self.buf.w_idx.load(Ordering::Relaxed);
         let r_idx = self.buf.r_idx.load(Ordering::Acquire);
@@ -159,6 +162,10 @@ impl<T, B> Producer<T, B> {
 }
 
 impl<T, B> Consumer<T, B> {
+    fn new(buf: Arc<SpscBuf<T, B>>) -> Self {
+        Self { buf }
+    }
+
     pub fn elements(&self) -> (&[T], &[T]) {
         let w_idx = self.buf.w_idx.load(Ordering::Acquire);
         let r_idx = self.buf.r_idx.load(Ordering::Relaxed);
@@ -271,7 +278,7 @@ mod tests {
 
     #[test]
     fn committed_slots_are_moved_to_consumer() {
-        let (mut producer, consumer) = SpscBuf::new(BUF.clone());
+        let (mut producer, consumer) = SpscBuf::new_uninit(BUF.clone());
 
         let (slots, _) = producer.slots();
         slots.iter_mut().enumerate().for_each(|(i, slot)| {

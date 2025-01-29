@@ -6,7 +6,7 @@ use phonic_signal::{
     delegate_signal, FiniteSignal, PhonicError, PhonicResult, Signal, SignalReader, SignalSeeker,
     SignalWriter,
 };
-use std::mem::MaybeUninit;
+use std::{io, mem::MaybeUninit};
 
 #[repr(transparent)]
 pub struct Infinite<T>(pub T);
@@ -69,6 +69,15 @@ impl<T: Signal> FiniteSignal for Infinite<T> {
     }
 }
 
+impl<T: io::Read> io::Read for UnReadable<T> {
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "reading is not supported by the reciever",
+        ))
+    }
+}
+
 delegate_format! {
     impl<T> * + !FormatReader for UnReadable<T> {
         Self as T;
@@ -111,6 +120,19 @@ delegate_signal! {
 impl<T: Signal> SignalReader for UnReadable<T> {
     fn read(&mut self, _buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         Err(PhonicError::unsupported())
+    }
+}
+
+impl<T: io::Write> io::Write for UnWriteable<T> {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "writing is not supported by the reciever",
+        ))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -172,6 +194,15 @@ impl<T: Signal> SignalWriter for UnWriteable<T> {
 
     fn flush(&mut self) -> PhonicResult<()> {
         Ok(())
+    }
+}
+
+impl<T: io::Seek> io::Seek for UnSeekable<T> {
+    fn seek(&mut self, _pos: io::SeekFrom) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "seeking is not supported by the reciever",
+        ))
     }
 }
 

@@ -3,10 +3,13 @@ use cpal::{
     SampleFormat, SampleRate, SizedSample, StreamConfig, StreamError, SupportedStreamConfigRange,
 };
 use phonic_signal::{
-    utils::copy_to_uninit_slice, BufferedSignalReader, BufferedSignalWriter, Sample, Signal,
-    SignalSpec,
+    utils::slice_as_uninit_mut, PhonicError, Sample, Signal, SignalReader, SignalSpec, SignalWriter,
 };
-use std::{any::TypeId, time::Duration};
+use std::{
+    any::TypeId,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 pub trait SignalSpecExt {
     fn from_cpal_config(config: StreamConfig) -> Self;
@@ -58,62 +61,200 @@ impl SupportedStreamConfigRangeExt for SupportedStreamConfigRange {
     }
 }
 
-pub trait DeviceExt: DeviceTrait {
-    fn build_input_stream_from_signal<T, E>(
-        &self,
-        mut signal: T,
-        error_callback: E,
-        buffer_size: BufferSize,
-        timeout: Option<Duration>,
-    ) -> Result<Self::Stream, BuildStreamError>
-    where
-        T: BufferedSignalWriter + Send + 'static,
-        T::Sample: SizedSample,
-        E: FnMut(StreamError) + Send + 'static,
-    {
-        self.build_input_stream(
-            &signal.spec().into_cpal_config(buffer_size),
-            move |buf: &[T::Sample], _: &InputCallbackInfo| {
-                let inner_buf = signal.buffer_mut().unwrap_or_default();
-                let n_samples = inner_buf.len().min(buf.len());
-                debug_assert!(buf.len() <= inner_buf.len());
+pub struct CpalSignal<Exhausted = fn(), SignalErr = fn(PhonicError), CpalErr = fn(StreamError)>
+where
+    Exhausted: FnOnce() + Send + 'static,
+    SignalErr: FnOnce(PhonicError) + Send + 'static,
+    CpalErr: FnMut(StreamError) + Send + 'static,
+{
+    pub buffer_size: BufferSize,
+    pub timeout: Option<Duration>,
+    pub on_exhausted: Option<Exhausted>,
+    pub on_signal_err: Option<SignalErr>,
+    pub on_cpal_err: Option<CpalErr>,
+}
 
-                copy_to_uninit_slice(&buf[..n_samples], &mut inner_buf[..n_samples]);
-                signal.commit(n_samples);
-            },
-            error_callback,
-            timeout,
-        )
+impl<Exhausted, SignalErr, CpalErr> CpalSignal<Exhausted, SignalErr, CpalErr>
+where
+    Exhausted: FnOnce() + Send + 'static,
+    SignalErr: FnOnce(PhonicError) + Send + 'static,
+    CpalErr: FnMut(StreamError) + Send + 'static,
+{
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    fn build_output_stream_from_signal<T, E>(
-        &self,
-        mut signal: T,
-        error_callback: E,
-        buffer_size: BufferSize,
-        timeout: Option<Duration>,
-    ) -> Result<Self::Stream, BuildStreamError>
+    pub fn buffer_size(mut self, buffer_size: u32) -> Self {
+        self.buffer_size = BufferSize::Fixed(buffer_size);
+        self
+    }
+
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn on_exhausted<F>(self, callback: F) -> CpalSignal<F, SignalErr, CpalErr>
     where
-        T: BufferedSignalReader + Send + 'static,
-        T::Sample: SizedSample,
-        E: FnMut(StreamError) + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        self.build_output_stream(
-            &signal.spec().into_cpal_config(buffer_size),
-            move |buf: &mut [T::Sample], _: &OutputCallbackInfo| {
-                let inner_buf = signal.buffer().unwrap_or_default();
-                let n_samples = inner_buf.len().min(buf.len());
-                debug_assert!(buf.len() <= inner_buf.len());
+        CpalSignal {
+            buffer_size: self.buffer_size,
+            timeout: self.timeout,
+            on_exhausted: Some(callback),
+            on_signal_err: self.on_signal_err,
+            on_cpal_err: self.on_cpal_err,
+        }
+    }
 
-                buf[..n_samples].copy_from_slice(&inner_buf[..n_samples]);
-                signal.consume(n_samples);
+    pub fn on_signal_err<F>(self, callback: F) -> CpalSignal<Exhausted, F, CpalErr>
+    where
+        F: FnMut(PhonicError) + Send + 'static,
+    {
+        CpalSignal {
+            buffer_size: self.buffer_size,
+            timeout: self.timeout,
+            on_exhausted: self.on_exhausted,
+            on_signal_err: Some(callback),
+            on_cpal_err: self.on_cpal_err,
+        }
+    }
 
-                buf[n_samples..].fill(T::Sample::ORIGIN);
-            },
-            error_callback,
+    pub fn on_cpal_err<F>(self, callback: F) -> CpalSignal<Exhausted, SignalErr, F>
+    where
+        F: FnMut(StreamError) + Send + 'static,
+    {
+        CpalSignal {
+            buffer_size: self.buffer_size,
+            timeout: self.timeout,
+            on_exhausted: self.on_exhausted,
+            on_signal_err: self.on_signal_err,
+            on_cpal_err: Some(callback),
+        }
+    }
+
+    pub fn build_input<D, S>(self, device: &D, mut signal: S) -> Result<D::Stream, BuildStreamError>
+    where
+        D: DeviceTrait,
+        S: SignalWriter + Send + 'static,
+        S::Sample: SizedSample,
+    {
+        let Self {
+            buffer_size,
             timeout,
-        )
+            mut on_exhausted,
+            mut on_signal_err,
+            mut on_cpal_err,
+        } = self;
+
+        let config = signal.spec().into_cpal_config(buffer_size);
+
+        let exited = AtomicBool::default();
+        let data_callback = move |buf: &[S::Sample], _: &InputCallbackInfo| {
+            if exited.load(Ordering::Relaxed) {
+                return;
+            }
+
+            match signal.write(buf) {
+                Ok(0) => {
+                    exited.store(true, Ordering::Relaxed);
+                    if let Some(callback) = on_exhausted.take() {
+                        callback()
+                    }
+                }
+
+                Ok(_) => {}
+                Err(PhonicError::Interrupted { .. }) => {}
+
+                Err(err) => {
+                    exited.store(true, Ordering::Relaxed);
+                    if let Some(callback) = on_signal_err.take() {
+                        callback(err);
+                    }
+                }
+            }
+        };
+
+        let error_callback = move |err: StreamError| {
+            if let Some(ref mut callback) = on_cpal_err {
+                callback(err)
+            }
+        };
+
+        device.build_input_stream(&config, data_callback, error_callback, timeout)
+    }
+
+    pub fn build_output<D, S>(
+        self,
+        device: &D,
+        mut signal: S,
+    ) -> Result<D::Stream, BuildStreamError>
+    where
+        D: DeviceTrait,
+        S: SignalReader + Send + 'static,
+        S::Sample: SizedSample,
+    {
+        let Self {
+            buffer_size,
+            timeout,
+            mut on_exhausted,
+            mut on_signal_err,
+            mut on_cpal_err,
+        } = self;
+
+        let config = signal.spec().into_cpal_config(buffer_size);
+
+        let exited = AtomicBool::default();
+        let data_callback = move |buf: &mut [S::Sample], _: &OutputCallbackInfo| {
+            if exited.load(Ordering::Relaxed) {
+                buf.fill(S::Sample::ORIGIN);
+                return;
+            }
+
+            let uninit_buf = slice_as_uninit_mut(buf);
+            match signal.read(uninit_buf) {
+                Ok(0) => {
+                    exited.store(true, Ordering::Relaxed);
+                    if let Some(callback) = on_exhausted.take() {
+                        callback()
+                    }
+                }
+
+                Ok(n) => buf[n..].fill(S::Sample::ORIGIN),
+                Err(PhonicError::Interrupted { .. }) => buf.fill(S::Sample::ORIGIN),
+
+                Err(err) => {
+                    exited.store(true, Ordering::Relaxed);
+                    if let Some(callback) = on_signal_err.take() {
+                        callback(err)
+                    }
+                }
+            }
+        };
+
+        let error_callback = move |err: StreamError| {
+            if let Some(ref mut callback) = on_cpal_err {
+                callback(err)
+            }
+        };
+
+        device.build_output_stream(&config, data_callback, error_callback, timeout)
     }
 }
 
-impl<T: DeviceTrait> DeviceExt for T {}
+impl<Exhausted, SignalErr, CpalErr> Default for CpalSignal<Exhausted, SignalErr, CpalErr>
+where
+    Exhausted: FnOnce() + Send + 'static,
+    SignalErr: FnOnce(PhonicError) + Send + 'static,
+    CpalErr: FnMut(StreamError) + Send + 'static,
+{
+    fn default() -> Self {
+        Self {
+            buffer_size: BufferSize::Default,
+            timeout: None,
+            on_exhausted: None,
+            on_signal_err: None,
+            on_cpal_err: None,
+        }
+    }
+}

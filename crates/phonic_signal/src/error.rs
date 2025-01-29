@@ -1,15 +1,12 @@
-use std::{fmt::Debug, panic::Location};
-
-#[derive(Debug)]
-struct Private;
-
 macro_rules! variants {
     ($(
         $(#[$attrs:meta])*
         $constructor:ident -> $variant:ident $({
-            $($visibility:vis $field:ident : $field_ty:ty),*
+            $($field:ident : $field_ty:ty),*
         })?
     );*) => {
+        struct Private;
+
         #[allow(private_interfaces)]
         pub enum PhonicError {$(
             $(#[$attrs])*
@@ -17,9 +14,9 @@ macro_rules! variants {
                 _private: Private,
 
                 #[cfg(debug_assertions)]
-                location: &'static Location<'static>,
+                location: &'static std::panic::Location<'static>,
 
-                $($($visibility $field : $field_ty),*)?
+                $($($field : $field_ty),*)?
             }
         ),*}
 
@@ -32,7 +29,9 @@ macro_rules! variants {
                 ) -> Self {
                     Self::$variant {
                         _private: Private,
-                        location: Location::caller(),
+
+                        #[cfg(debug_assertions)]
+                        location: std::panic::Location::caller(),
 
                         $($($field),*)?
                     }
@@ -40,7 +39,7 @@ macro_rules! variants {
             )*
 
             #[cfg(debug_assertions)]
-            fn location(&self) -> &'static Location<'static> {
+            fn location(&self) -> &'static std::panic::Location<'static> {
                 match self {
                     $(Self::$variant { location, .. } => location),*
                 }

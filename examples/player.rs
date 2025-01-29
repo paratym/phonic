@@ -1,9 +1,9 @@
 use cpal::{
     traits::{HostTrait, StreamTrait},
-    BufferSize, SizedSample,
+    SizedSample,
 };
 use phonic::{
-    cpal::DeviceExt,
+    cpal::CpalSignal,
     io::{
         dynamic::{DynFormatConstructor, DynStream, FormatIdentifier, KnownSample},
         match_tagged_signal,
@@ -30,7 +30,7 @@ fn main() -> PhonicResult<()> {
     match_tagged_signal!(signal, inner => play(inner))
 }
 
-fn play<S>(mut signal: S) -> PhonicResult<()>
+fn play<S>(signal: S) -> PhonicResult<()>
 where
     S: BlockingSignal + SignalReader + Send + Sync,
     S::Sample: KnownSample + SizedSample,
@@ -39,17 +39,10 @@ where
     const BUF_DURATION: Duration = Duration::from_millis(200);
     let (mut producer, consumer) = SpscSignal::default_duration(*spec, BUF_DURATION);
 
-    let output = cpal::default_host()
-        .default_output_device()
-        .expect("no default output device")
-        .build_output_stream_from_signal(
-            consumer,
-            |e| panic!("output error: {e}"),
-            BufferSize::Default,
-            None,
-        );
-
+    let device = cpal::default_host().default_output_device().unwrap();
+    let output = <CpalSignal>::new().build_output(&device, consumer);
     output.unwrap().play().unwrap();
-    (&mut producer).polled().copy_all_buffered(&mut signal)?;
+
+    (&mut producer).polled().copy_all_buffered(signal)?;
     producer.polled().flush_blocking()
 }

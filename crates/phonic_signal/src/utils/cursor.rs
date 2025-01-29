@@ -46,10 +46,7 @@ impl<B, S> Cursor<B, S> {
     where
         B: SizedBuf,
     {
-        let buf = B::uninit();
-        debug_assert_eq!(buf._as_slice().len() % spec.channels.count() as usize, 0);
-
-        Cursor::new(spec, buf)
+        Cursor::new(spec, B::uninit())
     }
 
     pub fn silence<D>(spec: SignalSpec, duration: D) -> Self
@@ -70,10 +67,7 @@ impl<B, S> Cursor<B, S> {
         B: SizedBuf,
         B::Item: Sample,
     {
-        let buf = B::silence();
-        debug_assert_eq!(buf._as_slice().len() % spec.channels.count() as usize, 0);
-
-        Self::new(spec, buf)
+        Self::new(spec, B::silence())
     }
 
     pub fn read<R>(reader: &mut R) -> PhonicResult<Self>
@@ -84,7 +78,6 @@ impl<B, S> Cursor<B, S> {
     {
         let spec = *reader.spec();
         let buf: B = reader.read_into()?;
-        debug_assert_eq!(buf._as_slice().len() % spec.channels.count() as usize, 0);
 
         Ok(Self::new(spec, buf))
     }
@@ -96,7 +89,6 @@ impl<B, S> Cursor<B, S> {
     {
         let spec = *reader.spec();
         let buf: B = reader.read_into_sized()?;
-        debug_assert_eq!(buf._as_slice().len() % spec.channels.count() as usize, 0);
 
         Ok(Self::new(spec, buf))
     }

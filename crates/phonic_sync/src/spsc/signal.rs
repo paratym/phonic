@@ -21,7 +21,7 @@ pub struct SignalConsumer<T, B> {
     consumer: Consumer<T, B>,
 }
 
-pub type SpscSignalPair<T, B> = (SignalProducer<T, B>, SignalConsumer<T, B>);
+type SpscSignalPair<T, B> = (SignalProducer<T, B>, SignalConsumer<T, B>);
 
 impl SpscSignal {
     pub unsafe fn from_raw_parts<T, B>(
@@ -42,6 +42,17 @@ impl SpscSignal {
     #[allow(clippy::new_ret_no_self)]
     pub fn new<T, B>(spec: SignalSpec, mut buf: B) -> SpscSignalPair<T, B>
     where
+        B: AsMut<[T]>,
+    {
+        let slice = buf.as_mut();
+        let ptr = slice.as_mut_ptr().cast();
+        let cap = slice.len();
+
+        unsafe { Self::from_raw_parts(spec, buf, ptr, cap) }
+    }
+
+    pub fn new_uninit<T, B>(spec: SignalSpec, mut buf: B) -> SpscSignalPair<T, B>
+    where
         B: AsMut<[MaybeUninit<T>]>,
     {
         let slice = buf.as_mut();
@@ -57,14 +68,14 @@ impl SpscSignal {
         B::Uninit: AsMut<[<B::Uninit as OwnedBuf>::Item]>,
     {
         let buf = B::uninit();
-        Self::new(spec, buf)
+        Self::new_uninit(spec, buf)
     }
 
     pub fn default_sized<T>(
         spec: SignalSpec,
     ) -> SpscSignalPair<T, <DefaultSizedBuf<T> as OwnedBuf>::Uninit> {
         let buf = DefaultSizedBuf::<T>::uninit();
-        Self::new(spec, buf)
+        Self::new_uninit(spec, buf)
     }
 
     pub fn new_duration<B>(
@@ -77,8 +88,7 @@ impl SpscSignal {
     {
         let NSamples { n_samples } = duration.into_duration(&spec);
         let buf = B::uninit(n_samples as usize);
-
-        Self::new(spec, buf)
+        Self::new_uninit(spec, buf)
     }
 
     pub fn default_duration<T>(
@@ -87,8 +97,7 @@ impl SpscSignal {
     ) -> SpscSignalPair<T, <DefaultDynamicBuf<T> as OwnedBuf>::Uninit> {
         let NSamples { n_samples } = duration.into_duration(&spec);
         let buf = DefaultDynamicBuf::<T>::uninit(n_samples as usize);
-
-        Self::new(spec, buf)
+        Self::new_uninit(spec, buf)
     }
 }
 
