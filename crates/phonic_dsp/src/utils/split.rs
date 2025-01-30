@@ -31,7 +31,7 @@ impl<T: Signal, B> SplitInner<T, B> {
 impl<T: Signal, B: AsRef<[T::Sample]>> Split<T, B> {
     pub fn new(inner: T, buf: B) -> Self {
         let spec = *inner.spec();
-        let n_channels = spec.channels.count() as usize;
+        let n_channels = spec.n_channels;
 
         let mut ring_buf = SpmcRingBuf::new(buf, n_channels);
         let id = ring_buf.add_instance();

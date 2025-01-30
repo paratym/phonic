@@ -1,7 +1,7 @@
 use crate::{CodecTag, StreamSpec};
 use phonic_signal::utils::{FromDuration, NFrames, NSamples};
 use std::{
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
     time::Duration,
 };
 
@@ -40,6 +40,12 @@ macro_rules! impl_ops {
             }
         }
 
+        impl AddAssign<$unit> for $unit {
+            fn add_assign(&mut self, rhs: Self) {
+                self.$inner += rhs.$inner
+            }
+        }
+
         impl Sub<$unit> for $unit {
             type Output = Self;
 
@@ -49,12 +55,24 @@ macro_rules! impl_ops {
             }
         }
 
+        impl SubAssign<$unit> for $unit {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.$inner -= rhs.$inner
+            }
+        }
+
         impl Mul<u64> for $unit {
             type Output = Self;
 
             fn mul(self, rhs: u64) -> Self {
                 let inner = self.$inner.mul(rhs);
                 Self::from(inner)
+            }
+        }
+
+        impl MulAssign<u64> for $unit {
+            fn mul_assign(&mut self, rhs: u64) {
+                self.$inner *= rhs
             }
         }
 
@@ -74,6 +92,12 @@ macro_rules! impl_ops {
                 Self::from(inner)
             }
         }
+
+        impl DivAssign<u64> for $unit {
+            fn div_assign(&mut self, rhs: u64) {
+                self.$inner /= rhs
+            }
+        }
     };
 }
 
@@ -82,7 +106,7 @@ impl_ops!(NBlocks, n_blocks);
 
 impl<T: FromDuration<U>, U> FromStreamDuration<U> for T {
     fn from_stream_duration<C: CodecTag>(duration: U, spec: &StreamSpec<C>) -> Self {
-        Self::from_duration(duration, &spec.decoded_spec)
+        Self::from_duration(duration, &spec.decoded)
     }
 }
 
@@ -94,15 +118,17 @@ impl<T, U: FromStreamDuration<T>> IntoStreamDuration<U> for T {
 
 impl FromStreamDuration<NFrames> for NBytes {
     fn from_stream_duration<C: CodecTag>(duration: NFrames, spec: &StreamSpec<C>) -> Self {
-        let n_bytes = (duration.n_frames as f64 * spec.avg_bytes_per_frame()) as u64;
-        Self { n_bytes }
+        todo!()
+        // let n_bytes = (duration.n_frames as f64 * spec.avg_bytes_per_frame()) as u64;
+        // Self { n_bytes }
     }
 }
 
 impl FromStreamDuration<NSamples> for NBytes {
     fn from_stream_duration<C: CodecTag>(duration: NSamples, spec: &StreamSpec<C>) -> Self {
-        let n_bytes = (duration.n_samples as f64 * spec.avg_bytes_per_sample()) as u64;
-        Self { n_bytes }
+        todo!()
+        // let n_bytes = (duration.n_samples as f64 * spec.avg_bytes_per_sample()) as u64;
+        // Self { n_bytes }
     }
 }
 
@@ -115,7 +141,7 @@ impl FromStreamDuration<NBlocks> for NBytes {
 
 impl FromStreamDuration<Duration> for NBytes {
     fn from_stream_duration<C: CodecTag>(duration: Duration, spec: &StreamSpec<C>) -> Self {
-        let n_bytes = (duration.as_secs_f64() * spec.avg_byte_rate as f64) as u64;
+        let n_bytes = (duration.as_secs_f64() * spec.byte_rate as f64) as u64;
         Self { n_bytes }
     }
 }
@@ -146,21 +172,23 @@ impl FromStreamDuration<NBytes> for NBlocks {
 
 impl FromStreamDuration<Duration> for NBlocks {
     fn from_stream_duration<C: CodecTag>(duration: Duration, spec: &StreamSpec<C>) -> Self {
-        let n_blocks = (duration.as_secs_f64() * spec.avg_block_rate()) as u64;
-        Self { n_blocks }
+        todo!()
+        // let n_blocks = (duration.as_secs_f64() * spec.avg_block_rate()) as u64;
+        // Self { n_blocks }
     }
 }
 
 impl FromStreamDuration<NBytes> for Duration {
     fn from_stream_duration<C: CodecTag>(duration: NBytes, spec: &StreamSpec<C>) -> Self {
-        let seconds = duration.n_bytes as f64 / spec.avg_byte_rate as f64;
+        let seconds = duration.n_bytes as f64 / spec.byte_rate as f64;
         Duration::from_secs_f64(seconds)
     }
 }
 
 impl FromStreamDuration<NBlocks> for Duration {
     fn from_stream_duration<C: CodecTag>(duration: NBlocks, spec: &StreamSpec<C>) -> Self {
-        let seconds = duration.n_blocks as f64 / spec.avg_block_rate();
-        Duration::from_secs_f64(seconds)
+        todo!()
+        // let seconds = duration.n_blocks as f64 / spec.avg_block_rate();
+        // Duration::from_secs_f64(seconds)
     }
 }

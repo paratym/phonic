@@ -69,9 +69,9 @@ impl<T: Signal, const N: usize> SignalList for [T; N] {
 
     fn spec(&self) -> Result<SignalSpec, PhonicError> {
         let mut iter = self.iter().map(Signal::spec);
-        let mut spec = *iter.next().ok_or(PhonicError::not_found())?;
-        for other in iter {
-            spec.merge(other)?;
+        let spec = *iter.next().ok_or(PhonicError::not_found())?;
+        if !iter.all(|other| *other == spec) {
+            return Err(PhonicError::param_mismatch());
         }
 
         Ok(spec)
@@ -123,9 +123,9 @@ macro_rules! impl_slice_list {
 
             fn spec(&self) -> Result<SignalSpec, PhonicError> {
                 let mut iter = self.iter().map(Signal::spec);
-                let mut spec = *iter.next().ok_or(PhonicError::not_found())?;
-                for other in iter {
-                    spec.merge(other)?;
+                let spec = *iter.next().ok_or(PhonicError::not_found())?;
+                if !iter.all(|other| *other == spec) {
+                    return Err(PhonicError::param_mismatch());
                 }
 
                 Ok(spec)
@@ -194,8 +194,10 @@ macro_rules! impl_tuple_list {
             type Sample = $first::Sample;
 
             fn spec(&self) -> Result<SignalSpec, PhonicError> {
-                let mut spec = *self.$first_i.spec();
-                $(spec.merge(self.$rest_i.spec())?);+;
+                let spec = *self.$first_i.spec();
+                $(if *self.$rest_i.spec() != spec {
+                    return Err(PhonicError::param_mismatch());
+                })+
 
                 Ok(spec)
             }

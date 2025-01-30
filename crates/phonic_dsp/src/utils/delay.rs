@@ -69,7 +69,7 @@ impl<T: SignalReader> Delay<T> {
         }
 
         let mut buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         buf_len -= buf_len % n_channels;
 
         let n_padding = buf_len.min(rem_padding as usize * n_channels);
@@ -83,7 +83,7 @@ impl<T: SignalReader> Delay<T> {
 impl<T: SignalReader> SignalReader for Delay<T> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let n_padding = self.read_padding(buf);
-        if buf.len() - n_padding < self.spec().channels.count() as usize {
+        if buf.len() - n_padding < self.spec().n_channels {
             return Ok(n_padding);
         }
 
@@ -99,7 +99,7 @@ impl<T: SignalWriter> Delay<T> {
         }
 
         let buf = <DefaultSizedBuf<_>>::silence();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         let mut n_written = 0;
 
         while self.n_delayed < self.delay {

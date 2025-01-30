@@ -19,15 +19,15 @@ pub trait SignalSpecExt {
 impl SignalSpecExt for SignalSpec {
     fn from_cpal_config(config: StreamConfig) -> SignalSpec {
         SignalSpec {
-            sample_rate: config.sample_rate.0,
-            channels: (config.channels as u32).into(),
+            sample_rate: config.sample_rate.0 as usize,
+            n_channels: config.channels as usize,
         }
     }
 
     fn into_cpal_config(self, buffer_size: BufferSize) -> StreamConfig {
         StreamConfig {
-            channels: self.channels.count() as u16,
-            sample_rate: SampleRate(self.sample_rate),
+            channels: self.n_channels as u16,
+            sample_rate: SampleRate(self.sample_rate as u32),
             buffer_size,
         }
     }
@@ -55,9 +55,9 @@ impl SupportedStreamConfigRangeExt for SupportedStreamConfigRange {
         };
 
         sample_type == TypeId::of::<S::Sample>()
-            && self.channels() == spec.channels.count() as u16
-            && self.max_sample_rate().0 >= spec.sample_rate
-            && self.min_sample_rate().0 <= spec.sample_rate
+            && self.channels() as usize == spec.n_channels
+            && self.max_sample_rate().0 as usize >= spec.sample_rate
+            && self.min_sample_rate().0 as usize <= spec.sample_rate
     }
 }
 

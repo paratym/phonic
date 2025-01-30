@@ -1,6 +1,6 @@
 use crate::SignalSpec;
 use std::{
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
     time::Duration,
 };
 
@@ -23,14 +23,14 @@ pub trait IntoDuration<T> {
 }
 
 macro_rules! impl_ops {
-    ($unit:ty, $inner:ident) => {
+    ($unit:ident, $inner:ident) => {
         impl From<u64> for $unit {
             fn from($inner: u64) -> Self {
                 Self { $inner }
             }
         }
 
-        impl Add<$unit> for $unit {
+        impl Add<Self> for $unit {
             type Output = Self;
 
             fn add(self, rhs: Self) -> Self {
@@ -39,7 +39,13 @@ macro_rules! impl_ops {
             }
         }
 
-        impl Sub<$unit> for $unit {
+        impl AddAssign<Self> for $unit {
+            fn add_assign(&mut self, rhs: Self) {
+                self.$inner += rhs.$inner
+            }
+        }
+
+        impl Sub<Self> for $unit {
             type Output = Self;
 
             fn sub(self, rhs: Self) -> Self {
@@ -48,12 +54,24 @@ macro_rules! impl_ops {
             }
         }
 
+        impl SubAssign<Self> for $unit {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.$inner -= rhs.$inner
+            }
+        }
+
         impl Mul<u64> for $unit {
             type Output = Self;
 
             fn mul(self, rhs: u64) -> Self {
-                let inner = self.$inner.mul(rhs);
+                let inner = self.$inner * rhs;
                 Self::from(inner)
+            }
+        }
+
+        impl MulAssign<u64> for $unit {
+            fn mul_assign(&mut self, rhs: u64) {
+                self.$inner *= rhs
             }
         }
 
@@ -62,6 +80,12 @@ macro_rules! impl_ops {
 
             fn div(self, rhs: Self) -> u64 {
                 self.$inner.div(rhs.$inner)
+            }
+        }
+
+        impl DivAssign<$unit> for $unit {
+            fn div_assign(&mut self, rhs: $unit) {
+                self.$inner /= rhs.$inner
             }
         }
 
@@ -93,7 +117,7 @@ impl<T, U: FromDuration<T>> IntoDuration<U> for T {
 
 impl FromDuration<NSamples> for NFrames {
     fn from_duration(duration: NSamples, spec: &SignalSpec) -> Self {
-        let n_channels = spec.channels.count() as u64;
+        let n_channels = spec.n_channels as u64;
         debug_assert!(
             duration.n_samples % n_channels == 0,
             "n samples not divisible by n channels"
@@ -113,7 +137,7 @@ impl FromDuration<Duration> for NFrames {
 
 impl FromDuration<NFrames> for NSamples {
     fn from_duration(duration: NFrames, spec: &SignalSpec) -> Self {
-        let n_samples = duration.n_frames * spec.channels.count() as u64;
+        let n_samples = duration.n_frames * spec.n_channels as u64;
         Self { n_samples }
     }
 }

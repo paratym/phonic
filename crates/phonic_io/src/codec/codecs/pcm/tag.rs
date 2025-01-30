@@ -3,7 +3,7 @@ use crate::{
     utils::{PollIo, UnWriteable},
     CodecFromSignal, CodecFromStream, CodecTag, StreamSpec, StreamSpecBuilder,
 };
-use phonic_signal::{utils::Poll, Channels, PhonicError, PhonicResult, SignalSpec};
+use phonic_signal::{utils::Poll, PhonicError, PhonicResult, SignalSpec};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum PcmCodecTag {
@@ -26,42 +26,38 @@ impl PcmCodecTag {
             .unwrap_or_default()
             .try_into()?;
 
-        let Some(sample_layout) = spec.sample_layout else {
+        let Some(sample_layout) = spec.sample else {
             return Err(PhonicError::missing_data());
         };
 
-        let sample_rate = if let Some(sample_rate) = spec.decoded_spec.sample_rate {
+        let sample_rate = if let Some(sample_rate) = spec.decoded.sample_rate {
             sample_rate
         } else {
-            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::missing_data())?;
-            let n_channels = spec
-                .decoded_spec
-                .channels
-                .ok_or(PhonicError::missing_data())?
-                .count();
+            let byte_rate = spec.byte_rate.ok_or(PhonicError::missing_data())?;
+            let n_channels = spec.decoded.n_channels.ok_or(PhonicError::missing_data())?;
 
-            byte_rate / sample_layout.size() as u32 / n_channels
+            byte_rate as usize / sample_layout.size() / n_channels
         };
 
-        let channels = if let Some(channels) = spec.decoded_spec.channels {
+        let n_channels = if let Some(channels) = spec.decoded.n_channels {
             channels
         } else {
-            let byte_rate = spec.avg_byte_rate.ok_or(PhonicError::missing_data())?;
-            let interleaved_sample_rate = byte_rate / sample_layout.size() as u32;
+            let byte_rate = spec.byte_rate.ok_or(PhonicError::missing_data())?;
+            let interleaved_sample_rate = byte_rate as usize / sample_layout.size();
             if interleaved_sample_rate % sample_rate != 0 {
                 return Err(PhonicError::invalid_input());
             }
 
-            Channels::Count(interleaved_sample_rate / sample_rate)
+            interleaved_sample_rate / sample_rate
         };
 
-        let calculated_byte_rate = sample_layout.size() as u32 * sample_rate * channels.count();
-        let avg_byte_rate = spec.avg_byte_rate.unwrap_or(calculated_byte_rate);
+        let calculated_byte_rate = sample_layout.size() * sample_rate * n_channels;
+        let avg_byte_rate = spec.byte_rate.unwrap_or(calculated_byte_rate);
         if avg_byte_rate != calculated_byte_rate {
             return Err(PhonicError::invalid_input());
         }
 
-        let min_block_align = sample_layout.size() * channels.count() as usize;
+        let min_block_align = sample_layout.size() * n_channels;
         let block_align = if let Some(block_align) = spec.block_align {
             if block_align % min_block_align != 0 {
                 return Err(PhonicError::invalid_input());
@@ -69,17 +65,17 @@ impl PcmCodecTag {
 
             block_align
         } else {
-            channels.count() as usize * sample_layout.size()
+            n_channels * sample_layout.size()
         };
 
         Ok(StreamSpec {
             codec,
-            avg_byte_rate,
+            byte_rate: avg_byte_rate,
             block_align,
-            sample_layout,
-            decoded_spec: SignalSpec {
+            sample: sample_layout,
+            decoded: SignalSpec {
                 sample_rate,
-                channels,
+                n_channels,
             },
         })
     }
@@ -110,7 +106,7 @@ impl PcmCodecTag {
     {
         use crate::dynamic::{KnownSampleType, TaggedSignal};
 
-        let sample_type = KnownSampleType::try_from(stream.stream_spec().sample_layout.id())?;
+        let sample_type = KnownSampleType::try_from(stream.stream_spec().sample.id())?;
         let signal = match sample_type {
             KnownSampleType::I8 => TaggedSignal::I8(Box::new(Poll(PcmCodec::from_stream(stream)?))),
             KnownSampleType::I16 => {
@@ -169,19 +165,26 @@ impl From<PcmCodecTag> for crate::dynamic::KnownCodec {
 }
 
 #[cfg(feature = "dynamic")]
+impl From<crate::dynamic::KnownCodec> for Option<PcmCodecTag> {
+    fn from(codec: crate::dynamic::KnownCodec) -> Self {
+        use crate::dynamic::KnownCodec;
+
+        match codec {
+            KnownCodec::PcmLE => Some(PcmCodecTag::LE),
+            KnownCodec::PcmBE => Some(PcmCodecTag::BE),
+
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "dynamic")]
 impl TryFrom<crate::dynamic::KnownCodec> for PcmCodecTag {
     type Error = PhonicError;
 
     fn try_from(codec: crate::dynamic::KnownCodec) -> Result<Self, Self::Error> {
-        use crate::dynamic::KnownCodec;
-
-        match codec {
-            KnownCodec::PcmLE => Ok(Self::LE),
-            KnownCodec::PcmBE => Ok(Self::BE),
-
-            #[allow(unreachable_patterns)]
-            _ => Err(PhonicError::unsupported()),
-        }
+        Option::<Self>::from(codec).ok_or(PhonicError::unsupported())
     }
 }
 
@@ -263,9 +266,9 @@ mod tests {
         impl_test!(
                 spec = StreamSpec::<PcmCodecTag>::builder();
                 spec = spec.with_sample_type::<f32>();
-                spec.decoded_spec.sample_rate = Some(48000);
-                spec.decoded_spec.channels = Some(2.into());
-                spec.avg_byte_rate = Some(4 * 48000 * 2);
+                spec.decoded.sample_rate = Some(48000);
+                spec.decoded.n_channels = Some(2);
+                spec.byte_rate = Some(4 * 48000 * 2);
         );
     }
 
@@ -282,7 +285,7 @@ mod tests {
                 fn $name() {
                     let spec = SignalSpec {
                         sample_rate: 48000,
-                        channels: 2.into(),
+                        n_channels: 2,
                     };
 
                     let signal = Poll(Infinite(UnSeekable(Indexed::new(
@@ -297,7 +300,7 @@ mod tests {
                         .expect("failed to construct signal codec");
 
                     assert_eq!(
-                        signal_codec.stream_spec().sample_layout.id(),
+                        signal_codec.stream_spec().sample.id(),
                         TypeId::of::<$sample>()
                     );
 

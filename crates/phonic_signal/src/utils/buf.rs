@@ -119,7 +119,7 @@ pub trait DynamicBuf: OwnedBuf {
         R: BlockingSignal + SignalReader<Sample = Self::Item>,
     {
         let NSamples { n_samples } = duration.into_duration(reader.spec());
-        debug_assert_eq!(n_samples % reader.spec().channels.count() as u64, 0);
+        debug_assert_eq!(n_samples % reader.spec().n_channels as u64, 0);
 
         let mut buf = Self::uninit(n_samples as usize);
         let slice = unsafe { buf._as_mut_slice() };

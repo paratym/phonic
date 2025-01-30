@@ -86,7 +86,7 @@ impl<T, S: Sample, C: CodecTag> Signal for PcmCodec<T, S, C> {
     type Sample = S;
 
     fn spec(&self) -> &SignalSpec {
-        &self.spec.decoded_spec
+        &self.spec.decoded
     }
 }
 

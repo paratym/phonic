@@ -74,8 +74,8 @@ pub trait StreamUtilsExt: Sized + Stream {
         Self: BlockingStream + StreamWriter,
         R: BlockingStream + StreamReader,
         D: IntoStreamDuration<NBytes>,
-        Self::Tag: TryInto<R::Tag>,
-        PhonicError: From<<Self::Tag as TryInto<R::Tag>>::Error>,
+        R::Tag: TryInto<Self::Tag>,
+        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
     {
         copy_stream_exact(reader, self, duration, buf)
     }
@@ -97,8 +97,8 @@ pub trait StreamUtilsExt: Sized + Stream {
     where
         Self: BlockingStream + StreamWriter,
         R: BlockingStream + StreamReader,
-        Self::Tag: TryInto<R::Tag>,
-        PhonicError: From<<Self::Tag as TryInto<R::Tag>>::Error>,
+        R::Tag: TryInto<Self::Tag>,
+        PhonicError: From<<R::Tag as TryInto<Self::Tag>>::Error>,
     {
         copy_stream_all(reader, self, buf)
     }

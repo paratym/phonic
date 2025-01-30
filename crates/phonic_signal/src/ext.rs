@@ -64,7 +64,7 @@ pub trait SignalExt: Signal {
     where
         Self: BlockingSignal + SignalReader,
     {
-        if buf.len() % self.spec().channels.count() as usize != 0 {
+        if buf.len() % self.spec().n_channels != 0 {
             return Err(PhonicError::invalid_input());
         }
 
@@ -112,7 +112,7 @@ pub trait SignalExt: Signal {
         Self: SignalReader,
     {
         let samples = self.read_init(buf)?;
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         debug_assert_eq!(samples.len() % n_channels, 0);
 
         Ok(samples.chunks_exact(n_channels))
@@ -126,7 +126,7 @@ pub trait SignalExt: Signal {
         Self: BlockingSignal + SignalReader,
     {
         let samples = self.read_exact_init(buf)?;
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         debug_assert_eq!(samples.len() % n_channels, 0);
 
         Ok(samples.chunks_exact(n_channels))
@@ -150,7 +150,7 @@ pub trait SignalExt: Signal {
     where
         Self: BlockingSignal + SignalWriter,
     {
-        if buf.len() % self.spec().channels.count() as usize != 0 {
+        if buf.len() % self.spec().n_channels != 0 {
             return Err(PhonicError::invalid_input());
         }
 

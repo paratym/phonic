@@ -51,7 +51,7 @@ impl FmtChunk {
             ..
         } = self;
 
-        let (codec, sample_layout) = match (w_format_tag, w_bits_per_sample) {
+        let (codec, sample) = match (w_format_tag, w_bits_per_sample) {
             (0x0001, 8) => Some((WaveSupportedCodec::PcmLE, TypeLayout::of::<u8>())).unzip(),
             (0x0001, 16) => Some((WaveSupportedCodec::PcmLE, TypeLayout::of::<i16>())).unzip(),
             (0x0001, 32) => Some((WaveSupportedCodec::PcmLE, TypeLayout::of::<i32>())).unzip(),
@@ -61,13 +61,13 @@ impl FmtChunk {
         };
 
         spec.codec = codec.map(TryInto::try_into).transpose()?;
-        spec.sample_layout = sample_layout;
+        spec.sample = sample;
 
-        spec.decoded_spec = SignalSpec::builder()
-            .with_channels(n_channels as u32)
-            .with_sample_rate(n_samples_per_sec);
+        spec.decoded = SignalSpec::builder()
+            .with_n_channels(n_channels as usize)
+            .with_sample_rate(n_samples_per_sec as usize);
 
-        spec.avg_byte_rate = Some(n_avg_bytes_per_sec);
+        spec.byte_rate = Some(n_avg_bytes_per_sec as usize);
         spec.block_align = Some(n_block_align as usize);
 
         Ok(())
@@ -131,34 +131,33 @@ impl FmtChunk {
     {
         let StreamSpec {
             codec,
-            avg_byte_rate,
+            byte_rate,
             block_align,
-            sample_layout,
-            decoded_spec,
+            sample,
+            decoded:
+                SignalSpec {
+                    sample_rate,
+                    n_channels,
+                },
         } = spec;
-
-        let SignalSpec {
-            sample_rate,
-            channels,
-        } = decoded_spec;
 
         let native_codec = codec.try_into()?;
         let w_format_tag = match native_codec {
-            WaveSupportedCodec::PcmLE if sample_layout.is::<u8>() => 0x0001,
-            WaveSupportedCodec::PcmLE if sample_layout.is::<i16>() => 0x0001,
-            WaveSupportedCodec::PcmLE if sample_layout.is::<i32>() => 0x0001,
-            WaveSupportedCodec::PcmLE if sample_layout.is::<f32>() => 0x0003,
-            WaveSupportedCodec::PcmLE if sample_layout.is::<f64>() => 0x0003,
+            WaveSupportedCodec::PcmLE if sample.is::<u8>() => 0x0001,
+            WaveSupportedCodec::PcmLE if sample.is::<i16>() => 0x0001,
+            WaveSupportedCodec::PcmLE if sample.is::<i32>() => 0x0001,
+            WaveSupportedCodec::PcmLE if sample.is::<f32>() => 0x0003,
+            WaveSupportedCodec::PcmLE if sample.is::<f64>() => 0x0003,
             _ => return Err(PhonicError::unsupported()),
         };
 
         Ok(Self {
             w_format_tag,
-            n_channels: channels.count() as u16,
-            n_samples_per_sec: sample_rate,
-            n_avg_bytes_per_sec: avg_byte_rate,
+            n_channels: n_channels as u16,
+            n_samples_per_sec: sample_rate as u32,
+            n_avg_bytes_per_sec: byte_rate as u32,
             n_block_align: block_align as u16,
-            w_bits_per_sample: sample_layout.size() as u16 * 8,
+            w_bits_per_sample: sample.size() as u16 * 8,
             extension: None,
         })
     }

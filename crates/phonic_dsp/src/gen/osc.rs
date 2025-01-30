@@ -115,7 +115,7 @@ where
     f64: IntoSample<S>,
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         let frames = buf.chunks_exact_mut(n_channels);
         let n_frames = frames.len();
 

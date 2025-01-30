@@ -1,7 +1,7 @@
 use crate::{
     utils::{IntoDuration, NSamples},
-    BlockingSignal, BufferedSignalWriter, PhonicError, PhonicResult, Signal, SignalExt,
-    SignalReader, SignalWriter,
+    BlockingSignal, BufferedSignalWriter, PhonicError, PhonicResult, SignalExt, SignalReader,
+    SignalWriter,
 };
 use std::mem::MaybeUninit;
 
@@ -15,8 +15,12 @@ where
     R: BlockingSignal + SignalReader,
     W: BlockingSignal + SignalWriter<Sample = R::Sample>,
 {
-    let spec = reader.spec().merged(writer.spec())?;
-    let NSamples { n_samples } = duration.into_duration(&spec);
+    let spec = reader.spec();
+    if spec != writer.spec() {
+        return Err(PhonicError::param_mismatch());
+    }
+
+    let NSamples { n_samples } = duration.into_duration(spec);
     let mut n = 0;
 
     while n < n_samples {
@@ -44,9 +48,13 @@ where
     R: BlockingSignal + SignalReader,
     W: BlockingSignal + BufferedSignalWriter<Sample = R::Sample>,
 {
-    let spec = reader.spec().merged(writer.spec())?;
-    let n_channels = spec.channels.count() as usize;
-    let n_samples = IntoDuration::<NSamples>::into_duration(duration, &spec).n_samples as usize;
+    let spec = reader.spec();
+    if spec != writer.spec() {
+        return Err(PhonicError::param_mismatch());
+    }
+
+    let n_channels = spec.n_channels;
+    let n_samples = IntoDuration::<NSamples>::into_duration(duration, spec).n_samples as usize;
     let mut n = 0;
 
     while n < n_samples {
@@ -83,7 +91,9 @@ where
     R: BlockingSignal + SignalReader,
     W: BlockingSignal + SignalWriter<Sample = R::Sample>,
 {
-    let _spec = reader.spec().merged(writer.spec())?;
+    if reader.spec() != writer.spec() {
+        return Err(PhonicError::param_mismatch());
+    }
 
     loop {
         let samples = match reader.read_init_blocking(buf) {
@@ -108,8 +118,12 @@ where
     R: BlockingSignal + SignalReader,
     W: BlockingSignal + BufferedSignalWriter<Sample = R::Sample>,
 {
-    let spec = reader.spec().merged(writer.spec())?;
-    let n_channels = spec.channels.count() as usize;
+    let spec = reader.spec();
+    if spec != writer.spec() {
+        return Err(PhonicError::param_mismatch());
+    }
+
+    let n_channels = spec.n_channels;
 
     loop {
         let Some(buf) = writer.buffer_mut() else {

@@ -54,7 +54,7 @@ impl<T: SignalWriterList> SignalWriter for Bus<T> {
         };
 
         let mut buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut n_written = 0;

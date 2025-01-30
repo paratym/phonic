@@ -90,7 +90,7 @@ where
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;
@@ -116,7 +116,7 @@ where
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;
@@ -146,7 +146,7 @@ where
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;
@@ -212,7 +212,7 @@ where
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;
@@ -238,7 +238,7 @@ where
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;
@@ -267,7 +267,7 @@ where
 {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut buf_len = buf.len();
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         buf_len -= buf_len % n_channels;
 
         let mut i = 0;

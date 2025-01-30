@@ -15,15 +15,16 @@ where
     R: BlockingStream + StreamReader,
     W: BlockingStream + StreamWriter,
     D: IntoStreamDuration<NBytes>,
-    W::Tag: TryInto<R::Tag>,
-    PhonicError: From<<W::Tag as TryInto<R::Tag>>::Error>,
+    R::Tag: TryInto<W::Tag>,
+    PhonicError: From<<R::Tag as TryInto<W::Tag>>::Error>,
 {
-    let spec = reader.stream_spec().merged(writer.stream_spec())?;
+    let spec = reader
+        .stream_spec()
+        .try_with_tag_type()?
+        .merged(writer.stream_spec())?;
+
     let NBytes { n_bytes } = duration.into_stream_duration(&spec);
-    debug_assert!(
-        n_bytes % spec.block_align as u64 == 0,
-        "n bytes not divisible by block align"
-    );
+    debug_assert!(n_bytes % spec.block_align as u64 == 0);
 
     let mut n = 0;
     while n < n_bytes {
@@ -50,10 +51,13 @@ pub fn copy_stream_all<R, W>(
 where
     R: BlockingStream + StreamReader,
     W: BlockingStream + StreamWriter,
-    W::Tag: TryInto<R::Tag>,
-    PhonicError: From<<W::Tag as TryInto<R::Tag>>::Error>,
+    R::Tag: TryInto<W::Tag>,
+    PhonicError: From<<R::Tag as TryInto<W::Tag>>::Error>,
 {
-    let _spec = reader.stream_spec().merged(writer.stream_spec())?;
+    let _spec = reader
+        .stream_spec()
+        .try_with_tag_type()?
+        .merged(writer.stream_spec())?;
 
     loop {
         let samples = match reader.read_init_blocking(buf) {

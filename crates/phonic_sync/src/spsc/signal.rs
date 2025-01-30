@@ -30,7 +30,7 @@ impl SpscSignal {
         ptr: *mut MaybeUninit<T>,
         cap: usize,
     ) -> SpscSignalPair<T, B> {
-        let aligned_cap = cap - cap % spec.channels.count() as usize;
+        let aligned_cap = cap - cap % spec.n_channels;
         let (producer, consumer) = SpscBuf::from_raw_parts(buf, ptr, aligned_cap);
 
         (
@@ -121,7 +121,7 @@ impl<T: Sample, B> SignalReader for SignalConsumer<T, B> {
             return Err(PhonicError::not_ready());
         }
 
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         let buf_len = buf.len() - buf.len() % n_channels;
 
         let trailing_len = trailing.len().min(buf_len);
@@ -187,7 +187,7 @@ impl<T: Sample, B> SignalWriter for SignalProducer<T, B> {
             return Err(PhonicError::not_ready());
         }
 
-        let n_channels = self.spec.channels.count() as usize;
+        let n_channels = self.spec.n_channels;
         let buf_len = buf.len() - buf.len() % n_channels;
 
         let trailing_len = trailing.len().min(buf_len);

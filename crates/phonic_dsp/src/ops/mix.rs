@@ -125,7 +125,7 @@ where
         };
 
         let mut buf_len = buf.len().min(self.buf.as_mut().len());
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
         buf_len -= buf_len % n_channels;
 
         let partial_len = self.take_partial_samples(&mut buf[..buf_len]);

@@ -36,7 +36,7 @@ impl<B, S> Cursor<B, S> {
         D: IntoDuration<NSamples>,
     {
         let NSamples { n_samples } = duration.into_duration(&spec);
-        debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
+        debug_assert_eq!(n_samples % spec.n_channels as u64, 0);
 
         let buf = B::uninit(n_samples as usize);
         Cursor::new(spec, buf)
@@ -56,7 +56,7 @@ impl<B, S> Cursor<B, S> {
         D: IntoDuration<NSamples>,
     {
         let NSamples { n_samples } = duration.into_duration(&spec);
-        debug_assert_eq!(n_samples % spec.channels.count() as u64, 0);
+        debug_assert_eq!(n_samples % spec.n_channels as u64, 0);
 
         let buf = B::silence(n_samples as usize);
         Self::new(spec, buf)

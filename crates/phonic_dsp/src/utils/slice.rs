@@ -98,7 +98,7 @@ impl<T: Signal> FiniteSignal for Slice<T> {
 impl<T: IndexedSignal + SignalReader> Slice<T> {
     fn read_padding(&mut self, buf: &mut [MaybeUninit<T::Sample>]) -> PhonicResult<()> {
         let buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
 
         loop {
             let pos = self.inner.pos();
@@ -129,7 +129,7 @@ impl<T: IndexedSignal + SignalWriter> Slice<T> {
         let buf = DefaultSizedBuf::<T::Sample>::silence();
 
         let buf_len = buf.len();
-        let n_channels = self.spec().channels.count() as usize;
+        let n_channels = self.spec().n_channels;
 
         loop {
             let pos = self.inner.pos();

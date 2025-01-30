@@ -26,7 +26,7 @@ impl<S: Sample> Signal for NullSignal<S> {
 impl<S: Sample> SignalReader for NullSignal<S> {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let mut len = buf.len();
-        len -= len % self.spec().channels.count() as usize;
+        len -= len % self.spec().n_channels;
 
         buf[..len].fill(MaybeUninit::new(Self::Sample::ORIGIN));
         Ok(len)
@@ -36,7 +36,7 @@ impl<S: Sample> SignalReader for NullSignal<S> {
 impl<S: Sample> SignalWriter for NullSignal<S> {
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let mut len = buf.len();
-        len -= len % self.spec().channels.count() as usize;
+        len -= len % self.spec().n_channels;
 
         Ok(len)
     }
