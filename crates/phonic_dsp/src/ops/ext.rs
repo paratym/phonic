@@ -82,10 +82,12 @@ pub trait DspOpsExt: Sized + Signal {
         Limit::clip(self)
     }
 
+    // TODO: remove 'static bounds for mix methods
+
     fn mix<T>(self, other: T) -> PhonicResult<Mix<(Self, T)>>
     where
-        Self: IndexedSignal,
-        T: IndexedSignal<Sample = Self::Sample>,
+        Self: 'static + IndexedSignal,
+        T: 'static + IndexedSignal<Sample = Self::Sample>,
     {
         let buf = DefaultSizedBuf::uninit();
         Mix::new((self, other), buf)
@@ -93,16 +95,16 @@ pub trait DspOpsExt: Sized + Signal {
 
     fn mix_buf<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, T), B>>
     where
-        Self: IndexedSignal,
-        T: IndexedSignal<Sample = Self::Sample>,
+        Self: 'static + IndexedSignal,
+        T: 'static + IndexedSignal<Sample = Self::Sample>,
     {
         Mix::new((self, other), buf)
     }
 
     fn cancel<T>(self, other: T) -> PhonicResult<Mix<(Self, Complement<T>)>>
     where
-        Self: IndexedSignal,
-        T: IndexedSignal<Sample = Self::Sample>,
+        Self: 'static + IndexedSignal,
+        T: 'static + IndexedSignal<Sample = Self::Sample>,
         T::Sample: ComplementSample,
     {
         let buf = DefaultSizedBuf::uninit();
@@ -111,8 +113,8 @@ pub trait DspOpsExt: Sized + Signal {
 
     fn cancel_buf<T, B>(self, other: T, buf: B) -> PhonicResult<Mix<(Self, Complement<T>), B>>
     where
-        Self: IndexedSignal,
-        T: IndexedSignal<Sample = Self::Sample>,
+        Self: 'static + IndexedSignal,
+        T: 'static + IndexedSignal<Sample = Self::Sample>,
         T::Sample: ComplementSample,
     {
         Mix::cancel(self, other, buf)

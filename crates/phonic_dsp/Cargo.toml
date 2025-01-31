@@ -9,5 +9,4 @@ phonic_io = { version = "0.0.1", path = "../phonic_io", optional = true }
 phonic_macro = { version = "0.0.1", path = "../phonic_macro" }
 
 [features]
-gen = []
 io = ["dep:phonic_io"]

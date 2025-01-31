@@ -1,4 +1,4 @@
-use crate::types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalWriterList};
+use crate::types::{PosQueue, SignalList};
 use phonic_signal::{FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalSpec, SignalWriter};
 
 pub struct Bus<T> {
@@ -10,9 +10,10 @@ pub struct Bus<T> {
 impl<T> Bus<T> {
     pub fn new(inner: T) -> PhonicResult<Self>
     where
-        T: IndexedSignalList,
+        T: SignalList,
+        for<'a> T::Signal<'a>: IndexedSignal,
     {
-        let spec = inner.spec()?;
+        let spec = inner.merged_spec()?;
         let queue = PosQueue::new(&inner);
 
         Ok(Self { inner, spec, queue })
@@ -35,19 +36,38 @@ impl<T: SignalList> Signal for Bus<T> {
     }
 }
 
-impl<T: IndexedSignalList> IndexedSignal for Bus<T> {
+impl<T: SignalList> IndexedSignal for Bus<T>
+where
+    for<'a> T::Signal<'a>: IndexedSignal,
+{
     fn pos(&self) -> u64 {
-        self.inner.min_pos()
+        let range = 0..self.inner.len();
+
+        range
+            .map(|i| self.inner.signal(i).pos())
+            .min()
+            .unwrap_or_default()
     }
 }
 
-impl<T: FiniteSignalList> FiniteSignal for Bus<T> {
+impl<T: SignalList> FiniteSignal for Bus<T>
+where
+    for<'a> T::Signal<'a>: FiniteSignal,
+{
     fn len(&self) -> u64 {
-        self.inner.max_len()
+        let range = 0..self.inner.len();
+
+        range
+            .map(|i| self.inner.signal(i).len())
+            .max()
+            .unwrap_or_default()
     }
 }
 
-impl<T: SignalWriterList> SignalWriter for Bus<T> {
+impl<T: SignalList> SignalWriter for Bus<T>
+where
+    for<'a> T::Signal<'a>: SignalWriter,
+{
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
             return Ok(0);
@@ -69,7 +89,7 @@ impl<T: SignalWriterList> SignalWriter for Bus<T> {
                 break;
             }
 
-            let result = self.inner.write(cursor.id, &buf[start_i..buf_len]);
+            let result = self.inner.signal(cursor.id).write(&buf[start_i..buf_len]);
 
             match result {
                 Ok(0) => {
@@ -100,7 +120,10 @@ impl<T: SignalWriterList> SignalWriter for Bus<T> {
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        let mut range = 0..self.inner.count();
-        range.try_for_each(|i| self.inner.flush(i))
+        for i in 0..self.inner.len() {
+            self.inner.signal(i).flush()?;
+        }
+
+        Ok(())
     }
 }

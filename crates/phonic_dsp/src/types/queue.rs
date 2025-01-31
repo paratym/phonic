@@ -1,4 +1,6 @@
-use crate::types::IndexedSignalList;
+use phonic_signal::IndexedSignal;
+
+use crate::types::SignalList;
 use std::collections::LinkedList;
 
 #[derive(Clone, Copy)]
@@ -12,10 +14,13 @@ pub struct PosQueue {
 }
 
 impl PosQueue {
-    pub fn new<T: IndexedSignalList>(list: &T) -> Self {
-        let range = 0..list.count();
+    pub fn new<T: SignalList>(list: &T) -> Self
+    where
+        for<'a> T::Signal<'a>: IndexedSignal,
+    {
+        let range = 0..list.len();
         let mut positions = range
-            .map(|id| (id, list.pos(id)))
+            .map(|i| (i, list.signal(i).pos()))
             .map(|(id, pos)| PosCursor { id, pos })
             .collect::<Box<[_]>>();
 

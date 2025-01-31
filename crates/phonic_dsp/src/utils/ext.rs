@@ -1,6 +1,6 @@
-use crate::utils::{Concat, Delay, Repeat, Slice, Split};
+use crate::utils::{Concat, Delay, Repeat, Slice};
 use phonic_signal::{
-    utils::{DefaultSizedBuf, IntoDuration, NFrames, SizedBuf},
+    utils::{IntoDuration, NFrames},
     FiniteSignal, IndexedSignal, PhonicResult, Signal,
 };
 
@@ -69,15 +69,6 @@ pub trait DspUtilsExt: Sized + Signal {
         Self: FiniteSignal,
     {
         Slice::to_end_offset(self, start)
-    }
-
-    fn split(self) -> Split<Self> {
-        let buf = DefaultSizedBuf::silence();
-        Split::new(self, buf)
-    }
-
-    fn split_buf<B: AsRef<[Self::Sample]>>(self, buf: B) -> Split<Self, B> {
-        Split::new(self, buf)
     }
 }
 

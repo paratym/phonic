@@ -1,10 +1,10 @@
 use crate::{
     ops::Complement,
-    types::{FiniteSignalList, IndexedSignalList, PosQueue, SignalList, SignalReaderList},
+    types::{PosQueue, SignalList},
 };
 use phonic_signal::{
     utils::{slice_as_init_mut, DefaultSizedBuf},
-    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalReader, SignalSpec,
+    FiniteSignal, IndexedSignal, PhonicResult, Sample, Signal, SignalExt, SignalReader, SignalSpec,
 };
 use std::{mem::MaybeUninit, ops::Add};
 
@@ -21,9 +21,12 @@ pub trait MixSample {
     fn mix(self, other: Self) -> Self;
 }
 
-impl<T: IndexedSignalList, B> Mix<T, B> {
-    pub fn new(inner: T, buf: B) -> PhonicResult<Self> {
-        let spec = inner.spec()?;
+impl<T: SignalList, B> Mix<T, B> {
+    pub fn new(inner: T, buf: B) -> PhonicResult<Self>
+    where
+        for<'a> T::Signal<'a>: IndexedSignal,
+    {
+        let spec = inner.merged_spec()?;
         let queue = PosQueue::new(&inner);
 
         Ok(Self {
@@ -47,7 +50,8 @@ impl<T: IndexedSignalList, B> Mix<T, B> {
 
 impl<T, C, B> Mix<(T, Complement<C>), B>
 where
-    (T, Complement<C>): IndexedSignalList,
+    (T, Complement<C>): SignalList,
+    for<'a> <(T, Complement<C>) as SignalList>::Signal<'a>: IndexedSignal,
 {
     pub fn cancel(inner: T, other: C, buf: B) -> PhonicResult<Self> {
         let complement = Complement::new(other);
@@ -101,23 +105,40 @@ impl<T: SignalList, B> Signal for Mix<T, B> {
     }
 }
 
-impl<T: IndexedSignalList, B> IndexedSignal for Mix<T, B> {
+impl<T: SignalList, B> IndexedSignal for Mix<T, B>
+where
+    for<'a> T::Signal<'a>: IndexedSignal,
+{
     fn pos(&self) -> u64 {
-        self.inner.min_pos()
+        let range = 0..self.inner.len();
+
+        range
+            .map(|i| self.inner.signal(i).pos())
+            .min()
+            .unwrap_or_default()
     }
 }
 
-impl<T: FiniteSignalList, B> FiniteSignal for Mix<T, B> {
+impl<T: SignalList, B> FiniteSignal for Mix<T, B>
+where
+    for<'a> T::Signal<'a>: FiniteSignal,
+{
     fn len(&self) -> u64 {
-        self.inner.max_len()
+        let range = 0..self.inner.len();
+
+        range
+            .map(|i| self.inner.signal(i).len())
+            .max()
+            .unwrap_or_default()
     }
 }
 
 impl<T, B> SignalReader for Mix<T, B>
 where
-    T: IndexedSignalList + SignalReaderList,
+    T: SignalList,
     T::Sample: MixSample,
-    B: AsMut<[MaybeUninit<T::Sample>]>,
+    for<'a> T::Signal<'a>: SignalReader,
+    B: AsMut<[MaybeUninit<Self::Sample>]>,
 {
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
         let Some(zero_cursor) = self.queue.peek_front().copied() else {
@@ -147,7 +168,7 @@ where
             }
 
             let inner_buf = &mut self.buf.as_mut()[start_i..buf_len];
-            let result = self.inner.read_init(cursor.id, inner_buf);
+            let result = self.inner.signal(cursor.id).read_init(inner_buf);
 
             match result {
                 Ok([]) => {

@@ -1,7 +1,4 @@
-use crate::types::{
-    FiniteSignalList, IndexedSignalList, SignalList, SignalReaderList, SignalSeekerList,
-    SignalWriterList,
-};
+use crate::types::SignalList;
 use phonic_signal::{
     FiniteSignal, IndexedSignal, PhonicResult, Signal, SignalReader, SignalSeeker, SignalSpec,
     SignalWriter,
@@ -11,15 +8,17 @@ use std::mem::MaybeUninit;
 pub struct Concat<T> {
     inner: T,
     spec: SignalSpec,
-    current_i: usize,
+    idx: usize,
 }
 
 impl<T: SignalList> Concat<T> {
     pub fn new(inner: T) -> PhonicResult<Self> {
+        let spec = inner.merged_spec()?;
+
         Ok(Self {
-            current_i: 0,
-            spec: inner.spec()?,
             inner,
+            spec,
+            idx: 0,
         })
     }
 
@@ -40,43 +39,59 @@ impl<T: SignalList> Signal for Concat<T> {
     }
 }
 
-impl<T: IndexedSignalList> IndexedSignal for Concat<T> {
+impl<T: SignalList> IndexedSignal for Concat<T>
+where
+    for<'a> T::Signal<'a>: IndexedSignal,
+{
     fn pos(&self) -> u64 {
-        let range = 0..=self.current_i;
-        range.map(|i| self.inner.pos(i)).sum()
+        let range = 0..self.idx;
+        range.map(|i| self.inner.signal(i).pos()).sum()
     }
 }
 
-impl<T: FiniteSignalList> FiniteSignal for Concat<T> {
+impl<T: SignalList> FiniteSignal for Concat<T>
+where
+    for<'a> T::Signal<'a>: FiniteSignal,
+{
     fn len(&self) -> u64 {
-        let range = 0..self.inner.count();
-        range.map(|i| self.inner.len(i)).sum()
+        let range = 0..self.inner.len();
+        range.map(|i| self.inner.signal(i).len()).sum()
     }
 }
 
-impl<T: SignalReaderList> SignalReader for Concat<T> {
+impl<T: SignalList> SignalReader for Concat<T>
+where
+    for<'a> T::Signal<'a>: SignalReader,
+{
     fn read(&mut self, buf: &mut [MaybeUninit<Self::Sample>]) -> PhonicResult<usize> {
-        while self.current_i < self.inner.count() {
-            let n = self.inner.read(self.current_i, buf)?;
-            if n == 0 {
-                self.current_i += 1;
-                continue;
-            }
+        while self.idx < self.inner.len() {
+            match self.inner.signal(self.idx).read(buf) {
+                Ok(0) => {
+                    self.idx += 1;
+                    continue;
+                }
 
-            return Ok(n);
+                result => return result,
+            }
         }
 
         Ok(0)
     }
 }
 
-impl<T: SignalWriterList> SignalWriter for Concat<T> {
+impl<T: SignalList> SignalWriter for Concat<T>
+where
+    for<'a> T::Signal<'a>: SignalWriter,
+{
     fn write(&mut self, buf: &[Self::Sample]) -> PhonicResult<usize> {
-        while self.current_i < self.inner.count() {
-            let n = self.inner.write(self.current_i, buf)?;
-            if n == 0 {
-                self.current_i += 1;
-                continue;
+        while self.idx < self.inner.len() {
+            match self.inner.signal(self.idx).write(buf) {
+                Ok(0) => {
+                    self.idx += 1;
+                    continue;
+                }
+
+                result => return result,
             }
         }
 
@@ -84,12 +99,18 @@ impl<T: SignalWriterList> SignalWriter for Concat<T> {
     }
 
     fn flush(&mut self) -> PhonicResult<()> {
-        let mut range = 0..self.inner.count();
-        range.try_for_each(|i| self.inner.flush(i))
+        for i in 0..self.inner.len() {
+            self.inner.signal(i).flush()?;
+        }
+
+        Ok(())
     }
 }
 
-impl<T: IndexedSignalList + SignalSeekerList> SignalSeeker for Concat<T> {
+impl<T: SignalList> SignalSeeker for Concat<T>
+where
+    for<'a> T::Signal<'a>: SignalSeeker,
+{
     fn seek(&mut self, offset: i64) -> PhonicResult<()> {
         todo!()
     }

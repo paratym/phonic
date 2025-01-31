@@ -31,12 +31,11 @@ signal-full = ["buf"]
 buf = ["phonic_signal/buf"]
 
 dsp = ["dep:phonic_dsp"]
-dsp-full = ["dsp", "gen"]
-gen = ["dsp", "phonic_dsp/gen"]
+dsp-full = ["dsp"]
 
 io = ["dep:phonic_io", "phonic_dsp?/io"]
-io-full = ["io", "dyn-io", "all-formats", "all-codecs"]
-dyn-io = ["io", "phonic_io/dynamic"]
+io-full = ["io", "io-dynamic", "all-formats", "all-codecs"]
+io-dynamic = ["io", "phonic_io/dynamic"]
 
 all-formats = ["io", "phonic_io/all-formats"]
 wave = ["io", "phonic_io/wave"]
