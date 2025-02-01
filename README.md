@@ -5,7 +5,7 @@ Phonic is a rust library for digital signal processing with a focus on audio. Th
 ## Features
 
 - Buffers can be statically allocated and uninitialized
-- All structures that require an internal buffer are generic over `AsMut<[T]>`
+- All structures that require an internal buffer are generic over `Borrow<[T]>`
 - Flexible blocking interface to allow for yielding time back to an arbitrary scheduler
 - Support for both static and dynamic construction of formats and codecs
 

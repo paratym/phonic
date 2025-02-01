@@ -1,4 +1,5 @@
 mod buf;
+mod buffered;
 mod copy;
 mod cursor;
 mod duration;
@@ -11,6 +12,7 @@ mod poll;
 mod uninit;
 
 pub use buf::*;
+pub use buffered::*;
 pub use copy::*;
 pub use cursor::*;
 pub use duration::*;

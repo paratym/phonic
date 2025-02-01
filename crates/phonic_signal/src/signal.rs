@@ -10,6 +10,10 @@ delegate_group! {
 
         /// Returns a set of parameters that determines how the samples that are read from/written
         /// to this signal should be interpreted.
+        ///
+        /// # Implementation
+        /// - The value returned from this method should not change over the lifetime of this
+        /// signal
         fn spec(&self) -> &crate::SignalSpec;
     }
 
@@ -26,14 +30,22 @@ delegate_group! {
     }
 
     pub trait FiniteSignal: crate::Signal {
-        /// Returns the number of frames between the start and the end of this signal.
+        /// Returns the number of frames between the start and the end of this signal. Note that
+        /// while there must always be at least `n` frames (where `n` is the returned value) in
+        /// this signal, it may be extended later by a call to `SignalWriter::write`.
         fn len(&self) -> u64;
     }
 
     #[subgroup(Mut, Read)]
     pub trait SignalReader: crate::Signal {
         /// Reads samples from this signal into the given buffer and returns the number of
-        /// interleaved samples read.
+        /// interleaved samples that were read. A return value of `Ok(0)` indicates this signal is
+        /// exhausted.
+        ///
+        /// # Implementation
+        /// - Failing to initialize `buf[..n]` (where `n` is the returned value) causes undefined
+        /// behavior
+        /// - The returned value must be a multiple of `self.spec().n_channels`
         fn read(
             &mut self,
             buf: &mut [std::mem::MaybeUninit<Self::Sample>]
@@ -43,32 +55,44 @@ delegate_group! {
     #[subgroup(Mut, Read, Buffered)]
     pub trait BufferedSignalReader: crate::SignalReader {
         /// Ensures there are samples available in this signal's inner buffer and returns a
-        /// reference to them. On "pull-based" signal chains the samples are read from the next
-        /// source. On "push-based" signal chains `Err(PhonicError::NotReady)` is returned until
-        /// there are samples available.
+        /// reference to them. On "pull-based" signals the samples are read from the next
+        /// source. On "push-based" signals `Err(PhonicError::NotReady)` is returned until
+        /// there are samples available. A return value of `Ok([])` indicates this signal is
+        /// exhausted.
+        ///
+        /// # Implementation
+        /// - The returned buffer's length must be a multiple of `self.spec().n_channels`
         fn fill(&mut self) -> crate::PhonicResult<&[Self::Sample]>;
 
         /// Returns a reference to this signal's inner buffer, or `None` if this signal is
         /// exhausted. To handle an empty buffer see `BufferedSignalReader::fill`.
+        ///
+        /// # Implementation
+        /// - The returned buffer's length must be a multiple of `self.spec().n_channels`
         fn buffer(&self) -> Option<&[Self::Sample]>;
 
-        /// Moves this signal's read/write head forward by `n_samples` and frees the consumed
-        /// section of its inner buffer for reuse.
+        /// Advances this signal's read/write head by `n_samples` and frees the consumed section of
+        /// its inner buffer for reuse.
         ///
         /// # Panics
-        /// panics if `n_samples` is greater than the length of the available inner buffer.
+        /// May panic if `n_samples` is greater than the length of the available inner buffer or is
+        /// indivisible by `self.spec().n_channels`.
         fn consume(&mut self, n_samples: usize);
     }
 
     #[subgroup(Mut, Write)]
     pub trait SignalWriter: crate::Signal {
         /// Writes samples from the given buffer to this signal and returns the number of
-        /// interleaved samples written.
+        /// interleaved samples that were written. A return value of `Ok(0)` indicates this signal
+        /// is exhausted.
+        ///
+        /// # Implementation
+        /// - The returned value must be a multiple of `self.spec().n_channels`
         fn write(&mut self, buf: &[Self::Sample]) -> crate::PhonicResult<usize>;
 
         /// Ensures all samples in the signal chain have been written to the innermost
-        /// destination. On "push-based" signal chains the samples are recursively written to
-        /// the next destination. On "pull-based" signal chains `Err(PhonicError::NotReady)` is
+        /// destination. On "push-based" signals the samples are recursively written to
+        /// the next destination. On "pull-based" signals `Err(PhonicError::NotReady)` is
         /// returned until there are no samples left.
         fn flush(&mut self) -> crate::PhonicResult<()>;
     }
@@ -77,6 +101,9 @@ delegate_group! {
     pub trait BufferedSignalWriter: crate::SignalWriter {
         /// Returns a mutable reference to this signal's inner buffer, or `None` if this signal
         /// is exhausted. To handle an empty buffer, see `SignalWriter::flush`.
+        ///
+        /// # Implementation
+        /// - The length of the returned buffer must be a multiple of `self.spec().n_channels`
         fn buffer_mut(&mut self) -> Option<&mut [std::mem::MaybeUninit<Self::Sample>]>;
 
         /// Moves this signal's read/write head forward by `n_samples` and marks the committed
@@ -84,7 +111,8 @@ delegate_group! {
         /// marked samples have been written see `SignalWriter::flush`.
         ///
         /// # Panics
-        /// panics if `n_samples` is greater than the length of the available inner buffer.
+        /// May panic if `n_samples` is greater than the length of the available inner buffer or is
+        /// indivisible by `self.spec().n_channels`.
         fn commit(&mut self, n_samples: usize);
     }
 

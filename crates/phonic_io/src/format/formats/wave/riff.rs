@@ -65,7 +65,7 @@ impl<T> RiffChunk<T> {
     where
         T: Read,
     {
-        let mut buf = <DefaultSizedBuf<_>>::init(0u8);
+        let mut buf = <DefaultSizedBuf<_>>::filled(0u8);
 
         while self.pos < self.len {
             match self.inner.read(&mut buf) {

@@ -46,7 +46,7 @@ pub trait OwnedBuf: Sized {
 pub trait SizedBuf: OwnedBuf {
     fn uninit() -> Self::Uninit;
 
-    fn init(item: Self::Item) -> Self
+    fn filled(item: Self::Item) -> Self
     where
         Self::Item: Copy,
     {
@@ -61,14 +61,14 @@ pub trait SizedBuf: OwnedBuf {
     where
         Self::Item: Copy + Default,
     {
-        Self::init(Self::Item::default())
+        Self::filled(Self::Item::default())
     }
 
     fn silence() -> Self
     where
         Self::Item: Sample,
     {
-        Self::init(Self::Item::ORIGIN)
+        Self::filled(Self::Item::ORIGIN)
     }
 
     fn read<R>(reader: &mut R) -> PhonicResult<Self>
@@ -90,15 +90,29 @@ pub trait ResizeBuf: OwnedBuf {
 pub trait DynamicBuf: OwnedBuf {
     fn uninit(len: usize) -> Self::Uninit;
 
+    fn filled(item: Self::Item, len: usize) -> Self
+    where
+        Self::Item: Copy,
+    {
+        let mut buf = Self::uninit(len);
+        let slice = unsafe { buf._as_mut_slice() };
+        slice.fill(MaybeUninit::new(item));
+
+        unsafe { Self::from_uninit(buf) }
+    }
+
+    fn default(len: usize) -> Self
+    where
+        Self::Item: Default + Copy,
+    {
+        Self::filled(Self::Item::default(), len)
+    }
+
     fn silence(len: usize) -> Self
     where
         Self::Item: Sample,
     {
-        let mut buf = Self::uninit(len);
-        let slice = unsafe { buf._as_mut_slice() };
-        slice.fill(MaybeUninit::new(Self::Item::ORIGIN));
-
-        unsafe { Self::from_uninit(buf) }
+        Self::filled(Self::Item::ORIGIN, len)
     }
 
     fn read<R>(reader: &mut R) -> PhonicResult<Self>

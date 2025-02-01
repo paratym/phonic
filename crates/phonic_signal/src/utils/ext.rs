@@ -1,7 +1,8 @@
 use crate::{
     utils::{
-        copy_all, copy_all_buffered, copy_exact, copy_exact_buffered, Cursor, DynamicBuf, Indexed,
-        IntoDuration, NFrames, NSamples, Observer, Poll, ResizeBuf, SignalEvent, SizedBuf,
+        copy_all, copy_all_buffered, copy_exact, copy_exact_buffered, BufReader, BufWriter, Cursor,
+        DynamicBuf, Indexed, IntoDuration, NFrames, NSamples, Observer, Poll, ResizeBuf,
+        SignalEvent, SizedBuf,
     },
     BlockingSignal, BufferedSignalWriter, FiniteSignal, IndexedSignal, PhonicError, PhonicResult,
     Signal, SignalExt, SignalReader, SignalSeeker, SignalWriter,
@@ -41,6 +42,14 @@ pub trait SignalUtilsExt: Sized + Signal {
         T::Uninit: ResizeBuf,
     {
         T::read_all(self)
+    }
+
+    fn buf_reader<B>(self, buf: B) -> BufReader<Self, B> {
+        BufReader::new(self, buf)
+    }
+
+    fn buf_writer<B>(self, buf: B) -> BufWriter<Self, B> {
+        BufWriter::new(self, buf)
     }
 
     fn copy_exact<R>(
